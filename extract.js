@@ -8,7 +8,7 @@ const app = express();
 // ============================================================
 
 const SHOP =
-  process.env.SHOP || 'imtiaz-mmk7g8dm';
+  process.env.SHOP || 'wellessia';
 
 const CLIENT_ID =
   process.env.CLIENT_ID;
