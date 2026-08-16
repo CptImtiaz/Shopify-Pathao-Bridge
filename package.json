@@ -1,0 +1,12 @@
+{
+  "name": "shopify-extractor",
+  "version": "1.0.0",
+  "description": "Extract orders from Shopify",
+  "main": "extract.js",
+  "scripts": {
+    "start": "node extract.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
