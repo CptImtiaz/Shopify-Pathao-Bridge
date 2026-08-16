@@ -68,7 +68,7 @@ async function getPathaoToken() {
   }
 
   try {
-    const tokenUrl = `${PATHAO_BASE_URL}/auth/login`;
+    const tokenUrl = `${PATHAO_BASE_URL}/aladdin/api/v1/issue-token`;
     
     const tokenResponse = await fetch(tokenUrl, {
       method: 'POST',
