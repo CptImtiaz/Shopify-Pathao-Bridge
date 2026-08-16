@@ -1,6 +1,11 @@
-const SHOP = 'imtiaz-mmk7g8dm'; // Your shop name
-const CLIENT_ID = 'your_client_id_here'; // From Shopify App
-const CLIENT_SECRET = 'your_client_secret_here'; // From Shopify App
+const SHOP = process.env.SHOP || 'imtiaz-mmk7g8dm';
+const CLIENT_ID = process.env.CLIENT_ID;
+const CLIENT_SECRET = process.env.CLIENT_SECRET;
+
+if (!CLIENT_ID || !CLIENT_SECRET) {
+  console.error('❌ Missing CLIENT_ID or CLIENT_SECRET environment variables');
+  process.exit(1);
+}
 
 let ACCESS_TOKEN = null;
 let TOKEN_EXPIRES_AT = 0;
