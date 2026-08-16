@@ -24,6 +24,11 @@ const SHOPIFY_API_VERSION =
   process.env.SHOPIFY_API_VERSION ||
   '2026-07';
 
+
+// ============================================================
+// PATHAO CONFIGURATION
+// ============================================================
+
 const PATHAO_BASE_URL =
   process.env.PATHAO_BASE_URL ||
   'https://courier-api-sandbox.pathao.com';
@@ -40,8 +45,14 @@ const PATHAO_USERNAME =
 const PATHAO_PASSWORD =
   process.env.PATHAO_PASSWORD;
 
+
+// IMPORTANT:
+// Your existing Pathao merchant store ID
 const MERCHANT_STORE_ID =
-  Number(process.env.MERCHANT_STORE_ID) || 1;
+  Number(
+    process.env.MERCHANT_STORE_ID
+  ) || 136349;
+
 
 const PORT =
   process.env.PORT || 3000;
@@ -52,6 +63,7 @@ const PORT =
 // ============================================================
 
 if (!CLIENT_ID || !CLIENT_SECRET) {
+
   console.error(
     '❌ Missing CLIENT_ID or CLIENT_SECRET'
   );
@@ -59,12 +71,14 @@ if (!CLIENT_ID || !CLIENT_SECRET) {
   process.exit(1);
 }
 
+
 if (
   !PATHAO_CLIENT_ID ||
   !PATHAO_CLIENT_SECRET ||
   !PATHAO_USERNAME ||
   !PATHAO_PASSWORD
 ) {
+
   console.error(
     '❌ Missing Pathao credentials'
   );
@@ -72,7 +86,9 @@ if (
   process.exit(1);
 }
 
+
 if (!SHOPIFY_WEBHOOK_SECRET) {
+
   console.error(
     '❌ Missing SHOPIFY_WEBHOOK_SECRET'
   );
@@ -85,11 +101,18 @@ if (!SHOPIFY_WEBHOOK_SECRET) {
 // TOKEN CACHE
 // ============================================================
 
+// Shopify
 let SHOPIFY_TOKEN = null;
 let SHOPIFY_EXPIRES_AT = 0;
 
+
+// Pathao
 let PATHAO_TOKEN = null;
 let PATHAO_EXPIRES_AT = 0;
+
+
+// Pathao refresh token
+let PATHAO_REFRESH_TOKEN = null;
 
 
 // ============================================================
@@ -105,11 +128,15 @@ const submittedOrders = new Map();
 
 app.use(
   express.json({
+
     limit: '1mb',
 
     verify: (req, res, buf) => {
-      req.rawBody = Buffer.from(buf);
+
+      req.rawBody =
+        Buffer.from(buf);
     }
+
   })
 );
 
@@ -123,7 +150,10 @@ function verifyShopifyWebhook(req) {
   try {
 
     const hmacHeader =
-      req.get('X-Shopify-Hmac-Sha256');
+      req.get(
+        'X-Shopify-Hmac-Sha256'
+      );
+
 
     if (!hmacHeader) {
 
@@ -134,6 +164,7 @@ function verifyShopifyWebhook(req) {
       return false;
     }
 
+
     if (!req.rawBody) {
 
       console.error(
@@ -142,6 +173,7 @@ function verifyShopifyWebhook(req) {
 
       return false;
     }
+
 
     const generatedHash =
       crypto
@@ -152,11 +184,13 @@ function verifyShopifyWebhook(req) {
         .update(req.rawBody)
         .digest('base64');
 
+
     const receivedBuffer =
       Buffer.from(
         hmacHeader,
         'utf8'
       );
+
 
     const generatedBuffer =
       Buffer.from(
@@ -164,12 +198,15 @@ function verifyShopifyWebhook(req) {
         'utf8'
       );
 
+
     if (
       receivedBuffer.length !==
       generatedBuffer.length
     ) {
+
       return false;
     }
+
 
     return crypto.timingSafeEqual(
       receivedBuffer,
@@ -194,20 +231,25 @@ function verifyShopifyWebhook(req) {
 
 async function getShopifyToken() {
 
+  // Use cached token
   if (
     SHOPIFY_TOKEN &&
     Date.now() <
       SHOPIFY_EXPIRES_AT - 60000
   ) {
+
     return SHOPIFY_TOKEN;
   }
+
 
   console.log(
     '🔐 Requesting Shopify access token...'
   );
 
+
   const tokenUrl =
     `https://${SHOP}.myshopify.com/admin/oauth/access_token`;
+
 
   const body =
     new URLSearchParams({
@@ -220,27 +262,35 @@ async function getShopifyToken() {
 
       client_secret:
         CLIENT_SECRET
+
     });
+
 
   const response =
     await fetch(
       tokenUrl,
       {
+
         method:
           'POST',
 
         headers: {
+
           'Content-Type':
             'application/x-www-form-urlencoded'
+
         },
 
         body:
           body.toString()
+
       }
     );
 
+
   const data =
     await response.json();
+
 
   if (!response.ok) {
 
@@ -253,6 +303,7 @@ async function getShopifyToken() {
       )
     );
 
+
     throw new Error(
       `Shopify token error ${response.status}: ${
         data.error_description ||
@@ -262,6 +313,7 @@ async function getShopifyToken() {
     );
   }
 
+
   if (!data.access_token) {
 
     throw new Error(
@@ -269,8 +321,10 @@ async function getShopifyToken() {
     );
   }
 
+
   SHOPIFY_TOKEN =
     data.access_token;
+
 
   SHOPIFY_EXPIRES_AT =
     Date.now() +
@@ -279,45 +333,47 @@ async function getShopifyToken() {
       1000
     );
 
+
   console.log(
     '✅ Shopify access token obtained'
   );
+
 
   return SHOPIFY_TOKEN;
 }
 
 
 // ============================================================
-// PATHAO ACCESS TOKEN
+// PATHAO ISSUE TOKEN
 // ============================================================
 
-async function getPathaoToken() {
-
-  if (
-    PATHAO_TOKEN &&
-    Date.now() <
-      PATHAO_EXPIRES_AT - 60000
-  ) {
-    return PATHAO_TOKEN;
-  }
+async function issuePathaoToken() {
 
   console.log(
     '🔐 Requesting Pathao access token...'
   );
 
+
   const tokenUrl =
     `${PATHAO_BASE_URL}/aladdin/api/v1/issue-token`;
+
 
   const response =
     await fetch(
       tokenUrl,
       {
+
         method:
           'POST',
 
         headers: {
+
           'Content-Type':
+            'application/json',
+
+          'Accept':
             'application/json'
+
         },
 
         body:
@@ -329,20 +385,41 @@ async function getPathaoToken() {
             client_secret:
               PATHAO_CLIENT_SECRET,
 
+            grant_type:
+              'password',
+
             username:
               PATHAO_USERNAME,
 
             password:
-              PATHAO_PASSWORD,
+              PATHAO_PASSWORD
 
-            grant_type:
-              'password'
           })
+
       }
     );
 
-  const data =
-    await response.json();
+
+  const text =
+    await response.text();
+
+
+  let data;
+
+  try {
+
+    data =
+      text
+        ? JSON.parse(text)
+        : {};
+
+  } catch {
+
+    data = {
+      raw: text
+    };
+  }
+
 
   if (!response.ok) {
 
@@ -355,14 +432,23 @@ async function getPathaoToken() {
       )
     );
 
-    throw new Error(
-      `Pathao token error ${response.status}: ${
-        data.message ||
-        data.error ||
-        JSON.stringify(data)
-      }`
-    );
+
+    const error =
+      new Error(
+        `Pathao token error ${response.status}`
+      );
+
+
+    error.status =
+      response.status;
+
+    error.data =
+      data;
+
+
+    throw error;
   }
+
 
   if (!data.access_token) {
 
@@ -371,21 +457,235 @@ async function getPathaoToken() {
     );
   }
 
+
   PATHAO_TOKEN =
     data.access_token;
+
+
+  PATHAO_REFRESH_TOKEN =
+    data.refresh_token ||
+    null;
+
+
+  // Pathao documentation says:
+  // expires_in = 432000 seconds = 5 days
+  const expiresIn =
+    Number(
+      data.expires_in
+    ) || 432000;
+
 
   PATHAO_EXPIRES_AT =
     Date.now() +
     (
-      (data.expires_in || 3600) *
+      expiresIn *
       1000
     );
+
 
   console.log(
     '✅ Pathao access token obtained'
   );
 
-  return PATHAO_TOKEN;
+
+  console.log(
+    `⏱️ Pathao token expires in ${expiresIn} seconds`
+  );
+
+
+  return data;
+}
+
+
+// ============================================================
+// PATHAO REFRESH TOKEN
+// ============================================================
+
+async function refreshPathaoToken() {
+
+  if (!PATHAO_REFRESH_TOKEN) {
+
+    console.log(
+      '⚠️ No Pathao refresh token available'
+    );
+
+    return issuePathaoToken();
+  }
+
+
+  console.log(
+    '🔄 Refreshing Pathao access token...'
+  );
+
+
+  const tokenUrl =
+    `${PATHAO_BASE_URL}/aladdin/api/v1/issue-token`;
+
+
+  const response =
+    await fetch(
+      tokenUrl,
+      {
+
+        method:
+          'POST',
+
+        headers: {
+
+          'Content-Type':
+            'application/json',
+
+          'Accept':
+            'application/json'
+
+        },
+
+        body:
+          JSON.stringify({
+
+            client_id:
+              PATHAO_CLIENT_ID,
+
+            client_secret:
+              PATHAO_CLIENT_SECRET,
+
+            grant_type:
+              'refresh_token',
+
+            refresh_token:
+              PATHAO_REFRESH_TOKEN
+
+          })
+
+      }
+    );
+
+
+  const text =
+    await response.text();
+
+
+  let data;
+
+  try {
+
+    data =
+      text
+        ? JSON.parse(text)
+        : {};
+
+  } catch {
+
+    data = {
+      raw: text
+    };
+  }
+
+
+  if (!response.ok) {
+
+    console.error(
+      '❌ Pathao refresh response:',
+      JSON.stringify(
+        data,
+        null,
+        2
+      )
+    );
+
+
+    // If refresh fails,
+    // issue a completely new token.
+    console.log(
+      '⚠️ Refresh failed. Requesting new Pathao token...'
+    );
+
+
+    return issuePathaoToken();
+  }
+
+
+  if (!data.access_token) {
+
+    return issuePathaoToken();
+  }
+
+
+  PATHAO_TOKEN =
+    data.access_token;
+
+
+  PATHAO_REFRESH_TOKEN =
+    data.refresh_token ||
+    PATHAO_REFRESH_TOKEN;
+
+
+  const expiresIn =
+    Number(
+      data.expires_in
+    ) || 432000;
+
+
+  PATHAO_EXPIRES_AT =
+    Date.now() +
+    (
+      expiresIn *
+      1000
+    );
+
+
+  console.log(
+    '✅ Pathao token refreshed'
+  );
+
+
+  return data;
+}
+
+
+// ============================================================
+// GET PATHAO ACCESS TOKEN
+// ============================================================
+
+async function getPathaoToken() {
+
+  // Existing valid token
+  if (
+    PATHAO_TOKEN &&
+    Date.now() <
+      PATHAO_EXPIRES_AT - 60000
+  ) {
+
+    return PATHAO_TOKEN;
+  }
+
+
+  // Try refresh token first
+  if (PATHAO_REFRESH_TOKEN) {
+
+    try {
+
+      const data =
+        await refreshPathaoToken();
+
+      return data.access_token;
+
+    } catch (error) {
+
+      console.error(
+        '⚠️ Pathao refresh failed:',
+        error.message
+      );
+    }
+  }
+
+
+  // Request new token
+  const data =
+    await issuePathaoToken();
+
+
+  return data.access_token;
 }
 
 
@@ -401,13 +701,16 @@ async function shopifyRequest(
   const token =
     await getShopifyToken();
 
+
   const url =
     `https://${SHOP}.myshopify.com/admin/api/${SHOPIFY_API_VERSION}/${endpoint}`;
+
 
   const response =
     await fetch(
       url,
       {
+
         method:
           options.method || 'GET',
 
@@ -419,7 +722,11 @@ async function shopifyRequest(
           'Content-Type':
             'application/json',
 
+          'Accept':
+            'application/json',
+
           ...(options.headers || {})
+
         },
 
         body:
@@ -428,11 +735,14 @@ async function shopifyRequest(
                 options.body
               )
             : undefined
+
       }
     );
 
+
   const text =
     await response.text();
+
 
   let data;
 
@@ -450,6 +760,7 @@ async function shopifyRequest(
     };
   }
 
+
   if (!response.ok) {
 
     const error =
@@ -457,14 +768,17 @@ async function shopifyRequest(
         `Shopify API ${response.status}`
       );
 
+
     error.status =
       response.status;
 
     error.data =
       data;
 
+
     throw error;
   }
+
 
   return data;
 }
@@ -479,16 +793,19 @@ async function pathaoRequest(
   options = {}
 ) {
 
-  const token =
+  let token =
     await getPathaoToken();
+
 
   const url =
     `${PATHAO_BASE_URL}${endpoint}`;
 
-  const response =
+
+  let response =
     await fetch(
       url,
       {
+
         method:
           options.method || 'GET',
 
@@ -500,7 +817,11 @@ async function pathaoRequest(
           'Content-Type':
             'application/json',
 
+          'Accept':
+            'application/json',
+
           ...(options.headers || {})
+
         },
 
         body:
@@ -509,11 +830,73 @@ async function pathaoRequest(
                 options.body
               )
             : undefined
+
       }
     );
 
+
+  // ----------------------------------------------------------
+  // If token expired, refresh and retry ONCE
+  // ----------------------------------------------------------
+
+  if (
+    response.status === 401
+  ) {
+
+    console.log(
+      '⚠️ Pathao token expired. Getting new token...'
+    );
+
+
+    PATHAO_TOKEN =
+      null;
+
+    PATHAO_EXPIRES_AT =
+      0;
+
+
+    token =
+      await getPathaoToken();
+
+
+    response =
+      await fetch(
+        url,
+        {
+
+          method:
+            options.method || 'GET',
+
+          headers: {
+
+            'Authorization':
+              `Bearer ${token}`,
+
+            'Content-Type':
+              'application/json',
+
+            'Accept':
+              'application/json',
+
+            ...(options.headers || {})
+
+          },
+
+          body:
+            options.body
+              ? JSON.stringify(
+                  options.body
+                )
+              : undefined
+
+        }
+      );
+  }
+
+
   const text =
     await response.text();
+
 
   let data;
 
@@ -531,6 +914,7 @@ async function pathaoRequest(
     };
   }
 
+
   if (!response.ok) {
 
     const error =
@@ -538,14 +922,17 @@ async function pathaoRequest(
         `Pathao API ${response.status}`
       );
 
+
     error.status =
       response.status;
 
     error.data =
       data;
 
+
     throw error;
   }
+
 
   return data;
 }
@@ -583,8 +970,12 @@ app.get(
           ? 'sandbox'
           : 'production',
 
+      pathao_store_id:
+        MERCHANT_STORE_ID,
+
       webhook:
         '/webhooks/orders-create'
+
     });
   }
 );
@@ -608,13 +999,146 @@ app.get(
 
       timestamp:
         new Date().toISOString()
+
     });
   }
 );
 
 
 // ============================================================
-// SHOPIFY ORDERS CREATE WEBHOOK
+// TEST PATHAO TOKEN
+// ============================================================
+
+app.get(
+  '/api/test/pathao',
+  async (req, res) => {
+
+    try {
+
+      const token =
+        await getPathaoToken();
+
+
+      res.json({
+
+        success:
+          true,
+
+        message:
+          'Pathao API authentication working',
+
+        environment:
+          PATHAO_BASE_URL.includes(
+            'sandbox'
+          )
+            ? 'sandbox'
+            : 'production',
+
+        token_received:
+          Boolean(token),
+
+        store_id:
+          MERCHANT_STORE_ID,
+
+        token_expires_at:
+          new Date(
+            PATHAO_EXPIRES_AT
+          ).toISOString()
+
+      });
+
+    } catch (error) {
+
+      console.error(
+        '❌ Pathao test error:',
+        error.data ||
+        error.message
+      );
+
+
+      res.status(
+        error.status || 500
+      ).json({
+
+        success:
+          false,
+
+        service:
+          'pathao',
+
+        error:
+          error.message,
+
+        details:
+          error.data ||
+          null
+
+      });
+    }
+  }
+);
+
+
+// ============================================================
+// GET PATHAO STORES
+// ============================================================
+
+app.get(
+  '/api/pathao/stores',
+  async (req, res) => {
+
+    try {
+
+      const data =
+        await pathaoRequest(
+          '/aladdin/api/v1/stores'
+        );
+
+
+      res.json({
+
+        success:
+          true,
+
+        configured_store_id:
+          MERCHANT_STORE_ID,
+
+        stores:
+          data
+
+      });
+
+    } catch (error) {
+
+      console.error(
+        '❌ Pathao stores error:',
+        error.data ||
+        error.message
+      );
+
+
+      res.status(
+        error.status || 500
+      ).json({
+
+        success:
+          false,
+
+        error:
+          error.message,
+
+        details:
+          error.data ||
+          null
+
+      });
+    }
+  }
+);
+
+
+// ============================================================
+// SHOPIFY WEBHOOK
 // ============================================================
 
 app.post(
@@ -635,17 +1159,17 @@ app.post(
 
 
     // --------------------------------------------------------
-    // Verify Shopify HMAC
+    // Verify HMAC
     // --------------------------------------------------------
 
-    const valid =
-      verifyShopifyWebhook(req);
-
-    if (!valid) {
+    if (
+      !verifyShopifyWebhook(req)
+    ) {
 
       console.error(
         '❌ Invalid Shopify webhook signature'
       );
+
 
       return res.status(401).json({
 
@@ -654,8 +1178,10 @@ app.post(
 
         error:
           'Invalid Shopify webhook signature'
+
       });
     }
+
 
     console.log(
       '✅ Shopify webhook signature verified'
@@ -663,7 +1189,7 @@ app.post(
 
 
     // --------------------------------------------------------
-    // Shopify webhook headers
+    // Headers
     // --------------------------------------------------------
 
     const webhookId =
@@ -680,6 +1206,7 @@ app.post(
       req.get(
         'X-Shopify-Shop-Domain'
       );
+
 
     console.log(
       'Webhook ID:',
@@ -698,20 +1225,17 @@ app.post(
 
 
     // --------------------------------------------------------
-    // Shopify order
+    // Order
     // --------------------------------------------------------
 
     const shopifyOrder =
       req.body;
 
+
     if (
       !shopifyOrder ||
       !shopifyOrder.id
     ) {
-
-      console.error(
-        '❌ Invalid Shopify order webhook'
-      );
 
       return res.status(400).json({
 
@@ -720,21 +1244,25 @@ app.post(
 
         error:
           'Invalid Shopify order webhook payload'
+
       });
     }
+
 
     const shopifyOrderId =
       String(
         shopifyOrder.id
       );
 
+
     console.log(
       '🛒 Shopify Order ID:',
       shopifyOrderId
     );
 
+
     console.log(
-      '🧾 Shopify Order Name:',
+      '🧾 Shopify Order:',
       shopifyOrder.name ||
       'N/A'
     );
@@ -754,6 +1282,7 @@ app.post(
         '⚠️ Order already submitted to Pathao'
       );
 
+
       return res.status(200).json({
 
         success:
@@ -762,13 +1291,11 @@ app.post(
         duplicate:
           true,
 
-        message:
-          'Order was already submitted to Pathao',
-
         previous_result:
           submittedOrders.get(
             shopifyOrderId
           )
+
       });
     }
 
@@ -786,6 +1313,7 @@ app.post(
     console.log(
       '\n📦 PATHAO ORDER PAYLOAD'
     );
+
 
     console.log(
       JSON.stringify(
@@ -806,15 +1334,18 @@ app.post(
         '\n🚚 Sending order to Pathao...'
       );
 
+
       const result =
         await pathaoRequest(
           '/aladdin/api/v1/orders',
           {
+
             method:
               'POST',
 
             body:
               pathaoOrder
+
           }
         );
 
@@ -832,6 +1363,7 @@ app.post(
 
         pathao_response:
           result
+
       };
 
 
@@ -853,6 +1385,7 @@ app.post(
         '============================================'
       );
 
+
       console.log(
         JSON.stringify(
           pathaoResult,
@@ -872,10 +1405,23 @@ app.post(
         '\n❌ PATHAO ORDER CREATION FAILED'
       );
 
+
       console.error(
-        error.data ||
-        error.message
+        JSON.stringify(
+          error.data ||
+          error.message,
+          null,
+          2
+        )
       );
+
+
+      // IMPORTANT:
+      // We do NOT normalize or modify
+      // the phone number.
+      //
+      // We return Pathao's original
+      // validation response.
 
       return res.status(
         error.status || 500
@@ -891,7 +1437,9 @@ app.post(
           error.message,
 
         details:
-          error.data || null
+          error.data ||
+          null
+
       });
     }
   }
@@ -899,7 +1447,7 @@ app.post(
 
 
 // ============================================================
-// TEST SHOPIFY
+// SHOPIFY TEST
 // ============================================================
 
 app.get(
@@ -913,6 +1461,7 @@ app.get(
           'shop.json'
         );
 
+
       res.json({
 
         success:
@@ -923,6 +1472,7 @@ app.get(
 
         shop:
           data.shop
+
       });
 
     } catch (error) {
@@ -932,6 +1482,7 @@ app.get(
         error.data ||
         error.message
       );
+
 
       res.status(
         error.status || 500
@@ -947,63 +1498,9 @@ app.get(
           error.message,
 
         details:
-          error.data || null
-      });
-    }
-  }
-);
+          error.data ||
+          null
 
-
-// ============================================================
-// TEST PATHAO
-// ============================================================
-
-app.get(
-  '/api/test/pathao',
-  async (req, res) => {
-
-    try {
-
-      await getPathaoToken();
-
-      res.json({
-
-        success:
-          true,
-
-        message:
-          'Pathao API authentication working',
-
-        environment:
-          PATHAO_BASE_URL.includes(
-            'sandbox'
-          )
-            ? 'sandbox'
-            : 'production'
-      });
-
-    } catch (error) {
-
-      console.error(
-        'Pathao test error:',
-        error.message
-      );
-
-      res.status(
-        error.status || 500
-      ).json({
-
-        success:
-          false,
-
-        service:
-          'pathao',
-
-        error:
-          error.message,
-
-        details:
-          error.data || null
       });
     }
   }
@@ -1032,9 +1529,11 @@ app.get(
           250
         );
 
+
       const status =
         req.query.status ||
         'any';
+
 
       const data =
         await shopifyRequest(
@@ -1042,6 +1541,7 @@ app.get(
             status
           )}&limit=${limit}`
         );
+
 
       res.json({
 
@@ -1055,6 +1555,7 @@ app.get(
         orders:
           data.orders ||
           []
+
       });
 
     } catch (error) {
@@ -1064,6 +1565,7 @@ app.get(
         error.data ||
         error.message
       );
+
 
       res.status(
         error.status || 500
@@ -1076,7 +1578,9 @@ app.get(
           error.message,
 
         details:
-          error.data || null
+          error.data ||
+          null
+
       });
     }
   }
@@ -1098,10 +1602,12 @@ app.get(
           req.params.id
         );
 
+
       const data =
         await shopifyRequest(
           `orders/${orderId}.json`
         );
+
 
       res.json({
 
@@ -1111,6 +1617,7 @@ app.get(
         order:
           data.order ||
           null
+
       });
 
     } catch (error) {
@@ -1120,6 +1627,7 @@ app.get(
         error.data ||
         error.message
       );
+
 
       res.status(
         error.status || 500
@@ -1132,7 +1640,9 @@ app.get(
           error.message,
 
         details:
-          error.data || null
+          error.data ||
+          null
+
       });
     }
   }
@@ -1161,10 +1671,12 @@ app.get(
           250
         );
 
+
       const data =
         await shopifyRequest(
           `products.json?limit=${limit}`
         );
+
 
       res.json({
 
@@ -1178,6 +1690,7 @@ app.get(
         products:
           data.products ||
           []
+
       });
 
     } catch (error) {
@@ -1187,6 +1700,7 @@ app.get(
         error.data ||
         error.message
       );
+
 
       res.status(
         error.status || 500
@@ -1199,7 +1713,9 @@ app.get(
           error.message,
 
         details:
-          error.data || null
+          error.data ||
+          null
+
       });
     }
   }
@@ -1228,10 +1744,12 @@ app.get(
           250
         );
 
+
       const data =
         await shopifyRequest(
           `customers.json?limit=${limit}`
         );
+
 
       res.json({
 
@@ -1245,6 +1763,7 @@ app.get(
         customers:
           data.customers ||
           []
+
       });
 
     } catch (error) {
@@ -1254,6 +1773,7 @@ app.get(
         error.data ||
         error.message
       );
+
 
       res.status(
         error.status || 500
@@ -1266,7 +1786,9 @@ app.get(
           error.message,
 
         details:
-          error.data || null
+          error.data ||
+          null
+
       });
     }
   }
@@ -1277,9 +1799,13 @@ app.get(
 // CALCULATE ORDER WEIGHT
 // ============================================================
 
-function calculateOrderWeight(items) {
+function calculateOrderWeight(
+  items
+) {
 
-  let totalGrams = 0;
+  let totalGrams =
+    0;
+
 
   for (
     const item of items
@@ -1290,14 +1816,18 @@ function calculateOrderWeight(items) {
         item.grams
       ) || 0;
 
+
     const quantity =
       Number(
         item.quantity
       ) || 0;
 
+
     totalGrams +=
-      grams * quantity;
+      grams *
+      quantity;
   }
+
 
   let weightKg =
     totalGrams / 1000;
@@ -1330,72 +1860,6 @@ function calculateOrderWeight(items) {
 
 
 // ============================================================
-// NORMALIZE BANGLADESH PHONE
-// ============================================================
-//
-// Examples:
-//
-// +8801741563884
-//       ↓
-// 01741563884
-//
-// 8801741563884
-//       ↓
-// 01741563884
-//
-// 01741563884
-//       ↓
-// 01741563884
-//
-// ============================================================
-
-function normalizePhone(phone) {
-
-  if (!phone) {
-    return '';
-  }
-
-  let value =
-    String(phone).trim();
-
-  // Remove spaces, hyphens, brackets
-  value =
-    value.replace(
-      /[\s\-()]/g,
-      ''
-    );
-
-  // +8801XXXXXXXXX
-  if (
-    value.startsWith(
-      '+880'
-    )
-  ) {
-
-    value =
-      '0' +
-      value.substring(4);
-
-  }
-
-  // 8801XXXXXXXXX
-  else if (
-    value.startsWith(
-      '880'
-    )
-  ) {
-
-    value =
-      '0' +
-      value.substring(3);
-
-  }
-
-  return value;
-}
-
-
-// ============================================================
 // BUILD PATHAO ORDER
 // ============================================================
 
@@ -1407,9 +1871,11 @@ function buildPathaoOrder(
     shopifyOrder.shipping_address ||
     {};
 
+
   const billing =
     shopifyOrder.billing_address ||
     {};
+
 
   const items =
     shopifyOrder.line_items ||
@@ -1430,17 +1896,21 @@ function buildPathaoOrder(
   // ----------------------------------------------------------
   // Recipient phone
   // ----------------------------------------------------------
+  //
+  // IMPORTANT:
+  // NO NORMALIZATION
+  // NO REPLACEMENT
+  // NO COUNTRY CODE CONVERSION
+  // NO REMOVAL OF +
+  //
+  // The exact Shopify value is sent to Pathao.
+  // ----------------------------------------------------------
 
   const recipientPhone =
     shipping.phone ||
     billing.phone ||
     shopifyOrder.customer?.phone ||
     '';
-
-  const cleanedPhone =
-    normalizePhone(
-      recipientPhone
-    );
 
 
   // ----------------------------------------------------------
@@ -1494,7 +1964,7 @@ function buildPathaoOrder(
 
 
   // ----------------------------------------------------------
-  // Description
+  // Item description
   // ----------------------------------------------------------
 
   const itemDescription =
@@ -1506,21 +1976,24 @@ function buildPathaoOrder(
             item.title ||
             'Product';
 
+
           const quantity =
             Number(
               item.quantity
             ) || 1;
 
+
           return (
             `${title} x ${quantity}`
           );
+
         }
       )
       .join(', ');
 
 
   // ----------------------------------------------------------
-  // Shopify total price
+  // Shopify total
   // ----------------------------------------------------------
 
   const totalPrice =
@@ -1533,7 +2006,7 @@ function buildPathaoOrder(
 
 
   // ----------------------------------------------------------
-  // Pathao payload
+  // Pathao order
   // ----------------------------------------------------------
 
   const pathaoOrder = {
@@ -1549,8 +2022,9 @@ function buildPathaoOrder(
     recipient_name:
       recipientName,
 
+    // EXACT SHOPIFY PHONE
     recipient_phone:
-      cleanedPhone,
+      recipientPhone,
 
     recipient_address:
       recipientAddress,
@@ -1583,6 +2057,7 @@ function buildPathaoOrder(
 
     amount_to_collect:
       totalPrice
+
   };
 
 
@@ -1591,7 +2066,7 @@ function buildPathaoOrder(
 
 
 // ============================================================
-// CONVERT SHOPIFY ORDER TO PATHAO FORMAT
+// PREVIEW SHOPIFY ORDER → PATHAO
 // ============================================================
 
 app.get(
@@ -1605,10 +2080,12 @@ app.get(
           req.params.id
         );
 
+
       const data =
         await shopifyRequest(
           `orders/${orderId}.json`
         );
+
 
       if (!data.order) {
 
@@ -1619,6 +2096,7 @@ app.get(
 
           error:
             'Shopify order not found'
+
         });
       }
 
@@ -1639,6 +2117,7 @@ app.get(
 
         pathao_order:
           pathaoOrder
+
       });
 
     } catch (error) {
@@ -1648,6 +2127,7 @@ app.get(
         error.data ||
         error.message
       );
+
 
       res.status(
         error.status || 500
@@ -1660,7 +2140,9 @@ app.get(
           error.message,
 
         details:
-          error.data || null
+          error.data ||
+          null
+
       });
     }
   }
@@ -1707,6 +2189,7 @@ app.post(
                 shopifyOrderId
               )
             )
+
         });
       }
 
@@ -1736,6 +2219,7 @@ app.post(
 
           error:
             'Shopify order not found'
+
         });
       }
 
@@ -1751,7 +2235,11 @@ app.post(
 
 
       console.log(
-        '📦 Creating Pathao order:',
+        '\n📦 Creating Pathao order:'
+      );
+
+
+      console.log(
         JSON.stringify(
           pathaoOrder,
           null,
@@ -1768,11 +2256,13 @@ app.post(
         await pathaoRequest(
           '/aladdin/api/v1/orders',
           {
+
             method:
               'POST',
 
             body:
               pathaoOrder
+
           }
         );
 
@@ -1790,6 +2280,7 @@ app.post(
 
         pathao_response:
           result
+
       };
 
 
@@ -1808,11 +2299,21 @@ app.post(
     } catch (error) {
 
       console.error(
-        '❌ Pathao order creation error:',
-        error.data ||
-        error.message
+        '\n❌ Pathao order creation error:'
       );
 
+
+      console.error(
+        JSON.stringify(
+          error.data ||
+          error.message,
+          null,
+          2
+        )
+      );
+
+
+      // Return Pathao's actual response
       res.status(
         error.status || 500
       ).json({
@@ -1827,7 +2328,366 @@ app.post(
           error.message,
 
         details:
-          error.data || null
+          error.data ||
+          null
+
+      });
+    }
+  }
+);
+
+
+// ============================================================
+// BULK PATHAO ORDERS
+// ============================================================
+
+app.post(
+  '/api/pathao/bulk',
+  async (req, res) => {
+
+    try {
+
+      if (
+        !Array.isArray(
+          req.body.orders
+        )
+      ) {
+
+        return res.status(400).json({
+
+          success:
+            false,
+
+          error:
+            'orders must be an array'
+
+        });
+      }
+
+
+      const orders =
+        req.body.orders;
+
+
+      const result =
+        await pathaoRequest(
+          '/aladdin/api/v1/orders/bulk',
+          {
+
+            method:
+              'POST',
+
+            body: {
+
+              orders:
+                orders
+
+            }
+
+          }
+        );
+
+
+      res.json({
+
+        success:
+          true,
+
+        pathao_response:
+          result
+
+      });
+
+    } catch (error) {
+
+      console.error(
+        '❌ Bulk Pathao error:',
+        error.data ||
+        error.message
+      );
+
+
+      res.status(
+        error.status || 500
+      ).json({
+
+        success:
+          false,
+
+        error:
+          error.message,
+
+        details:
+          error.data ||
+          null
+
+      });
+    }
+  }
+);
+
+
+// ============================================================
+// PATHAO ORDER INFO
+// ============================================================
+
+app.get(
+  '/api/pathao/order/:consignmentId',
+  async (req, res) => {
+
+    try {
+
+      const consignmentId =
+        encodeURIComponent(
+          req.params.consignmentId
+        );
+
+
+      const result =
+        await pathaoRequest(
+          `/aladdin/api/v1/orders/${consignmentId}/info`
+        );
+
+
+      res.json({
+
+        success:
+          true,
+
+        pathao_response:
+          result
+
+      });
+
+    } catch (error) {
+
+      res.status(
+        error.status || 500
+      ).json({
+
+        success:
+          false,
+
+        error:
+          error.message,
+
+        details:
+          error.data ||
+          null
+
+      });
+    }
+  }
+);
+
+
+// ============================================================
+// PATHAO CITIES
+// ============================================================
+
+app.get(
+  '/api/pathao/cities',
+  async (req, res) => {
+
+    try {
+
+      const result =
+        await pathaoRequest(
+          '/aladdin/api/v1/city-list'
+        );
+
+
+      res.json({
+
+        success:
+          true,
+
+        pathao_response:
+          result
+
+      });
+
+    } catch (error) {
+
+      res.status(
+        error.status || 500
+      ).json({
+
+        success:
+          false,
+
+        error:
+          error.message,
+
+        details:
+          error.data ||
+          null
+
+      });
+    }
+  }
+);
+
+
+// ============================================================
+// PATHAO ZONES
+// ============================================================
+
+app.get(
+  '/api/pathao/cities/:cityId/zones',
+  async (req, res) => {
+
+    try {
+
+      const cityId =
+        encodeURIComponent(
+          req.params.cityId
+        );
+
+
+      const result =
+        await pathaoRequest(
+          `/aladdin/api/v1/cities/${cityId}/zone-list`
+        );
+
+
+      res.json({
+
+        success:
+          true,
+
+        pathao_response:
+          result
+
+      });
+
+    } catch (error) {
+
+      res.status(
+        error.status || 500
+      ).json({
+
+        success:
+          false,
+
+        error:
+          error.message,
+
+        details:
+          error.data ||
+          null
+
+      });
+    }
+  }
+);
+
+
+// ============================================================
+// PATHAO AREAS
+// ============================================================
+
+app.get(
+  '/api/pathao/zones/:zoneId/areas',
+  async (req, res) => {
+
+    try {
+
+      const zoneId =
+        encodeURIComponent(
+          req.params.zoneId
+        );
+
+
+      const result =
+        await pathaoRequest(
+          `/aladdin/api/v1/zones/${zoneId}/area-list`
+        );
+
+
+      res.json({
+
+        success:
+          true,
+
+        pathao_response:
+          result
+
+      });
+
+    } catch (error) {
+
+      res.status(
+        error.status || 500
+      ).json({
+
+        success:
+          false,
+
+        error:
+          error.message,
+
+        details:
+          error.data ||
+          null
+
+      });
+    }
+  }
+);
+
+
+// ============================================================
+// PATHAO PRICE CALCULATION
+// ============================================================
+
+app.post(
+  '/api/pathao/price',
+  async (req, res) => {
+
+    try {
+
+      const result =
+        await pathaoRequest(
+          '/aladdin/api/v1/merchant/price-plan',
+          {
+
+            method:
+              'POST',
+
+            body:
+              req.body
+
+          }
+        );
+
+
+      res.json({
+
+        success:
+          true,
+
+        pathao_response:
+          result
+
+      });
+
+    } catch (error) {
+
+      res.status(
+        error.status || 500
+      ).json({
+
+        success:
+          false,
+
+        error:
+          error.message,
+
+        details:
+          error.data ||
+          null
+
       });
     }
   }
@@ -1895,6 +2755,7 @@ app.get(
 
           pathao_order:
             pathaoOrder
+
         });
       }
 
@@ -1908,6 +2769,7 @@ app.get(
           results.length,
 
         results
+
       });
 
     } catch (error) {
@@ -1917,6 +2779,7 @@ app.get(
         error.data ||
         error.message
       );
+
 
       res.status(
         error.status || 500
@@ -1929,7 +2792,9 @@ app.get(
           error.message,
 
         details:
-          error.data || null
+          error.data ||
+          null
+
       });
     }
   }
@@ -1937,7 +2802,7 @@ app.get(
 
 
 // ============================================================
-// WEBHOOK TEST INFORMATION
+// WEBHOOK GET TEST
 // ============================================================
 
 app.get(
@@ -1963,6 +2828,7 @@ app.get(
 
       status:
         'waiting_for_shopify_webhook'
+
     });
   }
 );
@@ -1985,6 +2851,7 @@ app.use(
 
       path:
         req.originalUrl
+
     });
   }
 );
@@ -2007,6 +2874,7 @@ app.use(
       err
     );
 
+
     res.status(500).json({
 
       success:
@@ -2014,6 +2882,7 @@ app.use(
 
       error:
         'Internal server error'
+
     });
   }
 );
