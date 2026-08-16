@@ -1,12 +1,12 @@
 {
-  "name": "shopify-extractor",
+  "name": "shopify-pathao-bridge",
   "version": "1.0.0",
-  "description": "Extract orders from Shopify",
+  "private": true,
   "main": "extract.js",
   "scripts": {
     "start": "node extract.js"
   },
-  "engines": {
-    "node": ">=18.0.0"
+  "dependencies": {
+    "express": "^5.1.0"
   }
 }
