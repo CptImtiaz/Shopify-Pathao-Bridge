@@ -7,19 +7,22 @@ const app = express();
 // CONFIGURATION
 // ============================================================
 
-const SHOP = process.env.SHOP || 'imtiaz-mmk7g8dm';
+const SHOP =
+  process.env.SHOP || 'imtiaz-mmk7g8dm';
 
-const CLIENT_ID = process.env.CLIENT_ID;
-const CLIENT_SECRET = process.env.CLIENT_SECRET;
+const CLIENT_ID =
+  process.env.CLIENT_ID;
 
-// Shopify webhook HMAC secret.
-// For a Shopify custom app this should normally be the app's
-// client/app secret.
+const CLIENT_SECRET =
+  process.env.CLIENT_SECRET;
+
 const SHOPIFY_WEBHOOK_SECRET =
-  process.env.SHOPIFY_WEBHOOK_SECRET || CLIENT_SECRET;
+  process.env.SHOPIFY_WEBHOOK_SECRET ||
+  CLIENT_SECRET;
 
 const SHOPIFY_API_VERSION =
-  process.env.SHOPIFY_API_VERSION || '2026-07';
+  process.env.SHOPIFY_API_VERSION ||
+  '2026-07';
 
 const PATHAO_BASE_URL =
   process.env.PATHAO_BASE_URL ||
@@ -43,8 +46,9 @@ const MERCHANT_STORE_ID =
 const PORT =
   process.env.PORT || 3000;
 
+
 // ============================================================
-// VALIDATE ENVIRONMENT
+// ENVIRONMENT VALIDATION
 // ============================================================
 
 if (!CLIENT_ID || !CLIENT_SECRET) {
@@ -79,6 +83,7 @@ if (!SHOPIFY_WEBHOOK_SECRET) {
   process.exit(1);
 }
 
+
 // ============================================================
 // TOKEN CACHE
 // ============================================================
@@ -89,42 +94,31 @@ let SHOPIFY_EXPIRES_AT = 0;
 let PATHAO_TOKEN = null;
 let PATHAO_EXPIRES_AT = 0;
 
+
 // ============================================================
 // DUPLICATE PROTECTION
-// ============================================================
-//
-// This protects against the same order being submitted to Pathao
-// multiple times while this Railway instance is running.
-//
-// IMPORTANT:
-// This is in-memory only.
-// If Railway restarts the service, this memory is cleared.
-//
-// For permanent production duplicate protection, use a persistent
-// database, Shopify metafield, or another persistent mechanism.
 // ============================================================
 
 const submittedOrders = new Map();
 
+
 // ============================================================
 // EXPRESS JSON BODY
-// ============================================================
-//
-// We keep the raw request body because Shopify webhook HMAC
-// verification must be calculated against the ORIGINAL body.
 // ============================================================
 
 app.use(
   express.json({
     limit: '1mb',
+
     verify: (req, res, buf) => {
 
-      // Save the exact raw request body
-      // for Shopify HMAC verification.
+      // Keep original body for Shopify HMAC verification
       req.rawBody = Buffer.from(buf);
+
     }
   })
 );
+
 
 // ============================================================
 // SHOPIFY WEBHOOK HMAC VERIFICATION
@@ -165,15 +159,22 @@ function verifyShopifyWebhook(req) {
         .digest('base64');
 
     const receivedBuffer =
-      Buffer.from(hmacHeader, 'utf8');
+      Buffer.from(
+        hmacHeader,
+        'utf8'
+      );
 
     const generatedBuffer =
-      Buffer.from(generatedHash, 'utf8');
+      Buffer.from(
+        generatedHash,
+        'utf8'
+      );
 
     if (
       receivedBuffer.length !==
       generatedBuffer.length
     ) {
+
       return false;
     }
 
@@ -193,17 +194,18 @@ function verifyShopifyWebhook(req) {
   }
 }
 
+
 // ============================================================
 // SHOPIFY ACCESS TOKEN
 // ============================================================
 
 async function getShopifyToken() {
 
-  // Reuse existing token if still valid
+  // Reuse cached token
   if (
     SHOPIFY_TOKEN &&
     Date.now() <
-      SHOPIFY_EXPIRES_AT - 60_000
+      SHOPIFY_EXPIRES_AT - 60000
   ) {
 
     return SHOPIFY_TOKEN;
@@ -218,23 +220,34 @@ async function getShopifyToken() {
 
   const body =
     new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: CLIENT_ID,
-      client_secret: CLIENT_SECRET
+
+      grant_type:
+        'client_credentials',
+
+      client_id:
+        CLIENT_ID,
+
+      client_secret:
+        CLIENT_SECRET
+
     });
 
   const response =
     await fetch(
       tokenUrl,
       {
-        method: 'POST',
+        method:
+          'POST',
 
         headers: {
+
           'Content-Type':
             'application/x-www-form-urlencoded'
+
         },
 
-        body: body.toString()
+        body:
+          body.toString()
       }
     );
 
@@ -285,16 +298,18 @@ async function getShopifyToken() {
   return SHOPIFY_TOKEN;
 }
 
+
 // ============================================================
 // PATHAO ACCESS TOKEN
 // ============================================================
 
 async function getPathaoToken() {
 
+  // Reuse cached token
   if (
     PATHAO_TOKEN &&
     Date.now() <
-      PATHAO_EXPIRES_AT - 60_000
+      PATHAO_EXPIRES_AT - 60000
   ) {
 
     return PATHAO_TOKEN;
@@ -311,30 +326,35 @@ async function getPathaoToken() {
     await fetch(
       tokenUrl,
       {
-        method: 'POST',
+        method:
+          'POST',
 
         headers: {
+
           'Content-Type':
             'application/json'
+
         },
 
-        body: JSON.stringify({
+        body:
+          JSON.stringify({
 
-          client_id:
-            PATHAO_CLIENT_ID,
+            client_id:
+              PATHAO_CLIENT_ID,
 
-          client_secret:
-            PATHAO_CLIENT_SECRET,
+            client_secret:
+              PATHAO_CLIENT_SECRET,
 
-          username:
-            PATHAO_USERNAME,
+            username:
+              PATHAO_USERNAME,
 
-          password:
-            PATHAO_PASSWORD,
+            password:
+              PATHAO_PASSWORD,
 
-          grant_type:
-            'password'
-        })
+            grant_type:
+              'password'
+
+          })
       }
     );
 
@@ -385,6 +405,7 @@ async function getPathaoToken() {
   return PATHAO_TOKEN;
 }
 
+
 // ============================================================
 // SHOPIFY API REQUEST
 // ============================================================
@@ -416,11 +437,14 @@ async function shopifyRequest(
             'application/json',
 
           ...(options.headers || {})
+
         },
 
         body:
           options.body
-            ? JSON.stringify(options.body)
+            ? JSON.stringify(
+                options.body
+              )
             : undefined
       }
     );
@@ -442,6 +466,7 @@ async function shopifyRequest(
     data = {
       raw: text
     };
+
   }
 
   if (!response.ok) {
@@ -462,6 +487,7 @@ async function shopifyRequest(
 
   return data;
 }
+
 
 // ============================================================
 // PATHAO API REQUEST
@@ -494,11 +520,14 @@ async function pathaoRequest(
             'application/json',
 
           ...(options.headers || {})
+
         },
 
         body:
           options.body
-            ? JSON.stringify(options.body)
+            ? JSON.stringify(
+                options.body
+              )
             : undefined
       }
     );
@@ -520,6 +549,7 @@ async function pathaoRequest(
     data = {
       raw: text
     };
+
   }
 
   if (!response.ok) {
@@ -541,6 +571,7 @@ async function pathaoRequest(
   return data;
 }
 
+
 // ============================================================
 // HEALTH CHECK
 // ============================================================
@@ -551,9 +582,11 @@ app.get(
 
     res.json({
 
-      success: true,
+      success:
+        true,
 
-      status: 'ok',
+      status:
+        'ok',
 
       service:
         'Shopify Pathao Bridge',
@@ -565,15 +598,20 @@ app.get(
         SHOPIFY_API_VERSION,
 
       pathao_environment:
-        PATHAO_BASE_URL.includes('sandbox')
+        PATHAO_BASE_URL.includes(
+          'sandbox'
+        )
           ? 'sandbox'
           : 'production',
 
       webhook:
         '/webhooks/orders-create'
+
     });
+
   }
 );
+
 
 // ============================================================
 // HEALTH
@@ -585,27 +623,23 @@ app.get(
 
     res.json({
 
-      success: true,
+      success:
+        true,
 
       status:
         'healthy',
 
       timestamp:
         new Date().toISOString()
+
     });
+
   }
 );
 
+
 // ============================================================
-// SHOPIFY WEBHOOK ENDPOINT
-// ============================================================
-//
-// Shopify sends:
-// POST /webhooks/orders-create
-//
-// Topic:
-// ORDERS_CREATE
-//
+// SHOPIFY ORDERS CREATE WEBHOOK
 // ============================================================
 
 app.post(
@@ -624,6 +658,7 @@ app.post(
       '============================================'
     );
 
+
     // --------------------------------------------------------
     // Verify Shopify HMAC
     // --------------------------------------------------------
@@ -639,16 +674,20 @@ app.post(
 
       return res.status(401).json({
 
-        success: false,
+        success:
+          false,
 
         error:
           'Invalid Shopify webhook signature'
+
       });
+
     }
 
     console.log(
       '✅ Shopify webhook signature verified'
     );
+
 
     // --------------------------------------------------------
     // Shopify webhook headers
@@ -669,6 +708,7 @@ app.post(
         'X-Shopify-Shop-Domain'
       );
 
+
     console.log(
       'Webhook ID:',
       webhookId || 'N/A'
@@ -684,12 +724,14 @@ app.post(
       shopDomain || 'N/A'
     );
 
+
     // --------------------------------------------------------
-    // Get order from webhook payload
+    // Shopify order
     // --------------------------------------------------------
 
     const shopifyOrder =
       req.body;
+
 
     if (
       !shopifyOrder ||
@@ -697,22 +739,27 @@ app.post(
     ) {
 
       console.error(
-        '❌ Webhook does not contain a valid Shopify order'
+        '❌ Invalid Shopify order webhook'
       );
 
       return res.status(400).json({
 
-        success: false,
+        success:
+          false,
 
         error:
           'Invalid Shopify order webhook payload'
+
       });
+
     }
+
 
     const shopifyOrderId =
       String(
         shopifyOrder.id
       );
+
 
     console.log(
       '🛒 Shopify Order ID:',
@@ -721,8 +768,10 @@ app.post(
 
     console.log(
       '🧾 Shopify Order Name:',
-      shopifyOrder.name || 'N/A'
+      shopifyOrder.name ||
+      'N/A'
     );
+
 
     // --------------------------------------------------------
     // Duplicate protection
@@ -740,9 +789,11 @@ app.post(
 
       return res.status(200).json({
 
-        success: true,
+        success:
+          true,
 
-        duplicate: true,
+        duplicate:
+          true,
 
         message:
           'Order was already submitted to Pathao',
@@ -751,40 +802,21 @@ app.post(
           submittedOrders.get(
             shopifyOrderId
           )
+
       });
+
     }
+
 
     // --------------------------------------------------------
     // Build Pathao order
     // --------------------------------------------------------
 
-    let pathaoOrder;
-
-    try {
-
-      pathaoOrder =
-        buildPathaoOrder(
-          shopifyOrder
-        );
-
-    } catch (error) {
-
-      console.error(
-        '❌ Could not build Pathao order:',
-        error.message
+    const pathaoOrder =
+      buildPathaoOrder(
+        shopifyOrder
       );
 
-      return res.status(400).json({
-
-        success: false,
-
-        shopify_order_id:
-          shopifyOrderId,
-
-        error:
-          error.message
-      });
-    }
 
     console.log(
       '\n📦 PATHAO ORDER PAYLOAD'
@@ -797,6 +829,7 @@ app.post(
         2
       )
     );
+
 
     // --------------------------------------------------------
     // Create Pathao order
@@ -817,8 +850,10 @@ app.post(
 
             body:
               pathaoOrder
+
           }
         );
+
 
       const pathaoResult = {
 
@@ -833,16 +868,15 @@ app.post(
 
         pathao_response:
           result
+
       };
 
-      // ------------------------------------------------------
-      // Save duplicate protection
-      // ------------------------------------------------------
 
       submittedOrders.set(
         shopifyOrderId,
         pathaoResult
       );
+
 
       console.log(
         '\n============================================'
@@ -864,13 +898,11 @@ app.post(
         )
       );
 
-      // ------------------------------------------------------
-      // Tell Shopify webhook was successfully processed
-      // ------------------------------------------------------
 
       return res.status(200).json(
         pathaoResult
       );
+
 
     } catch (error) {
 
@@ -882,6 +914,7 @@ app.post(
         error.data ||
         error.message
       );
+
 
       return res.status(
         error.status || 500
@@ -898,13 +931,17 @@ app.post(
 
         details:
           error.data || null
+
       });
+
     }
+
   }
 );
 
+
 // ============================================================
-// TEST SHOPIFY AUTHENTICATION
+// TEST SHOPIFY
 // ============================================================
 
 app.get(
@@ -918,6 +955,7 @@ app.get(
           'shop.json'
         );
 
+
       res.json({
 
         success:
@@ -928,7 +966,9 @@ app.get(
 
         shop:
           data.shop
+
       });
+
 
     } catch (error) {
 
@@ -937,6 +977,7 @@ app.get(
         error.data ||
         error.message
       );
+
 
       res.status(
         error.status || 500
@@ -953,13 +994,17 @@ app.get(
 
         details:
           error.data || null
+
       });
+
     }
+
   }
 );
 
+
 // ============================================================
-// TEST PATHAO AUTHENTICATION
+// TEST PATHAO
 // ============================================================
 
 app.get(
@@ -970,6 +1015,7 @@ app.get(
 
       await getPathaoToken();
 
+
       res.json({
 
         success:
@@ -979,10 +1025,14 @@ app.get(
           'Pathao API authentication working',
 
         environment:
-          PATHAO_BASE_URL.includes('sandbox')
+          PATHAO_BASE_URL.includes(
+            'sandbox'
+          )
             ? 'sandbox'
             : 'production'
+
       });
+
 
     } catch (error) {
 
@@ -990,6 +1040,7 @@ app.get(
         'Pathao test error:',
         error.message
       );
+
 
       res.status(
         error.status || 500
@@ -1006,10 +1057,14 @@ app.get(
 
         details:
           error.data || null
+
       });
+
     }
+
   }
 );
+
 
 // ============================================================
 // GET SHOPIFY ORDERS
@@ -1033,9 +1088,11 @@ app.get(
           250
         );
 
+
       const status =
         req.query.status ||
         'any';
+
 
       const data =
         await shopifyRequest(
@@ -1043,6 +1100,7 @@ app.get(
             status
           )}&limit=${limit}`
         );
+
 
       res.json({
 
@@ -1056,7 +1114,9 @@ app.get(
         orders:
           data.orders ||
           []
+
       });
+
 
     } catch (error) {
 
@@ -1065,6 +1125,7 @@ app.get(
         error.data ||
         error.message
       );
+
 
       res.status(
         error.status || 500
@@ -1078,10 +1139,14 @@ app.get(
 
         details:
           error.data || null
+
       });
+
     }
+
   }
 );
+
 
 // ============================================================
 // GET SINGLE SHOPIFY ORDER
@@ -1098,10 +1163,12 @@ app.get(
           req.params.id
         );
 
+
       const data =
         await shopifyRequest(
           `orders/${orderId}.json`
         );
+
 
       res.json({
 
@@ -1111,7 +1178,9 @@ app.get(
         order:
           data.order ||
           null
+
       });
+
 
     } catch (error) {
 
@@ -1120,6 +1189,7 @@ app.get(
         error.data ||
         error.message
       );
+
 
       res.status(
         error.status || 500
@@ -1133,10 +1203,14 @@ app.get(
 
         details:
           error.data || null
+
       });
+
     }
+
   }
 );
+
 
 // ============================================================
 // GET SHOPIFY PRODUCTS
@@ -1160,10 +1234,12 @@ app.get(
           250
         );
 
+
       const data =
         await shopifyRequest(
           `products.json?limit=${limit}`
         );
+
 
       res.json({
 
@@ -1177,7 +1253,9 @@ app.get(
         products:
           data.products ||
           []
+
       });
+
 
     } catch (error) {
 
@@ -1186,6 +1264,7 @@ app.get(
         error.data ||
         error.message
       );
+
 
       res.status(
         error.status || 500
@@ -1199,10 +1278,14 @@ app.get(
 
         details:
           error.data || null
+
       });
+
     }
+
   }
 );
+
 
 // ============================================================
 // GET SHOPIFY CUSTOMERS
@@ -1226,10 +1309,12 @@ app.get(
           250
         );
 
+
       const data =
         await shopifyRequest(
           `customers.json?limit=${limit}`
         );
+
 
       res.json({
 
@@ -1243,7 +1328,9 @@ app.get(
         customers:
           data.customers ||
           []
+
       });
+
 
     } catch (error) {
 
@@ -1252,6 +1339,7 @@ app.get(
         error.data ||
         error.message
       );
+
 
       res.status(
         error.status || 500
@@ -1265,20 +1353,23 @@ app.get(
 
         details:
           error.data || null
+
       });
+
     }
+
   }
 );
+
 
 // ============================================================
 // CALCULATE ORDER WEIGHT
 // ============================================================
 
-function calculateOrderWeight(
-  items
-) {
+function calculateOrderWeight(items) {
 
   let totalGrams = 0;
+
 
   for (
     const item of items
@@ -1294,35 +1385,45 @@ function calculateOrderWeight(
         item.quantity
       ) || 0;
 
+
     totalGrams +=
       grams * quantity;
+
   }
+
 
   let weightKg =
     totalGrams / 1000;
 
-  // Pathao minimum = 0.5 KG
+
+  // Pathao minimum
   if (
     weightKg < 0.5
   ) {
 
     weightKg =
       0.5;
+
   }
 
-  // Pathao maximum = 10 KG
+
+  // Pathao maximum
   if (
     weightKg > 10
   ) {
 
     weightKg =
       10;
+
   }
+
 
   return Number(
     weightKg.toFixed(2)
   );
+
 }
+
 
 // ============================================================
 // BUILD PATHAO ORDER
@@ -1344,6 +1445,7 @@ function buildPathaoOrder(
     shopifyOrder.line_items ||
     [];
 
+
   // ----------------------------------------------------------
   // Recipient name
   // ----------------------------------------------------------
@@ -1354,57 +1456,27 @@ function buildPathaoOrder(
     shopifyOrder.customer?.first_name ||
     'Customer';
 
-  if (
-    recipientName.length < 3
-  ) {
-
-    throw new Error(
-      'Recipient name must be at least 3 characters'
-    );
-  }
 
   // ----------------------------------------------------------
   // Recipient phone
   // ----------------------------------------------------------
   //
-  // Prefer shipping phone.
-  // If missing, use billing phone.
+  // NO NORMALIZATION
+  // NO FORMAT CHECK
+  // NO LENGTH CHECK
   //
+  // Shopify phone is passed directly.
   // ----------------------------------------------------------
 
   const recipientPhone =
     shipping.phone ||
     billing.phone ||
     shopifyOrder.customer?.phone ||
-    null;
+    '';
 
-  if (!recipientPhone) {
-
-    throw new Error(
-      `Recipient phone is missing for Shopify order ${shopifyOrder.id}`
-    );
-  }
-
-  // Remove spaces, -, (, )
-  const cleanedPhone =
-    String(
-      recipientPhone
-    ).replace(
-      /[\s\-()+]/g,
-      ''
-    );
-
-  if (
-    cleanedPhone.length !== 11
-  ) {
-
-    throw new Error(
-      `Recipient phone must contain 11 digits for Shopify order ${shopifyOrder.id}. Received: ${recipientPhone}`
-    );
-  }
 
   // ----------------------------------------------------------
-  // Address
+  // Recipient address
   // ----------------------------------------------------------
 
   const addressParts = [
@@ -1423,26 +1495,10 @@ function buildPathaoOrder(
 
   ].filter(Boolean);
 
+
   const recipientAddress =
     addressParts.join(', ');
 
-  if (
-    recipientAddress.length < 10
-  ) {
-
-    throw new Error(
-      `Recipient address is too short for Shopify order ${shopifyOrder.id}`
-    );
-  }
-
-  if (
-    recipientAddress.length > 220
-  ) {
-
-    throw new Error(
-      `Recipient address is longer than Pathao's 220 character limit for Shopify order ${shopifyOrder.id}`
-    );
-  }
 
   // ----------------------------------------------------------
   // Total quantity
@@ -1468,6 +1524,7 @@ function buildPathaoOrder(
       0
     );
 
+
   // ----------------------------------------------------------
   // Description
   // ----------------------------------------------------------
@@ -1486,10 +1543,15 @@ function buildPathaoOrder(
               item.quantity
             ) || 1;
 
-          return `${title} x ${quantity}`;
+
+          return (
+            `${title} x ${quantity}`
+          );
+
         }
       )
       .join(', ');
+
 
   // ----------------------------------------------------------
   // Shopify total price
@@ -1502,6 +1564,7 @@ function buildPathaoOrder(
         0
       ).toFixed(0)
     );
+
 
   // ----------------------------------------------------------
   // Pathao payload
@@ -1521,7 +1584,7 @@ function buildPathaoOrder(
       recipientName,
 
     recipient_phone:
-      cleanedPhone,
+      recipientPhone,
 
     recipient_address:
       recipientAddress,
@@ -1554,10 +1617,14 @@ function buildPathaoOrder(
 
     amount_to_collect:
       totalPrice
+
   };
 
+
   return pathaoOrder;
+
 }
+
 
 // ============================================================
 // CONVERT SHOPIFY ORDER TO PATHAO FORMAT
@@ -1574,10 +1641,12 @@ app.get(
           req.params.id
         );
 
+
       const data =
         await shopifyRequest(
           `orders/${orderId}.json`
         );
+
 
       if (!data.order) {
 
@@ -1588,13 +1657,17 @@ app.get(
 
           error:
             'Shopify order not found'
+
         });
+
       }
+
 
       const pathaoOrder =
         buildPathaoOrder(
           data.order
         );
+
 
       res.json({
 
@@ -1606,7 +1679,9 @@ app.get(
 
         pathao_order:
           pathaoOrder
+
       });
+
 
     } catch (error) {
 
@@ -1615,6 +1690,7 @@ app.get(
         error.data ||
         error.message
       );
+
 
       res.status(
         error.status || 500
@@ -1628,10 +1704,14 @@ app.get(
 
         details:
           error.data || null
+
       });
+
     }
+
   }
 );
+
 
 // ============================================================
 // CREATE PATHAO ORDER FROM SHOPIFY ORDER
@@ -1644,10 +1724,11 @@ app.post(
     const shopifyOrderId =
       req.params.shopifyOrderId;
 
+
     try {
 
       // ------------------------------------------------------
-      // Check duplicate
+      // Duplicate check
       // ------------------------------------------------------
 
       if (
@@ -1672,8 +1753,11 @@ app.post(
                 shopifyOrderId
               )
             )
+
         });
+
       }
+
 
       // ------------------------------------------------------
       // Get Shopify order
@@ -1686,8 +1770,10 @@ app.post(
           )}.json`
         );
 
+
       const shopifyOrder =
         data.order;
+
 
       if (!shopifyOrder) {
 
@@ -1698,8 +1784,11 @@ app.post(
 
           error:
             'Shopify order not found'
+
         });
+
       }
+
 
       // ------------------------------------------------------
       // Build Pathao order
@@ -1710,6 +1799,7 @@ app.post(
           shopifyOrder
         );
 
+
       console.log(
         '📦 Creating Pathao order:',
         JSON.stringify(
@@ -1718,6 +1808,7 @@ app.post(
           2
         )
       );
+
 
       // ------------------------------------------------------
       // Send to Pathao
@@ -1732,8 +1823,10 @@ app.post(
 
             body:
               pathaoOrder
+
           }
         );
+
 
       const pathaoResult = {
 
@@ -1748,7 +1841,9 @@ app.post(
 
         pathao_response:
           result
+
       };
+
 
       submittedOrders.set(
         String(
@@ -1757,9 +1852,11 @@ app.post(
         pathaoResult
       );
 
+
       res.json(
         pathaoResult
       );
+
 
     } catch (error) {
 
@@ -1768,6 +1865,7 @@ app.post(
         error.data ||
         error.message
       );
+
 
       res.status(
         error.status || 500
@@ -1784,13 +1882,17 @@ app.post(
 
         details:
           error.data || null
+
       });
+
     }
+
   }
 );
 
+
 // ============================================================
-// GET ALL SHOPIFY ORDERS AND PREVIEW PATHAO DATA
+// SYNC PREVIEW
 // ============================================================
 
 app.get(
@@ -1811,62 +1913,50 @@ app.get(
           50
         );
 
+
       const data =
         await shopifyRequest(
           `orders.json?status=any&limit=${limit}`
         );
 
+
       const orders =
         data.orders ||
         [];
 
+
       const results =
         [];
+
 
       for (
         const order of orders
       ) {
 
-        try {
+        const pathaoOrder =
+          buildPathaoOrder(
+            order
+          );
 
-          const pathaoOrder =
-            buildPathaoOrder(
-              order
-            );
 
-          results.push({
+        results.push({
 
-            success:
-              true,
+          success:
+            true,
 
-            shopify_order_id:
-              order.id,
+          shopify_order_id:
+            order.id,
 
-            shopify_order_name:
-              order.name,
+          shopify_order_name:
+            order.name,
 
-            pathao_order:
-              pathaoOrder
-          });
+          pathao_order:
+            pathaoOrder
 
-        } catch (error) {
+        });
 
-          results.push({
-
-            success:
-              false,
-
-            shopify_order_id:
-              order.id,
-
-            shopify_order_name:
-              order.name,
-
-            error:
-              error.message
-          });
-        }
       }
+
 
       res.json({
 
@@ -1877,7 +1967,9 @@ app.get(
           results.length,
 
         results
+
       });
+
 
     } catch (error) {
 
@@ -1886,6 +1978,7 @@ app.get(
         error.data ||
         error.message
       );
+
 
       res.status(
         error.status || 500
@@ -1899,10 +1992,14 @@ app.get(
 
         details:
           error.data || null
+
       });
+
     }
+
   }
 );
+
 
 // ============================================================
 // WEBHOOK TEST INFORMATION
@@ -1931,9 +2028,12 @@ app.get(
 
       status:
         'waiting_for_shopify_webhook'
+
     });
+
   }
 );
+
 
 // ============================================================
 // 404
@@ -1952,9 +2052,12 @@ app.use(
 
       path:
         req.originalUrl
+
     });
+
   }
 );
+
 
 // ============================================================
 // GLOBAL ERROR HANDLER
@@ -1973,6 +2076,7 @@ app.use(
       err
     );
 
+
     res.status(500).json({
 
       success:
@@ -1980,9 +2084,12 @@ app.use(
 
       error:
         'Internal server error'
+
     });
+
   }
 );
+
 
 // ============================================================
 // START SERVER
@@ -2019,7 +2126,9 @@ app.listen(
 
     console.log(
       `🚚 Pathao: ${
-        PATHAO_BASE_URL.includes('sandbox')
+        PATHAO_BASE_URL.includes(
+          'sandbox'
+        )
           ? 'SANDBOX'
           : 'PRODUCTION'
       }`
@@ -2036,5 +2145,6 @@ app.listen(
     console.log(
       '============================================'
     );
+
   }
 );
