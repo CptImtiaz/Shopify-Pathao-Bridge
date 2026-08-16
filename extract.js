@@ -1,17 +1,20 @@
 const SHOP = process.env.SHOP || 'imtiaz-mmk7g8dm';
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
+const PATHAO_BASE_URL = process.env.PATHAO_BASE_URL || 'https://courier-api-sandbox.pathao.com';
 const PATHAO_CLIENT_ID = process.env.PATHAO_CLIENT_ID;
 const PATHAO_CLIENT_SECRET = process.env.PATHAO_CLIENT_SECRET;
+const PATHAO_USERNAME = process.env.PATHAO_USERNAME;
+const PATHAO_PASSWORD = process.env.PATHAO_PASSWORD;
 const MERCHANT_STORE_ID = process.env.MERCHANT_STORE_ID || 1;
 
 if (!CLIENT_ID || !CLIENT_SECRET) {
-  console.error('❌ Missing CLIENT_ID or CLIENT_SECRET');
+  console.error('❌ Missing Shopify CLIENT_ID or CLIENT_SECRET');
   process.exit(1);
 }
 
-if (!PATHAO_CLIENT_ID || !PATHAO_CLIENT_SECRET) {
-  console.error('❌ Missing PATHAO_CLIENT_ID or PATHAO_CLIENT_SECRET');
+if (!PATHAO_CLIENT_ID || !PATHAO_CLIENT_SECRET || !PATHAO_USERNAME || !PATHAO_PASSWORD) {
+  console.error('❌ Missing Pathao credentials');
   process.exit(1);
 }
 
@@ -65,7 +68,7 @@ async function getPathaoToken() {
   }
 
   try {
-    const tokenUrl = 'https://api-staging.pathaointl.com/aladdin/api/v1/auth/login';
+    const tokenUrl = `${PATHAO_BASE_URL}/auth/login`;
     
     const tokenResponse = await fetch(tokenUrl, {
       method: 'POST',
@@ -75,6 +78,9 @@ async function getPathaoToken() {
       body: JSON.stringify({
         client_id: PATHAO_CLIENT_ID,
         client_secret: PATHAO_CLIENT_SECRET,
+        username: PATHAO_USERNAME,
+        password: PATHAO_PASSWORD,
+        grant_type: 'password',
       }),
     });
 
@@ -83,7 +89,7 @@ async function getPathaoToken() {
     }
 
     const tokenData = await tokenResponse.json();
-    PATHAO_TOKEN = tokenData.data.access_token;
+    PATHAO_TOKEN = tokenData.access_token;
     PATHAO_EXPIRES_AT = Date.now() + (3600 * 1000); // 1 hour
 
     return PATHAO_TOKEN;
@@ -116,7 +122,7 @@ async function createPathaoOrder(shopifyOrder) {
       amount_to_collect: parseFloat(shopifyOrder.total_price) || 0,
     };
 
-    const response = await fetch('https://api-staging.pathaointl.com/aladdin/api/v1/orders', {
+    const response = await fetch(`${PATHAO_BASE_URL}/aladdin/api/v1/orders`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
