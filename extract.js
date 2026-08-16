@@ -31,7 +31,7 @@ const SHOPIFY_API_VERSION =
 
 const PATHAO_BASE_URL =
   process.env.PATHAO_BASE_URL ||
-  'https://courier-api-sandbox.pathao.com';
+  'https://api-hermes.pathao.com';
 
 const PATHAO_CLIENT_ID =
   process.env.PATHAO_CLIENT_ID;
