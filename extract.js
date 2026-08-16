@@ -52,7 +52,6 @@ const PORT =
 // ============================================================
 
 if (!CLIENT_ID || !CLIENT_SECRET) {
-
   console.error(
     '❌ Missing CLIENT_ID or CLIENT_SECRET'
   );
@@ -66,7 +65,6 @@ if (
   !PATHAO_USERNAME ||
   !PATHAO_PASSWORD
 ) {
-
   console.error(
     '❌ Missing Pathao credentials'
   );
@@ -75,7 +73,6 @@ if (
 }
 
 if (!SHOPIFY_WEBHOOK_SECRET) {
-
   console.error(
     '❌ Missing SHOPIFY_WEBHOOK_SECRET'
   );
@@ -111,10 +108,7 @@ app.use(
     limit: '1mb',
 
     verify: (req, res, buf) => {
-
-      // Keep original body for Shopify HMAC verification
       req.rawBody = Buffer.from(buf);
-
     }
   })
 );
@@ -174,7 +168,6 @@ function verifyShopifyWebhook(req) {
       receivedBuffer.length !==
       generatedBuffer.length
     ) {
-
       return false;
     }
 
@@ -201,13 +194,11 @@ function verifyShopifyWebhook(req) {
 
 async function getShopifyToken() {
 
-  // Reuse cached token
   if (
     SHOPIFY_TOKEN &&
     Date.now() <
       SHOPIFY_EXPIRES_AT - 60000
   ) {
-
     return SHOPIFY_TOKEN;
   }
 
@@ -229,7 +220,6 @@ async function getShopifyToken() {
 
       client_secret:
         CLIENT_SECRET
-
     });
 
   const response =
@@ -240,10 +230,8 @@ async function getShopifyToken() {
           'POST',
 
         headers: {
-
           'Content-Type':
             'application/x-www-form-urlencoded'
-
         },
 
         body:
@@ -305,13 +293,11 @@ async function getShopifyToken() {
 
 async function getPathaoToken() {
 
-  // Reuse cached token
   if (
     PATHAO_TOKEN &&
     Date.now() <
       PATHAO_EXPIRES_AT - 60000
   ) {
-
     return PATHAO_TOKEN;
   }
 
@@ -330,10 +316,8 @@ async function getPathaoToken() {
           'POST',
 
         headers: {
-
           'Content-Type':
             'application/json'
-
         },
 
         body:
@@ -353,7 +337,6 @@ async function getPathaoToken() {
 
             grant_type:
               'password'
-
           })
       }
     );
@@ -437,7 +420,6 @@ async function shopifyRequest(
             'application/json',
 
           ...(options.headers || {})
-
         },
 
         body:
@@ -466,7 +448,6 @@ async function shopifyRequest(
     data = {
       raw: text
     };
-
   }
 
   if (!response.ok) {
@@ -520,7 +501,6 @@ async function pathaoRequest(
             'application/json',
 
           ...(options.headers || {})
-
         },
 
         body:
@@ -549,7 +529,6 @@ async function pathaoRequest(
     data = {
       raw: text
     };
-
   }
 
   if (!response.ok) {
@@ -606,9 +585,7 @@ app.get(
 
       webhook:
         '/webhooks/orders-create'
-
     });
-
   }
 );
 
@@ -631,9 +608,7 @@ app.get(
 
       timestamp:
         new Date().toISOString()
-
     });
-
   }
 );
 
@@ -679,9 +654,7 @@ app.post(
 
         error:
           'Invalid Shopify webhook signature'
-
       });
-
     }
 
     console.log(
@@ -708,7 +681,6 @@ app.post(
         'X-Shopify-Shop-Domain'
       );
 
-
     console.log(
       'Webhook ID:',
       webhookId || 'N/A'
@@ -732,7 +704,6 @@ app.post(
     const shopifyOrder =
       req.body;
 
-
     if (
       !shopifyOrder ||
       !shopifyOrder.id
@@ -749,17 +720,13 @@ app.post(
 
         error:
           'Invalid Shopify order webhook payload'
-
       });
-
     }
-
 
     const shopifyOrderId =
       String(
         shopifyOrder.id
       );
-
 
     console.log(
       '🛒 Shopify Order ID:',
@@ -802,9 +769,7 @@ app.post(
           submittedOrders.get(
             shopifyOrderId
           )
-
       });
-
     }
 
 
@@ -850,7 +815,6 @@ app.post(
 
             body:
               pathaoOrder
-
           }
         );
 
@@ -868,7 +832,6 @@ app.post(
 
         pathao_response:
           result
-
       };
 
 
@@ -903,7 +866,6 @@ app.post(
         pathaoResult
       );
 
-
     } catch (error) {
 
       console.error(
@@ -914,7 +876,6 @@ app.post(
         error.data ||
         error.message
       );
-
 
       return res.status(
         error.status || 500
@@ -931,11 +892,8 @@ app.post(
 
         details:
           error.data || null
-
       });
-
     }
-
   }
 );
 
@@ -955,7 +913,6 @@ app.get(
           'shop.json'
         );
 
-
       res.json({
 
         success:
@@ -966,9 +923,7 @@ app.get(
 
         shop:
           data.shop
-
       });
-
 
     } catch (error) {
 
@@ -977,7 +932,6 @@ app.get(
         error.data ||
         error.message
       );
-
 
       res.status(
         error.status || 500
@@ -994,11 +948,8 @@ app.get(
 
         details:
           error.data || null
-
       });
-
     }
-
   }
 );
 
@@ -1015,7 +966,6 @@ app.get(
 
       await getPathaoToken();
 
-
       res.json({
 
         success:
@@ -1030,9 +980,7 @@ app.get(
           )
             ? 'sandbox'
             : 'production'
-
       });
-
 
     } catch (error) {
 
@@ -1040,7 +988,6 @@ app.get(
         'Pathao test error:',
         error.message
       );
-
 
       res.status(
         error.status || 500
@@ -1057,11 +1004,8 @@ app.get(
 
         details:
           error.data || null
-
       });
-
     }
-
   }
 );
 
@@ -1088,11 +1032,9 @@ app.get(
           250
         );
 
-
       const status =
         req.query.status ||
         'any';
-
 
       const data =
         await shopifyRequest(
@@ -1100,7 +1042,6 @@ app.get(
             status
           )}&limit=${limit}`
         );
-
 
       res.json({
 
@@ -1114,9 +1055,7 @@ app.get(
         orders:
           data.orders ||
           []
-
       });
-
 
     } catch (error) {
 
@@ -1125,7 +1064,6 @@ app.get(
         error.data ||
         error.message
       );
-
 
       res.status(
         error.status || 500
@@ -1139,11 +1077,8 @@ app.get(
 
         details:
           error.data || null
-
       });
-
     }
-
   }
 );
 
@@ -1163,12 +1098,10 @@ app.get(
           req.params.id
         );
 
-
       const data =
         await shopifyRequest(
           `orders/${orderId}.json`
         );
-
 
       res.json({
 
@@ -1178,9 +1111,7 @@ app.get(
         order:
           data.order ||
           null
-
       });
-
 
     } catch (error) {
 
@@ -1189,7 +1120,6 @@ app.get(
         error.data ||
         error.message
       );
-
 
       res.status(
         error.status || 500
@@ -1203,11 +1133,8 @@ app.get(
 
         details:
           error.data || null
-
       });
-
     }
-
   }
 );
 
@@ -1234,12 +1161,10 @@ app.get(
           250
         );
 
-
       const data =
         await shopifyRequest(
           `products.json?limit=${limit}`
         );
-
 
       res.json({
 
@@ -1253,9 +1178,7 @@ app.get(
         products:
           data.products ||
           []
-
       });
-
 
     } catch (error) {
 
@@ -1264,7 +1187,6 @@ app.get(
         error.data ||
         error.message
       );
-
 
       res.status(
         error.status || 500
@@ -1278,11 +1200,8 @@ app.get(
 
         details:
           error.data || null
-
       });
-
     }
-
   }
 );
 
@@ -1309,12 +1228,10 @@ app.get(
           250
         );
 
-
       const data =
         await shopifyRequest(
           `customers.json?limit=${limit}`
         );
-
 
       res.json({
 
@@ -1328,9 +1245,7 @@ app.get(
         customers:
           data.customers ||
           []
-
       });
-
 
     } catch (error) {
 
@@ -1339,7 +1254,6 @@ app.get(
         error.data ||
         error.message
       );
-
 
       res.status(
         error.status || 500
@@ -1353,11 +1267,8 @@ app.get(
 
         details:
           error.data || null
-
       });
-
     }
-
   }
 );
 
@@ -1369,7 +1280,6 @@ app.get(
 function calculateOrderWeight(items) {
 
   let totalGrams = 0;
-
 
   for (
     const item of items
@@ -1385,12 +1295,9 @@ function calculateOrderWeight(items) {
         item.quantity
       ) || 0;
 
-
     totalGrams +=
       grams * quantity;
-
   }
-
 
   let weightKg =
     totalGrams / 1000;
@@ -1403,7 +1310,6 @@ function calculateOrderWeight(items) {
 
     weightKg =
       0.5;
-
   }
 
 
@@ -1414,14 +1320,78 @@ function calculateOrderWeight(items) {
 
     weightKg =
       10;
-
   }
 
 
   return Number(
     weightKg.toFixed(2)
   );
+}
 
+
+// ============================================================
+// NORMALIZE BANGLADESH PHONE
+// ============================================================
+//
+// Examples:
+//
+// +8801741563884
+//       ↓
+// 01741563884
+//
+// 8801741563884
+//       ↓
+// 01741563884
+//
+// 01741563884
+//       ↓
+// 01741563884
+//
+// ============================================================
+
+function normalizePhone(phone) {
+
+  if (!phone) {
+    return '';
+  }
+
+  let value =
+    String(phone).trim();
+
+  // Remove spaces, hyphens, brackets
+  value =
+    value.replace(
+      /[\s\-()]/g,
+      ''
+    );
+
+  // +8801XXXXXXXXX
+  if (
+    value.startsWith(
+      '+880'
+    )
+  ) {
+
+    value =
+      '0' +
+      value.substring(4);
+
+  }
+
+  // 8801XXXXXXXXX
+  else if (
+    value.startsWith(
+      '880'
+    )
+  ) {
+
+    value =
+      '0' +
+      value.substring(3);
+
+  }
+
+  return value;
 }
 
 
@@ -1460,19 +1430,17 @@ function buildPathaoOrder(
   // ----------------------------------------------------------
   // Recipient phone
   // ----------------------------------------------------------
-  //
-  // NO NORMALIZATION
-  // NO FORMAT CHECK
-  // NO LENGTH CHECK
-  //
-  // Shopify phone is passed directly.
-  // ----------------------------------------------------------
 
   const recipientPhone =
     shipping.phone ||
     billing.phone ||
     shopifyOrder.customer?.phone ||
     '';
+
+  const cleanedPhone =
+    normalizePhone(
+      recipientPhone
+    );
 
 
   // ----------------------------------------------------------
@@ -1543,11 +1511,9 @@ function buildPathaoOrder(
               item.quantity
             ) || 1;
 
-
           return (
             `${title} x ${quantity}`
           );
-
         }
       )
       .join(', ');
@@ -1584,7 +1550,7 @@ function buildPathaoOrder(
       recipientName,
 
     recipient_phone:
-      recipientPhone,
+      cleanedPhone,
 
     recipient_address:
       recipientAddress,
@@ -1617,12 +1583,10 @@ function buildPathaoOrder(
 
     amount_to_collect:
       totalPrice
-
   };
 
 
   return pathaoOrder;
-
 }
 
 
@@ -1641,12 +1605,10 @@ app.get(
           req.params.id
         );
 
-
       const data =
         await shopifyRequest(
           `orders/${orderId}.json`
         );
-
 
       if (!data.order) {
 
@@ -1657,9 +1619,7 @@ app.get(
 
           error:
             'Shopify order not found'
-
         });
-
       }
 
 
@@ -1679,9 +1639,7 @@ app.get(
 
         pathao_order:
           pathaoOrder
-
       });
-
 
     } catch (error) {
 
@@ -1690,7 +1648,6 @@ app.get(
         error.data ||
         error.message
       );
-
 
       res.status(
         error.status || 500
@@ -1704,11 +1661,8 @@ app.get(
 
         details:
           error.data || null
-
       });
-
     }
-
   }
 );
 
@@ -1753,9 +1707,7 @@ app.post(
                 shopifyOrderId
               )
             )
-
         });
-
       }
 
 
@@ -1784,9 +1736,7 @@ app.post(
 
           error:
             'Shopify order not found'
-
         });
-
       }
 
 
@@ -1823,7 +1773,6 @@ app.post(
 
             body:
               pathaoOrder
-
           }
         );
 
@@ -1841,7 +1790,6 @@ app.post(
 
         pathao_response:
           result
-
       };
 
 
@@ -1857,7 +1805,6 @@ app.post(
         pathaoResult
       );
 
-
     } catch (error) {
 
       console.error(
@@ -1865,7 +1812,6 @@ app.post(
         error.data ||
         error.message
       );
-
 
       res.status(
         error.status || 500
@@ -1882,11 +1828,8 @@ app.post(
 
         details:
           error.data || null
-
       });
-
     }
-
   }
 );
 
@@ -1952,9 +1895,7 @@ app.get(
 
           pathao_order:
             pathaoOrder
-
         });
-
       }
 
 
@@ -1967,9 +1908,7 @@ app.get(
           results.length,
 
         results
-
       });
-
 
     } catch (error) {
 
@@ -1978,7 +1917,6 @@ app.get(
         error.data ||
         error.message
       );
-
 
       res.status(
         error.status || 500
@@ -1992,11 +1930,8 @@ app.get(
 
         details:
           error.data || null
-
       });
-
     }
-
   }
 );
 
@@ -2028,9 +1963,7 @@ app.get(
 
       status:
         'waiting_for_shopify_webhook'
-
     });
-
   }
 );
 
@@ -2052,9 +1985,7 @@ app.use(
 
       path:
         req.originalUrl
-
     });
-
   }
 );
 
@@ -2076,7 +2007,6 @@ app.use(
       err
     );
 
-
     res.status(500).json({
 
       success:
@@ -2084,9 +2014,7 @@ app.use(
 
       error:
         'Internal server error'
-
     });
-
   }
 );
 
@@ -2145,6 +2073,5 @@ app.listen(
     console.log(
       '============================================'
     );
-
   }
 );
