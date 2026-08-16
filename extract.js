@@ -1,19 +1,29 @@
 const SHOP = process.env.SHOP || 'imtiaz-mmk7g8dm';
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
+const PATHAO_CLIENT_ID = process.env.PATHAO_CLIENT_ID;
+const PATHAO_CLIENT_SECRET = process.env.PATHAO_CLIENT_SECRET;
+const MERCHANT_STORE_ID = process.env.MERCHANT_STORE_ID || 1;
 
 if (!CLIENT_ID || !CLIENT_SECRET) {
-  console.error('❌ Missing CLIENT_ID or CLIENT_SECRET environment variables');
+  console.error('❌ Missing CLIENT_ID or CLIENT_SECRET');
   process.exit(1);
 }
 
-let ACCESS_TOKEN = null;
-let TOKEN_EXPIRES_AT = 0;
+if (!PATHAO_CLIENT_ID || !PATHAO_CLIENT_SECRET) {
+  console.error('❌ Missing PATHAO_CLIENT_ID or PATHAO_CLIENT_SECRET');
+  process.exit(1);
+}
 
-// Get OAuth Access Token
-async function getAccessToken() {
-  if (ACCESS_TOKEN && Date.now() < TOKEN_EXPIRES_AT - 60000) {
-    return ACCESS_TOKEN;
+let SHOPIFY_TOKEN = null;
+let SHOPIFY_EXPIRES_AT = 0;
+let PATHAO_TOKEN = null;
+let PATHAO_EXPIRES_AT = 0;
+
+// Get Shopify OAuth Access Token
+async function getShopifyToken() {
+  if (SHOPIFY_TOKEN && Date.now() < SHOPIFY_EXPIRES_AT - 60000) {
+    return SHOPIFY_TOKEN;
   }
 
   try {
@@ -39,78 +49,148 @@ async function getAccessToken() {
     }
 
     const tokenData = await tokenResponse.json();
-    ACCESS_TOKEN = tokenData.access_token;
-    TOKEN_EXPIRES_AT = Date.now() + (tokenData.expires_in * 1000);
+    SHOPIFY_TOKEN = tokenData.access_token;
+    SHOPIFY_EXPIRES_AT = Date.now() + (tokenData.expires_in * 1000);
 
-    console.log('✅ Got access token\n');
-    return ACCESS_TOKEN;
+    return SHOPIFY_TOKEN;
   } catch (error) {
-    throw new Error(`Failed to get token: ${error.message}`);
+    throw new Error(`Failed to get Shopify token: ${error.message}`);
   }
 }
 
-async function extractOrders() {
-  try {
-    // Get token first
-    const token = await getAccessToken();
+// Get Pathao Access Token
+async function getPathaoToken() {
+  if (PATHAO_TOKEN && Date.now() < PATHAO_EXPIRES_AT - 60000) {
+    return PATHAO_TOKEN;
+  }
 
+  try {
+    const tokenUrl = 'https://api-staging.pathaointl.com/aladdin/api/v1/auth/login';
+    
+    const tokenResponse = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        client_id: PATHAO_CLIENT_ID,
+        client_secret: PATHAO_CLIENT_SECRET,
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      throw new Error(`Pathao Token Error: ${tokenResponse.status}`);
+    }
+
+    const tokenData = await tokenResponse.json();
+    PATHAO_TOKEN = tokenData.data.access_token;
+    PATHAO_EXPIRES_AT = Date.now() + (3600 * 1000); // 1 hour
+
+    return PATHAO_TOKEN;
+  } catch (error) {
+    throw new Error(`Failed to get Pathao token: ${error.message}`);
+  }
+}
+
+// Create order in Pathao
+async function createPathaoOrder(shopifyOrder) {
+  try {
+    const token = await getPathaoToken();
+    const shipping = shopifyOrder.shipping_address || {};
+    const items = shopifyOrder.line_items || [];
+    const firstItem = items[0] || {};
+
+    const pathaoOrder = {
+      store_id: MERCHANT_STORE_ID,
+      merchant_order_id: shopifyOrder.id.toString(),
+      recipient_name: shipping.name || 'Customer',
+      recipient_phone: shipping.phone || '01700000000',
+      recipient_address: `${shipping.address1 || ''} ${shipping.address2 || ''}`.trim(),
+      recipient_city: shipping.city || 'Dhaka',
+      delivery_type: 48, // Standard delivery
+      item_type: 2, // General item
+      special_instruction: shopifyOrder.note || '',
+      item_quantity: firstItem.quantity || 1,
+      item_weight: firstItem.grams ? (firstItem.grams / 1000).toFixed(2) : '0.5',
+      item_description: firstItem.title || shopifyOrder.id,
+      amount_to_collect: parseFloat(shopifyOrder.total_price) || 0,
+    };
+
+    const response = await fetch('https://api-staging.pathaointl.com/aladdin/api/v1/orders', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(pathaoOrder),
+    });
+
+    const result = await response.json();
+    
+    if (!response.ok) {
+      return {
+        success: false,
+        order_id: shopifyOrder.id,
+        error: result.message || `Error: ${response.status}`,
+      };
+    }
+
+    return {
+      success: true,
+      order_id: shopifyOrder.id,
+      pathao_id: result.data?.id,
+      tracking_number: result.data?.tracking_number,
+      status: result.data?.status,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      order_id: shopifyOrder.id,
+      error: error.message,
+    };
+  }
+}
+
+async function extractAndSubmitOrders() {
+  try {
+    // Get Shopify orders
+    const shopifyToken = await getShopifyToken();
     const url = `https://${SHOP}.myshopify.com/admin/api/2026-07/orders.json?status=any&limit=5`;
 
     const response = await fetch(url, {
       method: 'GET',
       headers: {
-        'X-Shopify-Access-Token': token,
+        'X-Shopify-Access-Token': shopifyToken,
         'Content-Type': 'application/json',
       },
     });
 
     if (!response.ok) {
-      throw new Error(`Error: ${response.status}`);
+      throw new Error(`Shopify Error: ${response.status}`);
     }
 
     const data = await response.json();
     const orders = data.orders || [];
 
-    console.log('\n📦 SHOPIFY ORDERS EXTRACTED\n');
-    console.log('═══════════════════════════════════════════════════════════\n');
+    // Submit each order to Pathao
+    const results = [];
+    for (const order of orders) {
+      const result = await createPathaoOrder(order);
+      results.push(result);
+    }
 
-    orders.forEach((order, idx) => {
-      const shipping = order.shipping_address || {};
-      const items = order.line_items || [];
+    // Summary
+    const successful = results.filter(r => r.success).length;
+    const failed = results.length - successful;
 
-      console.log(`Order ${idx + 1}:`);
-      console.log('─────────────────────────────────────────');
-      console.log(`merchant_order_id: ${order.id}`);
-      console.log(`recipient_name: ${shipping.name || 'N/A'}`);
-      console.log(`recipient_phone: ${shipping.phone || 'N/A'}`);
-      console.log(`recipient_address: ${shipping.address1 || ''} ${shipping.address2 || ''}`);
-      console.log(`recipient_city: ${shipping.city || 'N/A'}`);
-      console.log(`recipient_zone: ${shipping.province || 'N/A'}`);
-      console.log(`recipient_area: ${shipping.country || 'N/A'}`);
-      console.log(`delivery_type: ${order.fulfillment_status === 'fulfilled' ? 'Delivered' : 'Pending'}`);
-      console.log(`amount_to_collect: ${order.total_price}`);
-
-      console.log('\nItems:');
-      items.forEach((item, itemIdx) => {
-        console.log(`  ${itemIdx + 1}. ${item.title}`);
-        console.log(`     item_type: ${item.product_type || item.title}`);
-        console.log(`     item_quantity: ${item.quantity}`);
-        console.log(`     item_weight: ${item.grams ? (item.grams / 1000).toFixed(2) : '0'} kg`);
-        console.log(`     item_description: ${item.title}`);
-        console.log(`     special_instruction: ${order.note || 'None'}`);
-      });
-
-      console.log(`\ncreated_at: ${order.created_at}`);
-      console.log(`currency: ${order.currency}`);
-      console.log('\n');
-    });
-
-    console.log('═══════════════════════════════════════════════════════════\n');
-    console.log(`✅ Total Orders: ${orders.length}\n`);
+    console.log(`Shopify Orders: ${orders.length}`);
+    console.log(`Pathao Created: ${successful}`);
+    console.log(`Pathao Failed: ${failed}`);
+    console.log(JSON.stringify(results, null, 2));
 
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    console.error('Error:', error.message);
   }
 }
 
-extractOrders();
+extractAndSubmitOrders();
