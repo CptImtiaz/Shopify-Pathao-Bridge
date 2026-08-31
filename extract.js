@@ -1644,9 +1644,7 @@ function buildPathaoOrder(
       MERCHANT_STORE_ID,
 
     merchant_order_id:
-      String(
-        shopifyOrder.id
-      ),
+        shopifyOrder.name,
 
     recipient_name:
       recipientName,
