@@ -82,6 +82,28 @@ if (!SHOPIFY_WEBHOOK_SECRET) {
 
 
 // ============================================================
+// DEPLOYMENT CUTOFF
+// ============================================================
+//
+// Any Shopify order whose created_at is BEFORE this timestamp
+// will be ignored by the webhook handler. This prevents old /
+// backlog / redelivered webhooks from pushing stale orders to
+// Pathao every time the server restarts or redeploys.
+//
+// ============================================================
+
+const SERVER_STARTED_AT = new Date();
+
+console.log(
+  `🕒 Server started at: ${SERVER_STARTED_AT.toISOString()}`
+);
+
+console.log(
+  '   Orders created before this time will be skipped by the webhook.'
+);
+
+
+// ============================================================
 // TOKEN CACHE
 // ============================================================
 
@@ -94,6 +116,15 @@ let PATHAO_EXPIRES_AT = 0;
 
 // ============================================================
 // DUPLICATE PROTECTION
+// ============================================================
+//
+// Values can be:
+//   { status: 'processing' }                  -> lock reserved, request in flight
+//   { success: true, ... }                    -> completed successfully
+//
+// Entries are removed on failure so a genuinely failed order
+// can be retried by a future webhook redelivery.
+//
 // ============================================================
 
 const submittedOrders = new Map();
@@ -583,6 +614,9 @@ app.get(
           ? 'sandbox'
           : 'production',
 
+      server_started_at:
+        SERVER_STARTED_AT.toISOString(),
+
       webhook:
         '/webhooks/orders-create'
     });
@@ -741,7 +775,54 @@ app.post(
 
 
     // --------------------------------------------------------
-    // Duplicate protection
+    // Deployment cutoff — ignore orders created before this
+    // server instance started
+    // --------------------------------------------------------
+
+    const orderCreatedAt =
+      new Date(
+        shopifyOrder.created_at
+      );
+
+    if (
+      !isNaN(orderCreatedAt.getTime()) &&
+      orderCreatedAt < SERVER_STARTED_AT
+    ) {
+
+      console.log(
+        `⏭️ Skipping old order (created ${shopifyOrder.created_at}, before server start ${SERVER_STARTED_AT.toISOString()})`
+      );
+
+      return res.status(200).json({
+
+        success:
+          true,
+
+        skipped:
+          true,
+
+        reason:
+          'Order created before this server instance started',
+
+        shopify_order_id:
+          shopifyOrderId,
+
+        order_created_at:
+          shopifyOrder.created_at,
+
+        server_started_at:
+          SERVER_STARTED_AT.toISOString()
+      });
+    }
+
+
+    // --------------------------------------------------------
+    // Duplicate protection (atomic lock)
+    //
+    // The lock is reserved BEFORE any async work (buildPathaoOrder
+    // is sync, but the Pathao API call is not). This closes the
+    // race condition where Shopify redelivers the same webhook
+    // while the first request is still in flight.
     // --------------------------------------------------------
 
     if (
@@ -750,8 +831,15 @@ app.post(
       )
     ) {
 
+      const existing =
+        submittedOrders.get(
+          shopifyOrderId
+        );
+
       console.log(
-        '⚠️ Order already submitted to Pathao'
+        existing.status === 'processing'
+          ? '⚠️ Order is already being processed'
+          : '⚠️ Order already submitted to Pathao'
       );
 
       return res.status(200).json({
@@ -763,14 +851,22 @@ app.post(
           true,
 
         message:
-          'Order was already submitted to Pathao',
+          existing.status === 'processing'
+            ? 'Order is currently being processed'
+            : 'Order was already submitted to Pathao',
 
         previous_result:
-          submittedOrders.get(
-            shopifyOrderId
-          )
+          existing
       });
     }
+
+    // Reserve the slot immediately, before any await, so a
+    // redelivered webhook arriving milliseconds later sees the
+    // lock and bails out above instead of racing us to Pathao.
+    submittedOrders.set(
+      shopifyOrderId,
+      { status: 'processing' }
+    );
 
 
     // --------------------------------------------------------
@@ -875,6 +971,12 @@ app.post(
       console.error(
         error.data ||
         error.message
+      );
+
+      // Release the lock so a future redelivery (or manual
+      // retry) can actually attempt this order again.
+      submittedOrders.delete(
+        shopifyOrderId
       );
 
       return res.status(
@@ -1682,7 +1784,7 @@ app.post(
     try {
 
       // ------------------------------------------------------
-      // Duplicate check
+      // Duplicate check (atomic lock)
       // ------------------------------------------------------
 
       if (
@@ -1699,7 +1801,7 @@ app.post(
             false,
 
           error:
-            'This Shopify order has already been submitted to Pathao during this server session.',
+            'This Shopify order has already been submitted (or is currently being submitted) to Pathao during this server session.',
 
           previous_result:
             submittedOrders.get(
@@ -1709,6 +1811,11 @@ app.post(
             )
         });
       }
+
+      submittedOrders.set(
+        String(shopifyOrderId),
+        { status: 'processing' }
+      );
 
 
       // ------------------------------------------------------
@@ -1728,6 +1835,10 @@ app.post(
 
 
       if (!shopifyOrder) {
+
+        submittedOrders.delete(
+          String(shopifyOrderId)
+        );
 
         return res.status(404).json({
 
@@ -1811,6 +1922,10 @@ app.post(
         '❌ Pathao order creation error:',
         error.data ||
         error.message
+      );
+
+      submittedOrders.delete(
+        String(shopifyOrderId)
       );
 
       res.status(
@@ -1937,6 +2052,66 @@ app.get(
 
 
 // ============================================================
+// DEBUG: LIST REGISTERED SHOPIFY WEBHOOKS
+// ============================================================
+//
+// Use this to check for duplicate webhook subscriptions
+// pointing at /webhooks/orders-create.
+//
+// ============================================================
+
+app.get(
+  '/api/debug/webhooks',
+  async (req, res) => {
+
+    try {
+
+      const data =
+        await shopifyRequest(
+          'webhooks.json'
+        );
+
+      res.json({
+
+        success:
+          true,
+
+        count:
+          data.webhooks?.length ||
+          0,
+
+        webhooks:
+          data.webhooks ||
+          []
+      });
+
+    } catch (error) {
+
+      console.error(
+        'Webhook list error:',
+        error.data ||
+        error.message
+      );
+
+      res.status(
+        error.status || 500
+      ).json({
+
+        success:
+          false,
+
+        error:
+          error.message,
+
+        details:
+          error.data || null
+      });
+    }
+  }
+);
+
+
+// ============================================================
 // WEBHOOK TEST INFORMATION
 // ============================================================
 
@@ -1960,6 +2135,9 @@ app.get(
 
       endpoint:
         '/webhooks/orders-create',
+
+      server_started_at:
+        SERVER_STARTED_AT.toISOString(),
 
       status:
         'waiting_for_shopify_webhook'
@@ -2064,6 +2242,10 @@ app.listen(
 
     console.log(
       `🏬 Pathao Store ID: ${MERCHANT_STORE_ID}`
+    );
+
+    console.log(
+      `🕒 Cutoff: orders before ${SERVER_STARTED_AT.toISOString()} will be skipped`
     );
 
     console.log(
