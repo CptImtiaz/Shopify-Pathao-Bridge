@@ -915,6 +915,23 @@ app.post(
         );
 
 
+      try {
+
+        await syncNewPathaoOrderDeliveryStatus(
+          shopifyOrder,
+          result
+        );
+
+      } catch (statusSyncError) {
+
+        console.error(
+          '⚠️ Pathao order created, but delivery status sync failed:',
+          statusSyncError.data ||
+          statusSyncError.message
+        );
+      }
+
+
       const pathaoResult = {
 
         success:
@@ -1865,6 +1882,23 @@ app.post(
         );
 
 
+      try {
+
+        await syncNewPathaoOrderDeliveryStatus(
+          shopifyOrder,
+          result
+        );
+
+      } catch (statusSyncError) {
+
+        console.error(
+          '⚠️ Pathao order created, but delivery status sync failed:',
+          statusSyncError.data ||
+          statusSyncError.message
+        );
+      }
+
+
       const pathaoResult = {
 
         success:
@@ -1924,6 +1958,492 @@ app.post(
     }
   }
 );
+
+
+
+
+// ============================================================
+// PATHAO DELIVERY STATUS -> SHOPIFY
+// ADDED ONLY: existing code above/below is unchanged
+// ============================================================
+
+function getPathaoConsignmentId(pathaoCreateResponse) {
+
+  return (
+    pathaoCreateResponse?.data?.consignment_id ||
+    pathaoCreateResponse?.consignment_id ||
+    null
+  );
+}
+
+
+async function getPathaoDeliveryInfo(consignmentId) {
+
+  return pathaoRequest(
+    `/aladdin/api/v1/orders/${encodeURIComponent(
+      consignmentId
+    )}/info`
+  );
+}
+
+
+function mapPathaoDeliveryStatusToShopify(pathaoStatus) {
+
+  const status =
+    String(pathaoStatus || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ');
+
+  if (!status) {
+    return null;
+  }
+
+  if (
+    status.includes('delivered') ||
+    status.includes('delivery completed')
+  ) {
+    return 'delivered';
+  }
+
+  if (
+    status.includes('out for delivery') ||
+    status.includes('on the way to recipient')
+  ) {
+    return 'out_for_delivery';
+  }
+
+  if (
+    status.includes('attempted') ||
+    status.includes('delivery attempt')
+  ) {
+    return 'attempted_delivery';
+  }
+
+  if (
+    status.includes('failed') ||
+    status.includes('failure') ||
+    status.includes('cancelled') ||
+    status.includes('canceled') ||
+    status.includes('rejected')
+  ) {
+    return 'failure';
+  }
+
+  if (
+    status.includes('picked up') ||
+    status.includes('pickup completed') ||
+    status.includes('collected')
+  ) {
+    return 'picked_up';
+  }
+
+  if (
+    status.includes('transit') ||
+    status.includes('hub') ||
+    status.includes('sorting') ||
+    status.includes('dispatch') ||
+    status.includes('shipment') ||
+    status.includes('processing')
+  ) {
+    return 'in_transit';
+  }
+
+  if (
+    status.includes('pending') ||
+    status.includes('created') ||
+    status.includes('assigned')
+  ) {
+    return 'confirmed';
+  }
+
+  return null;
+}
+
+
+async function getOrCreatePathaoShopifyFulfillment(
+  shopifyOrderId,
+  consignmentId
+) {
+
+  const orderData =
+    await shopifyRequest(
+      `orders/${encodeURIComponent(
+        shopifyOrderId
+      )}.json`
+    );
+
+  const order =
+    orderData.order;
+
+  const existingFulfillment =
+    (order?.fulfillments || [])
+      .find(
+        fulfillment =>
+          String(
+            fulfillment.tracking_number || ''
+          ) === String(consignmentId) ||
+          (
+            String(
+              fulfillment.tracking_company || ''
+            ).toLowerCase() === 'pathao' &&
+            String(
+              fulfillment.tracking_number || ''
+            ) === String(consignmentId)
+          )
+      );
+
+  if (existingFulfillment) {
+    return existingFulfillment;
+  }
+
+  const fulfillmentOrdersData =
+    await shopifyRequest(
+      `orders/${encodeURIComponent(
+        shopifyOrderId
+      )}/fulfillment_orders.json`
+    );
+
+  const openFulfillmentOrder =
+    (fulfillmentOrdersData.fulfillment_orders || [])
+      .find(
+        fulfillmentOrder =>
+          fulfillmentOrder.status === 'open' ||
+          fulfillmentOrder.status === 'in_progress'
+      );
+
+  if (!openFulfillmentOrder) {
+    throw new Error(
+      'No open Shopify fulfillment order found for Pathao tracking.'
+    );
+  }
+
+  const created =
+    await shopifyRequest(
+      'fulfillments.json',
+      {
+        method:
+          'POST',
+
+        body: {
+          fulfillment: {
+            line_items_by_fulfillment_order: [
+              {
+                fulfillment_order_id:
+                  openFulfillmentOrder.id
+              }
+            ],
+
+            tracking_info: {
+              company:
+                'Pathao',
+
+              number:
+                String(consignmentId)
+            },
+
+            notify_customer:
+              false
+          }
+        }
+      }
+    );
+
+  return created.fulfillment;
+}
+
+
+async function writePathaoDeliveryStatusToShopify(
+  shopifyOrderId,
+  consignmentId
+) {
+
+  const pathaoResponse =
+    await getPathaoDeliveryInfo(
+      consignmentId
+    );
+
+  const info =
+    pathaoResponse?.data ||
+    {};
+
+  const pathaoStatus =
+    info.order_status_slug ||
+    info.order_status ||
+    '';
+
+  const shopifyStatus =
+    mapPathaoDeliveryStatusToShopify(
+      pathaoStatus
+    );
+
+  if (!shopifyStatus) {
+
+    return {
+      success:
+        true,
+
+      updated:
+        false,
+
+      shopify_order_id:
+        shopifyOrderId,
+
+      consignment_id:
+        consignmentId,
+
+      pathao_status:
+        pathaoStatus,
+
+      message:
+        'Pathao status received but no matching Shopify shipment status was found.'
+    };
+  }
+
+  const fulfillment =
+    await getOrCreatePathaoShopifyFulfillment(
+      shopifyOrderId,
+      consignmentId
+    );
+
+  const eventsData =
+    await shopifyRequest(
+      `orders/${encodeURIComponent(
+        shopifyOrderId
+      )}/fulfillments/${encodeURIComponent(
+        fulfillment.id
+      )}/events.json`
+    );
+
+  const alreadyWritten =
+    (eventsData.fulfillment_events || [])
+      .some(
+        event =>
+          String(event.status || '') ===
+          shopifyStatus
+      );
+
+  if (alreadyWritten) {
+
+    return {
+      success:
+        true,
+
+      updated:
+        false,
+
+      shopify_order_id:
+        shopifyOrderId,
+
+      consignment_id:
+        consignmentId,
+
+      pathao_status:
+        pathaoStatus,
+
+      shopify_status:
+        shopifyStatus,
+
+      message:
+        'Shopify already has this delivery status.'
+    };
+  }
+
+  const eventResult =
+    await shopifyRequest(
+      `orders/${encodeURIComponent(
+        shopifyOrderId
+      )}/fulfillments/${encodeURIComponent(
+        fulfillment.id
+      )}/events.json`,
+      {
+        method:
+          'POST',
+
+        body: {
+          event: {
+            status:
+              shopifyStatus,
+
+            message:
+              `Pathao: ${
+                info.order_status ||
+                pathaoStatus
+              }`
+          }
+        }
+      }
+    );
+
+  console.log(
+    `✅ PATHAO STATUS -> SHOPIFY: ${pathaoStatus} -> ${shopifyStatus}`
+  );
+
+  return {
+    success:
+      true,
+
+    updated:
+      true,
+
+    shopify_order_id:
+      shopifyOrderId,
+
+    consignment_id:
+      consignmentId,
+
+    pathao_status:
+      pathaoStatus,
+
+    shopify_status:
+      shopifyStatus,
+
+    shopify_event:
+      eventResult.event ||
+      null
+  };
+}
+
+
+async function syncNewPathaoOrderDeliveryStatus(
+  shopifyOrder,
+  pathaoCreateResponse
+) {
+
+  const consignmentId =
+    getPathaoConsignmentId(
+      pathaoCreateResponse
+    );
+
+  if (!consignmentId) {
+
+    console.log(
+      '⚠️ Pathao response did not contain consignment_id; delivery status sync skipped.'
+    );
+
+    return null;
+  }
+
+  return writePathaoDeliveryStatusToShopify(
+    shopifyOrder.id,
+    consignmentId
+  );
+}
+
+
+async function syncRecentPathaoDeliveryStatuses() {
+
+  try {
+
+    const data =
+      await shopifyRequest(
+        'orders.json?status=any&limit=250'
+      );
+
+    const orders =
+      data.orders ||
+      [];
+
+    for (
+      const order of orders
+    ) {
+
+      for (
+        const fulfillment of order.fulfillments || []
+      ) {
+
+        if (
+          String(
+            fulfillment.tracking_company || ''
+          ).toLowerCase() !== 'pathao'
+        ) {
+          continue;
+        }
+
+        const consignmentId =
+          fulfillment.tracking_number;
+
+        if (!consignmentId) {
+          continue;
+        }
+
+        if (
+          fulfillment.shipment_status === 'delivered'
+        ) {
+          continue;
+        }
+
+        try {
+
+          await writePathaoDeliveryStatusToShopify(
+            order.id,
+            consignmentId
+          );
+
+        } catch (error) {
+
+          console.error(
+            `Pathao delivery sync failed for Shopify order ${order.id}:`,
+            error.data ||
+            error.message
+          );
+        }
+      }
+    }
+
+  } catch (error) {
+
+    console.error(
+      'Automatic Pathao delivery status sync failed:',
+      error.data ||
+      error.message
+    );
+  }
+}
+
+
+app.post(
+  '/api/pathao/sync-delivery/:shopifyOrderId/:consignmentId',
+  async (req, res) => {
+
+    try {
+
+      const result =
+        await writePathaoDeliveryStatusToShopify(
+          req.params.shopifyOrderId,
+          req.params.consignmentId
+        );
+
+      res.json(
+        result
+      );
+
+    } catch (error) {
+
+      res.status(
+        error.status || 500
+      ).json({
+
+        success:
+          false,
+
+        error:
+          error.message,
+
+        details:
+          error.data || null
+      });
+    }
+  }
+);
+
+
+// Automatically refresh Pathao delivery statuses every 5 minutes.
+setInterval(
+  syncRecentPathaoDeliveryStatuses,
+  5 * 60 * 1000
+).unref();
 
 
 // ============================================================
