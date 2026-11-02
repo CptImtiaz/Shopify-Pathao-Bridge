@@ -1,8 +1,55 @@
+:root { --line: #e3e3e3; --muted: #616161; --ink: #303030; --green: #29845a; --accent: #005bd3; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+[hidden] { display: none !important; }
 #banners > * { display: block; margin-bottom: 12px; }
-.plan-card { border: 1px solid #e3e3e3; border-radius: 12px; padding: 16px; background: #fff; }
-.plan-card.current { border-color: #303030; box-shadow: 0 0 0 1px #303030; }
-.plan-card ul { margin: 8px 0 12px; padding-left: 18px; color: #4a4a4a; }
-.price { font-size: 24px; font-weight: 650; }
-.err { color: #8e1f0b; font-size: 12px; display: block; max-width: 340px; }
-.muted { color: #616161; font-size: 12px; }
+.muted { color: var(--muted); font-size: 13px; }
+.center { text-align: center; margin: 12px 0 0; }
+
+.card { background: #fff; border-radius: 12px; box-shadow: 0 1px 0 rgba(26,26,26,.07), 0 0 0 1px rgba(26,26,26,.06); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stat { padding: 16px; display: flex; flex-direction: column; gap: 6px; min-height: 104px; }
+.stat-label { font-size: 13px; color: var(--muted); font-weight: 550; }
+.stat-value { font-size: 22px; font-weight: 650; color: var(--ink); line-height: 1.2; }
+.stat-value.small { font-size: 15px; }
+.stat-sub { font-size: 12px; color: var(--muted); }
+.stat-row { display: flex; align-items: center; gap: 10px; }
+.ok { color: var(--green); }
+.meter { height: 6px; background: #f1f1f1; border-radius: 4px; overflow: hidden; }
+.meter-fill { height: 100%; width: 0; background: var(--ink); border-radius: 4px; transition: width .3s; }
+.meter-fill.warn { background: #e51c00; }
+
+.steps-hint { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; color: var(--muted); }
+.num { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--ink); color: #fff; font-size: 11px; font-weight: 650; }
+
+.toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.pill { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 8px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.pill:hover { background: #f1f1f1; }
+.pill.active { background: #ebebeb; color: var(--ink); font-weight: 600; }
+.pill span { color: var(--muted); font-weight: 450; margin-left: 2px; }
+.order-name { font-weight: 600; color: var(--ink); }
+.sub { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.err { color: #8e1f0b; font-size: 12px; display: block; max-width: 320px; margin-top: 4px; }
+.empty { text-align: center; padding: 28px 12px; color: var(--muted); }
+.empty b { display: block; color: var(--ink); font-size: 15px; margin-bottom: 4px; }
+
+.plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.plan { padding: 20px; position: relative; display: flex; flex-direction: column; gap: 10px; }
+.plan.current { box-shadow: 0 0 0 2px var(--ink); }
+.plan.featured { background: linear-gradient(180deg, #f6f9ff 0%, #fff 60%); }
+.plan-tag { position: absolute; top: 14px; right: 14px; font-size: 11px; font-weight: 650; background: var(--ink); color: #fff; padding: 3px 8px; border-radius: 999px; }
+.plan-name { font-size: 15px; font-weight: 650; }
+.price { font-size: 30px; font-weight: 700; color: var(--ink); }
+.price small { font-size: 13px; font-weight: 450; color: var(--muted); }
+.plan ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13px; }
+.plan li::before { content: "✓"; color: var(--green); font-weight: 700; margin-right: 8px; }
+.plan .cta { margin-top: auto; }
+
+.account-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.kv { display: flex; gap: 12px; font-size: 13px; padding: 3px 0; }
+.kv span { color: var(--muted); width: 110px; }
+details.more { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+details.more summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+.footer { text-align: center; padding: 20px 0 8px; }
+a.link { color: var(--accent); text-decoration: none; font-weight: 550; }
+a.link:hover { text-decoration: underline; }

@@ -59,6 +59,7 @@ const SCHEMA = [
     UNIQUE (shop, shopify_order_id)
   )`,
   `CREATE INDEX IF NOT EXISTS shipments_shop_created ON shipments (shop, created_at)`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS pathao_store_name TEXT`,
   `CREATE INDEX IF NOT EXISTS shipments_consignment ON shipments (consignment_id)`,
 ];
 

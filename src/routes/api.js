@@ -48,6 +48,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, cipher, lo
       has_client_secret: Boolean(s.pathao_client_secret_enc),
       has_password: Boolean(s.pathao_password_enc),
       pathao_store_id: s.pathao_store_id,
+      pathao_store_name: s.pathao_store_name || null,
       auto_send: s.auto_send,
       delivery_type: s.delivery_type,
       item_type: s.item_type,
@@ -106,6 +107,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, cipher, lo
     if (credsChanged) Object.assign(f, { pathao_token_enc: null, pathao_refresh_enc: null, pathao_token_expires_at: null });
 
     if (b.pathao_store_id !== undefined) f.pathao_store_id = b.pathao_store_id ? parseInt(b.pathao_store_id, 10) : null;
+    if (b.pathao_store_name !== undefined) f.pathao_store_name = b.pathao_store_name ? String(b.pathao_store_name).slice(0, 120) : null;
     if (b.delivery_type !== undefined) f.delivery_type = Number(b.delivery_type) === 12 ? 12 : 48;
     if (b.item_type !== undefined) f.item_type = Number(b.item_type) === 1 ? 1 : 2;
     if (b.default_weight !== undefined) {
