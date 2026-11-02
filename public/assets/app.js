@@ -160,7 +160,9 @@
     if (o.cancelled) return '<s-badge>Cancelled</s-badge>';
     if (!s) return '<s-badge>Not sent</s-badge>';
     if (s.status === 'sent') {
-      return `<s-badge tone="success">${esc(s.pathaoStatus && s.pathaoStatus !== 'Pending' ? s.pathaoStatus : 'Sent')}</s-badge>` +
+      const label = s.pathaoStatus && s.pathaoStatus !== 'Pending' ? String(s.pathaoStatus).replace(/[-_]/g, ' ') : 'Sent';
+      const tone = /return|fail|cancel/i.test(label) ? 'critical' : 'success';
+      return `<s-badge tone="${tone}">${esc(label.charAt(0).toUpperCase() + label.slice(1))}</s-badge>` +
         `<span class="sub">Consignment ${esc(s.consignmentId || '')}${s.deliveryFee != null ? ` · fee ${esc(s.deliveryFee)}` : ''}</span>`;
     }
     if (s.status === 'processing') return '<s-badge tone="info">Sending…</s-badge>';
