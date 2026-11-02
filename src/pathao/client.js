@@ -93,9 +93,12 @@ function makePathao({ config, db, cipher, fetchImpl = fetch }) {
 
   async function listStores(settings) {
     const data = await authed(settings, '/aladdin/api/v1/stores');
-    return (data.data?.data || data.data || []).map((s) => ({
-      id: s.store_id, name: s.store_name, address: s.store_address, active: s.is_active !== 0,
-    }));
+    const list = data.data?.data || data.data?.stores || data.data || [];
+    return (Array.isArray(list) ? list : [])
+      .map((s) => ({
+        id: s.store_id ?? s.id, name: s.store_name ?? s.name, address: s.store_address ?? s.address, active: s.is_active !== 0,
+      }))
+      .filter((s) => Number.isInteger(Number(s.id)));
   }
 
   async function createOrder(settings, payload) {

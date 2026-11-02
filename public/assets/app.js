@@ -128,7 +128,7 @@
 
   async function saveStore() {
     const sel = $('pathao_store_id');
-    if (!sel.value) return;
+    if (!sel.value || !/^\d+$/.test(sel.value)) return;
     const opt = sel.querySelector(`s-option[value="${sel.value}"]`);
     state.boot.settings = (await api('/settings', { method: 'POST', body: { pathao_store_id: sel.value, pathao_store_name: opt ? opt.textContent.replace(' (inactive)', '') : null } })).settings;
     state.editing = false;

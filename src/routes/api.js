@@ -106,7 +106,11 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, cipher, lo
       .some((k) => k in f && f[k] !== current[k]);
     if (credsChanged) Object.assign(f, { pathao_token_enc: null, pathao_refresh_enc: null, pathao_token_expires_at: null });
 
-    if (b.pathao_store_id !== undefined) f.pathao_store_id = b.pathao_store_id ? parseInt(b.pathao_store_id, 10) : null;
+    if (b.pathao_store_id !== undefined) {
+      const id = b.pathao_store_id === '' || b.pathao_store_id === null ? null : Number(b.pathao_store_id);
+      if (id !== null && !Number.isInteger(id)) throw Object.assign(new Error('Please choose a valid Pathao store'), { status: 400 });
+      f.pathao_store_id = id;
+    }
     if (b.pathao_store_name !== undefined) f.pathao_store_name = b.pathao_store_name ? String(b.pathao_store_name).slice(0, 120) : null;
     if (b.delivery_type !== undefined) f.delivery_type = Number(b.delivery_type) === 12 ? 12 : 48;
     if (b.item_type !== undefined) f.item_type = Number(b.item_type) === 1 ? 1 : 2;

@@ -314,3 +314,13 @@ test('Vercel handler: full app runs through makeHandler, webhook work finishes v
   await Promise.all(deferred);
   assert.equal((await db.getShipment(SHOP, 31)).status, 'sent');
 });
+
+test('settings rejects a non-numeric store id instead of crashing', async (t) => {
+  const a = await startApp();
+  t.after(() => a.close());
+  await a.api('/bootstrap');
+  const r = await a.api('/settings', { method: 'POST', body: { pathao_store_id: 'undefined' } });
+  assert.equal(r.status, 400);
+  assert.match(r.data.error, /valid Pathao store/);
+  assert.equal((await a.api('/settings', { method: 'POST', body: { pathao_store_id: '77' } })).data.settings.pathao_store_id, 77);
+});
