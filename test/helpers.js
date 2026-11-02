@@ -159,4 +159,4 @@ async function startApp() {
   return { base, api, webhook, settle, fake, db, logs, close: () => server.close() };
 }
 
-module.exports = { startApp, sessionToken, gqlOrder, SHOP, SECRET };
+module.exports = { startApp, sessionToken, gqlOrder, memPool, fakeFetch, SHOP, SECRET };

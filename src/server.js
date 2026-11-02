@@ -1,15 +1,11 @@
-const { Pool } = require('pg');
+// Always-on server entry (Railway, Render, a VPS...). Vercel uses api/index.js instead.
 const { load } = require('./config');
 const { createApp } = require('./app');
+const { makePool } = require('./pool');
 
 async function main() {
   const config = load();
-  const pool = new Pool({
-    connectionString: config.databaseUrl,
-    ssl: /sslmode=require/.test(config.databaseUrl) ? { rejectUnauthorized: false } : undefined,
-    max: 10,
-  });
-  const { app, db } = createApp({ config, pool });
+  const { app, db } = createApp({ config, pool: makePool(config.databaseUrl) });
   await db.migrate();
   app.listen(config.port, () => {
     console.log(`ShipBridge running on port ${config.port} (${config.appUrl})`);

@@ -50,7 +50,7 @@ function makeShipping({ db, pathao, admin, log = console }) {
       });
 
       if (settings.tag_orders) {
-        admin
+        await admin
           .annotateOrder(shop, order.id, { tags: ['pathao-sent'], consignmentId: result.consignmentId })
           .catch((e) => log.warn(`[${shop}] could not tag order ${order.name}: ${e.message}`));
       }

@@ -14,8 +14,9 @@ const { makeWebhookRouter } = require('./routes/webhooks');
 const { makeApiRouter } = require('./routes/api');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+const VIEWS_DIR = path.join(__dirname, 'views');
 
-function createApp({ config, pool, fetchImpl = fetch, log = console }) {
+function createApp({ config, pool, fetchImpl = fetch, log = console, defer = (p) => p }) {
   const cipher = makeCipher(config.encryptionKey);
   const db = makeDb(pool);
   const tokens = makeTokenManager({ config, db, cipher, fetchImpl });
@@ -30,7 +31,7 @@ function createApp({ config, pool, fetchImpl = fetch, log = console }) {
   app.get('/health', (req, res) => res.json({ ok: true }));
 
   // Webhooks need the raw body for HMAC, so mount before any JSON parser.
-  app.use(makeWebhookRouter({ config, db, admin, shipping, log }));
+  app.use(makeWebhookRouter({ config, db, admin, shipping, log, defer }));
   app.use('/api', makeApiRouter({ config, db, tokens, admin, pathao, shipping, cipher, log }));
 
   // Static assets (JS/CSS) and public pages (privacy policy).
@@ -45,7 +46,7 @@ function createApp({ config, pool, fetchImpl = fetch, log = console }) {
   });
 
   // Embedded app shell. Shopify loads this inside the admin iframe.
-  const shell = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8').replace(/%SHOPIFY_API_KEY%/g, config.shopifyApiKey);
+  const shell = fs.readFileSync(path.join(VIEWS_DIR, 'index.html'), 'utf8').replace(/%SHOPIFY_API_KEY%/g, config.shopifyApiKey);
   app.get(['/', '/app'], (req, res) => {
     const shop = String(req.query.shop || '');
     // Required for embedded apps: only Shopify admin may frame this page.

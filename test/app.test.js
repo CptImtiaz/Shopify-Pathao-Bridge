@@ -265,3 +265,52 @@ test('embedded shell: CSP frame-ancestors, API key injected, bounce when opened 
   assert.equal(res.headers.get('location'), 'https://admin.shopify.com/store/demo-store/apps/pathao-shipbridge');
   assert.equal((await fetch(`${a.base}/privacy`)).status, 200);
 });
+
+test('Vercel handler: full app runs through makeHandler, webhook work finishes via defer, bad config reported', async (t) => {
+  const http = require('http');
+  const crypto = require('crypto');
+  const { makeHandler } = require('../api/index');
+  const { createApp } = require('../src/app');
+  const { memPool, fakeFetch, gqlOrder, SECRET } = require('./helpers');
+
+  const broken = makeHandler(async () => { throw new Error('Missing required environment variable: DATABASE_URL'); });
+  const s1 = http.createServer(broken);
+  await new Promise((r) => s1.listen(0, r));
+  t.after(() => s1.close());
+  const bad = await fetch(`http://127.0.0.1:${s1.address().port}/health`);
+  assert.equal(bad.status, 500);
+  assert.match(await bad.text(), /DATABASE_URL/);
+
+  const fake = fakeFetch();
+  const deferred = [];
+  const config = {
+    port: 0, shopifyApiKey: 'test_api_key', shopifyApiSecret: SECRET, shopifyApiVersion: '2026-10',
+    appUrl: 'https://x.vercel.app', appHandle: 'h', databaseUrl: 'mem', encryptionKey: crypto.randomBytes(32).toString('hex'),
+    billingTest: true, pathaoProductionUrl: 'https://api-hermes.pathao.com', pathaoSandboxUrl: 'https://s', pathaoIntegrationSecret: 'u',
+  };
+  let db;
+  const handler = makeHandler(async () => {
+    const built = createApp({ config, pool: memPool(), fetchImpl: fake.impl, log: { info() {}, warn() {}, error() {} }, defer: (p) => { deferred.push(p); return p; } });
+    db = built.db;
+    await db.migrate();
+    return built.app;
+  });
+  const s2 = http.createServer(handler);
+  await new Promise((r) => s2.listen(0, r));
+  t.after(() => s2.close());
+  const base = `http://127.0.0.1:${s2.address().port}`;
+  const auth = { Authorization: `Bearer ${sessionToken()}`, 'Content-Type': 'application/json' };
+
+  assert.equal((await fetch(`${base}/api/bootstrap`, { headers: auth })).status, 200);
+  await fetch(`${base}/api/settings`, { method: 'POST', headers: auth, body: JSON.stringify({ pathao_client_id: 'c', pathao_client_secret: 's', pathao_username: 'u', pathao_password: 'p', pathao_store_id: 77, auto_send: true }) });
+  await new Promise((r) => setTimeout(r, 20));
+
+  const body = JSON.stringify({ id: 31, name: '#31', created_at: new Date(Date.now() + 1000).toISOString(), financial_status: 'pending', total_price: '500', total_outstanding: '500', tags: '',
+    shipping_address: { name: 'A', phone: '01712345678', address1: 'House 1, Road 2, Banani', city: 'Dhaka' }, line_items: [{ title: 'x', quantity: 1, grams: 600 }] });
+  const hmac = crypto.createHmac('sha256', SECRET).update(body).digest('base64');
+  const wr = await fetch(`${base}/webhooks/orders/create`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Shopify-Hmac-Sha256': hmac, 'X-Shopify-Topic': 'orders/create', 'X-Shopify-Shop-Domain': SHOP }, body });
+  assert.equal(wr.status, 200);
+  assert.ok(deferred.length >= 1, 'webhook work handed to waitUntil');
+  await Promise.all(deferred);
+  assert.equal((await db.getShipment(SHOP, 31)).status, 'sent');
+});
