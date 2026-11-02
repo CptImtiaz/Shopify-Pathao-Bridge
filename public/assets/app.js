@@ -297,6 +297,16 @@
   });
 
   async function start() {
+    // Opened outside Shopify admin (no iframe / no App Bridge): explain instead of erroring.
+    let embedded = true;
+    try { embedded = window.top !== window.self; } catch { embedded = true; }
+    if (!embedded || !(window.shopify && shopify.idToken)) {
+      $('banners').innerHTML = '<s-banner tone="info" heading="Open this app from your Shopify admin">' +
+        'ShipBridge runs inside Shopify. Go to your store admin → <b>Apps</b> → <b>ShipBridge for Pathao</b>. ' +
+        'If it is not listed yet, install it first from the Shopify App Store (or the Dev Dashboard while testing).</s-banner>';
+      document.querySelectorAll('s-section').forEach((s) => { s.style.display = 'none'; });
+      return;
+    }
     try {
       await refreshBoot();
       renderSettings();
