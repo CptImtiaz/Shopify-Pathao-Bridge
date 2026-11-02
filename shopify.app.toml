@@ -1,8 +1,8 @@
 # Shopify app configuration. Push it with:  shopify app deploy
 # Replace the two placeholders below before deploying.
 
-client_id = "YOUR_SHOPIFY_CLIENT_ID"
-name = "ShipBridge for Pathao Courier"
+client_id = "3b858aa1ec536fea2e3c1086e4470115"
+name = "ShipBridge for Pathao"
 application_url = "https://shopify-pathao-app.vercel.app"
 embedded = true
 
