@@ -3,7 +3,7 @@
 
 client_id = "YOUR_SHOPIFY_CLIENT_ID"
 name = "ShipBridge for Pathao Courier"
-application_url = "https://YOUR-APP.up.railway.app"
+application_url = "https://shopify-pathao-app.vercel.app"
 embedded = true
 
 [access_scopes]
@@ -12,7 +12,7 @@ embedded = true
 scopes = "read_orders,write_orders"
 
 [auth]
-redirect_urls = [ "https://YOUR-APP.up.railway.app/auth/callback" ]
+redirect_urls = [ "https://shopify-pathao-app.vercel.app/auth/callback" ]
 
 [webhooks]
 api_version = "2026-10"
