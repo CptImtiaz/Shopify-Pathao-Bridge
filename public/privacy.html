@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Privacy Policy – ShipBridge for Pathao</title>
+  <style>
+    body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 20px; color: #222; }
+    h1 { font-size: 28px; } h2 { font-size: 20px; margin-top: 32px; }
+  </style>
+</head>
+<body>
+  <h1>Privacy Policy – ShipBridge for Pathao</h1>
+  <p><em>Last updated: [DATE]</em></p>
+
+  <p>ShipBridge for Pathao ("the App") is provided by [YOUR COMPANY NAME] ("we", "us"). This policy explains what
+  data the App accesses when a Shopify merchant installs it, and how that data is used.</p>
+
+  <h2>Data we access</h2>
+  <ul>
+    <li><b>Order data from your Shopify store</b>: order number, line items, weights, totals, outstanding balance,
+      order note and tags, and the shipping recipient's name, phone number and address.</li>
+    <li><b>Your Pathao Merchant API credentials</b>, which you enter in the App.</li>
+  </ul>
+
+  <h2>How we use it</h2>
+  <p>Order data is used only to create delivery orders in your own Pathao merchant account, on your instruction
+  (manually or via the auto-send setting you enable). It is sent directly to Pathao's Merchant API.</p>
+
+  <h2>What we store</h2>
+  <ul>
+    <li>Shopify order IDs and order numbers, Pathao consignment IDs, delivery status, cash-to-collect amount and any error message.</li>
+    <li>Your settings and Pathao credentials, encrypted with AES-256-GCM.</li>
+    <li>Shopify access tokens, encrypted.</li>
+  </ul>
+  <p>We do <b>not</b> store customer names, phone numbers, emails or addresses. They are read from Shopify at the
+  moment an order is sent and passed to Pathao.</p>
+
+  <h2>Sharing</h2>
+  <p>Data is shared only with Pathao Ltd. (to fulfil deliveries) and our hosting provider. We never sell data.</p>
+
+  <h2>Retention and deletion</h2>
+  <p>When you uninstall the App, your Pathao credentials and Shopify tokens are deleted immediately, and all
+  remaining store data is deleted when Shopify sends the <code>shop/redact</code> request (48 hours after uninstall).
+  We honour Shopify's customer data and redaction requests.</p>
+
+  <h2>Contact</h2>
+  <p>Questions or data requests: [SUPPORT EMAIL]</p>
+</body>
+</html>

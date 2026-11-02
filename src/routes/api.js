@@ -1,0 +1,220 @@
+// JSON API used by the embedded admin UI. Every request carries an App Bridge
+// session token (App Bridge adds `Authorization: Bearer <token>` to fetch()
+// calls automatically), so no cookies are needed.
+
+const crypto = require('crypto');
+const express = require('express');
+const { verifySessionToken, AuthError } = require('../shopify/auth');
+const { fromGraphql } = require('../pathao/mapper');
+const { PLANS } = require('../plans');
+
+function makeApiRouter({ config, db, tokens, admin, pathao, shipping, cipher, log = console }) {
+  const router = express.Router();
+  router.use(express.json({ limit: '200kb' }));
+
+  // ---- auth middleware ----
+  router.use(async (req, res, next) => {
+    try {
+      const header = req.get('Authorization') || '';
+      const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+      const payload = verifySessionToken(token, { apiKey: config.shopifyApiKey, apiSecret: config.shopifyApiSecret });
+      req.shop = payload.shop;
+      req.opts = { sessionToken: token };
+      // Make sure we hold a valid offline token (does token exchange on first visit).
+      await tokens.getAccessToken(req.shop, req.opts);
+      next();
+    } catch (e) {
+      const status = e instanceof AuthError ? e.status : 500;
+      // Tell App Bridge to fetch a fresh session token and retry.
+      if (status === 401) res.set('X-Shopify-Retry-Invalid-Session-Request', '1');
+      res.status(status).json({ error: e.message });
+    }
+  });
+
+  const wrap = (fn) => async (req, res) => {
+    try {
+      res.json(await fn(req, res));
+    } catch (e) {
+      log.error(`[${req.shop}] ${req.method} ${req.path}: ${e.message}`);
+      res.status(e.status && e.status < 600 ? e.status : 500).json({ error: e.message });
+    }
+  };
+
+  function publicSettings(s) {
+    return {
+      pathao_env: s.pathao_env,
+      pathao_client_id: s.pathao_client_id || '',
+      pathao_username: s.pathao_username || '',
+      has_client_secret: Boolean(s.pathao_client_secret_enc),
+      has_password: Boolean(s.pathao_password_enc),
+      pathao_store_id: s.pathao_store_id,
+      auto_send: s.auto_send,
+      delivery_type: s.delivery_type,
+      item_type: s.item_type,
+      default_weight: Number(s.default_weight),
+      skip_tag: s.skip_tag,
+      only_cod: s.only_cod,
+      tag_orders: s.tag_orders,
+      connected: pathao.hasCredentials(s),
+    };
+  }
+
+  async function syncPlan(shop, opts) {
+    try {
+      const { plan, subscription } = await admin.activePlan(shop, opts);
+      await db.setPlan(shop, plan, subscription ? subscription.id : null);
+      return { plan, subscription };
+    } catch (e) {
+      log.warn(`[${shop}] plan sync failed: ${e.message}`);
+      const row = await db.getShop(shop);
+      return { plan: (row && row.plan) || 'free', subscription: null };
+    }
+  }
+
+  // ---- bootstrap: everything the UI needs on load ----
+  router.get('/bootstrap', wrap(async (req) => {
+    let settings = await db.getSettings(req.shop);
+    if (!settings.webhook_secret) {
+      settings = await db.updateSettings(req.shop, { webhook_secret: crypto.randomBytes(16).toString('hex') });
+    }
+    const { plan, subscription } = await syncPlan(req.shop, req.opts);
+    const used = await db.countSentThisMonth(req.shop);
+    return {
+      shop: req.shop,
+      settings: publicSettings(settings),
+      plan,
+      trialEndsOrRenews: subscription ? subscription.currentPeriodEnd : null,
+      usage: { used, limit: PLANS[plan].monthlyOrderLimit },
+      plans: Object.values(PLANS),
+      pathaoWebhook: { url: `${config.appUrl}/pathao/webhook/${req.shop}`, secret: settings.webhook_secret },
+    };
+  }));
+
+  // ---- settings ----
+  router.post('/settings', wrap(async (req) => {
+    const b = req.body || {};
+    const current = await db.getSettings(req.shop);
+    const f = {};
+
+    if (b.pathao_env !== undefined) f.pathao_env = b.pathao_env === 'sandbox' ? 'sandbox' : 'production';
+    if (b.pathao_client_id !== undefined) f.pathao_client_id = String(b.pathao_client_id).trim() || null;
+    if (b.pathao_username !== undefined) f.pathao_username = String(b.pathao_username).trim() || null;
+    if (b.pathao_client_secret) f.pathao_client_secret_enc = cipher.encrypt(String(b.pathao_client_secret).trim());
+    if (b.pathao_password) f.pathao_password_enc = cipher.encrypt(String(b.pathao_password));
+    const credsChanged = ['pathao_env', 'pathao_client_id', 'pathao_username', 'pathao_client_secret_enc', 'pathao_password_enc']
+      .some((k) => k in f && f[k] !== current[k]);
+    if (credsChanged) Object.assign(f, { pathao_token_enc: null, pathao_refresh_enc: null, pathao_token_expires_at: null });
+
+    if (b.pathao_store_id !== undefined) f.pathao_store_id = b.pathao_store_id ? parseInt(b.pathao_store_id, 10) : null;
+    if (b.delivery_type !== undefined) f.delivery_type = Number(b.delivery_type) === 12 ? 12 : 48;
+    if (b.item_type !== undefined) f.item_type = Number(b.item_type) === 1 ? 1 : 2;
+    if (b.default_weight !== undefined) {
+      const w = Number(b.default_weight);
+      if (!(w >= 0.5 && w <= 10)) throw Object.assign(new Error('Default weight must be between 0.5 and 10 kg'), { status: 400 });
+      f.default_weight = w;
+    }
+    if (b.skip_tag !== undefined) f.skip_tag = String(b.skip_tag).trim().slice(0, 40);
+    if (b.only_cod !== undefined) f.only_cod = Boolean(b.only_cod);
+    if (b.tag_orders !== undefined) f.tag_orders = Boolean(b.tag_orders);
+    if (b.auto_send !== undefined) {
+      f.auto_send = Boolean(b.auto_send);
+      // Only orders created after auto-send is switched on get sent automatically
+      // (replaces the old "server start" cutoff, so redeploys never resend old orders).
+      if (f.auto_send && !current.auto_send) f.auto_send_since = new Date();
+      if (f.auto_send && !(f.pathao_store_id || current.pathao_store_id)) {
+        throw Object.assign(new Error('Choose a Pathao store before turning on auto-send'), { status: 400 });
+      }
+    }
+
+    const saved = await db.updateSettings(req.shop, f);
+    return { settings: publicSettings(saved) };
+  }));
+
+  // ---- Pathao connection test + store list ----
+  router.post('/pathao/test', wrap(async (req) => {
+    const settings = await db.getSettings(req.shop);
+    try {
+      await pathao.token(settings, { force: true });
+      const stores = await pathao.listStores(await db.getSettings(req.shop));
+      return { ok: true, stores };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  }));
+
+  // ---- orders ----
+  router.get('/orders', wrap(async (req) => {
+    const orders = await admin.listRecentOrders(req.shop, req.opts, 30);
+    const ids = orders.map((o) => String(o.legacyResourceId));
+    const shipments = await db.shipmentsForOrders(req.shop, ids);
+    const byId = new Map(shipments.map((s) => [s.shopify_order_id, s]));
+    return {
+      orders: orders.map((o) => {
+        const n = fromGraphql(o);
+        const s = byId.get(n.id);
+        return {
+          id: n.id,
+          name: n.name,
+          createdAt: n.createdAt,
+          customer: n.shipping.name || n.fallbackName || '',
+          city: n.shipping.city || '',
+          total: n.total,
+          currency: o.totalPriceSet?.shopMoney?.currencyCode || '',
+          cod: n.outstanding != null ? n.outstanding : n.paid ? 0 : n.total,
+          cancelled: n.cancelled,
+          shipment: s ? {
+            status: s.status, consignmentId: s.consignment_id, pathaoStatus: s.pathao_status,
+            error: s.error, deliveryFee: s.delivery_fee == null ? null : Number(s.delivery_fee),
+          } : null,
+        };
+      }),
+    };
+  }));
+
+  router.post('/orders/send', wrap(async (req) => {
+    const ids = [...new Set((req.body?.ids || []).map(String))].filter((id) => /^\d+$/.test(id)).slice(0, 50);
+    if (!ids.length) throw Object.assign(new Error('No orders selected'), { status: 400 });
+    const settings = await db.getSettings(req.shop);
+    if (!pathao.hasCredentials(settings)) throw Object.assign(new Error('Connect your Pathao account in Settings first'), { status: 400 });
+
+    const results = [];
+    for (const id of ids) {
+      try {
+        const o = await admin.getOrder(req.shop, id, req.opts);
+        if (!o) { results.push({ id, ok: false, error: 'Order not found' }); continue; }
+        const r = await shipping.sendOrder(req.shop, fromGraphql(o));
+        results.push({ id, ok: r.ok, duplicate: Boolean(r.duplicate), error: r.shipment?.error || null, consignmentId: r.shipment?.consignment_id || null });
+      } catch (e) {
+        results.push({ id, ok: false, error: e.message });
+      }
+    }
+    return { results };
+  }));
+
+  router.post('/orders/:id/refresh', wrap(async (req) => {
+    const s = await db.getShipment(req.shop, req.params.id);
+    if (!s || !s.consignment_id) throw Object.assign(new Error('Order has not been sent to Pathao'), { status: 404 });
+    const info = await pathao.orderInfo(await db.getSettings(req.shop), s.consignment_id);
+    const status = info.order_status_slug || info.order_status || s.pathao_status;
+    await db.finishShipment(req.shop, req.params.id, { pathao_status: status });
+    return { pathaoStatus: status };
+  }));
+
+  // ---- billing ----
+  router.post('/billing/subscribe', wrap(async (req) => {
+    const plan = req.body?.plan;
+    if (!PLANS[plan] || PLANS[plan].price <= 0) throw Object.assign(new Error('Unknown plan'), { status: 400 });
+    return { confirmationUrl: await admin.createSubscription(req.shop, plan, req.opts) };
+  }));
+
+  router.post('/billing/cancel', wrap(async (req) => {
+    const { subscription } = await syncPlan(req.shop, req.opts);
+    if (subscription) await admin.cancelSubscription(req.shop, subscription.id, req.opts);
+    await db.setPlan(req.shop, 'free', null);
+    return { plan: 'free' };
+  }));
+
+  return router;
+}
+
+module.exports = { makeApiRouter };

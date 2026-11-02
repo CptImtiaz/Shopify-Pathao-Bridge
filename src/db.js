@@ -1,0 +1,212 @@
+const crypto = require('crypto');
+
+// Postgres storage. One row per installed shop, one settings row per shop,
+// and one shipment row per Shopify order (the unique key doubles as the
+// duplicate-protection lock that used to live in memory).
+
+const SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS shops (
+    shop TEXT PRIMARY KEY,
+    access_token_enc TEXT,
+    access_expires_at TIMESTAMPTZ,
+    refresh_token_enc TEXT,
+    refresh_expires_at TIMESTAMPTZ,
+    scope TEXT,
+    plan TEXT NOT NULL DEFAULT 'free',
+    subscription_id TEXT,
+    installed_at TIMESTAMPTZ,
+    uninstalled_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE TABLE IF NOT EXISTS settings (
+    shop TEXT PRIMARY KEY,
+    pathao_env TEXT NOT NULL DEFAULT 'production',
+    pathao_client_id TEXT,
+    pathao_client_secret_enc TEXT,
+    pathao_username TEXT,
+    pathao_password_enc TEXT,
+    pathao_store_id INTEGER,
+    pathao_token_enc TEXT,
+    pathao_token_expires_at TIMESTAMPTZ,
+    pathao_refresh_enc TEXT,
+    auto_send BOOLEAN NOT NULL DEFAULT FALSE,
+    auto_send_since TIMESTAMPTZ,
+    delivery_type INTEGER NOT NULL DEFAULT 48,
+    item_type INTEGER NOT NULL DEFAULT 2,
+    default_weight NUMERIC NOT NULL DEFAULT 0.5,
+    skip_tag TEXT NOT NULL DEFAULT 'no-pathao',
+    only_cod BOOLEAN NOT NULL DEFAULT FALSE,
+    tag_orders BOOLEAN NOT NULL DEFAULT TRUE,
+    webhook_secret TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE TABLE IF NOT EXISTS shipments (
+    id SERIAL PRIMARY KEY,
+    shop TEXT NOT NULL,
+    shopify_order_id TEXT NOT NULL,
+    order_name TEXT,
+    status TEXT NOT NULL,
+    consignment_id TEXT,
+    pathao_status TEXT,
+    delivery_fee NUMERIC,
+    amount_to_collect NUMERIC,
+    error TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    claim_token TEXT,
+    counted BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (shop, shopify_order_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS shipments_shop_created ON shipments (shop, created_at)`,
+  `CREATE INDEX IF NOT EXISTS shipments_consignment ON shipments (consignment_id)`,
+];
+
+function makeDb(pool) {
+  const q = (text, params = []) => pool.query(text, params);
+  const one = async (text, params) => (await q(text, params)).rows[0] || null;
+
+  return {
+    pool,
+
+    async migrate() {
+      for (const stmt of SCHEMA) await q(stmt);
+    },
+
+    // ---------- shops ----------
+    getShop: (shop) => one('SELECT * FROM shops WHERE shop = $1', [shop]),
+
+    async saveShopTokens(shop, t) {
+      await q(
+        `INSERT INTO shops (shop, access_token_enc, access_expires_at, refresh_token_enc, refresh_expires_at, scope, installed_at, uninstalled_at)
+         VALUES ($1,$2,$3,$4,$5,$6,NOW(),NULL)
+         ON CONFLICT (shop) DO UPDATE SET
+           access_token_enc = EXCLUDED.access_token_enc,
+           access_expires_at = EXCLUDED.access_expires_at,
+           refresh_token_enc = EXCLUDED.refresh_token_enc,
+           refresh_expires_at = EXCLUDED.refresh_expires_at,
+           scope = EXCLUDED.scope,
+           installed_at = COALESCE(shops.installed_at, NOW()),
+           uninstalled_at = NULL`,
+        [shop, t.accessTokenEnc, t.accessExpiresAt, t.refreshTokenEnc, t.refreshExpiresAt, t.scope]
+      );
+    },
+
+    async markUninstalled(shop) {
+      await q(
+        `UPDATE shops SET access_token_enc = NULL, refresh_token_enc = NULL, access_expires_at = NULL,
+           refresh_expires_at = NULL, uninstalled_at = NOW(), installed_at = NULL, plan = 'free', subscription_id = NULL
+         WHERE shop = $1`,
+        [shop]
+      );
+      // Drop merchant's Pathao credentials immediately on uninstall.
+      await q(
+        `UPDATE settings SET pathao_client_secret_enc = NULL, pathao_password_enc = NULL,
+           pathao_token_enc = NULL, pathao_refresh_enc = NULL, auto_send = FALSE WHERE shop = $1`,
+        [shop]
+      );
+    },
+
+    async setPlan(shop, plan, subscriptionId) {
+      await q('UPDATE shops SET plan = $2, subscription_id = $3 WHERE shop = $1', [shop, plan, subscriptionId || null]);
+    },
+
+    async deleteShopData(shop) {
+      await q('DELETE FROM shipments WHERE shop = $1', [shop]);
+      await q('DELETE FROM settings WHERE shop = $1', [shop]);
+      await q('DELETE FROM shops WHERE shop = $1', [shop]);
+    },
+
+    // ---------- settings ----------
+    async getSettings(shop) {
+      const row = await one('SELECT * FROM settings WHERE shop = $1', [shop]);
+      if (row) return row;
+      await q('INSERT INTO settings (shop) VALUES ($1) ON CONFLICT (shop) DO NOTHING', [shop]);
+      return one('SELECT * FROM settings WHERE shop = $1', [shop]);
+    },
+
+    async updateSettings(shop, fields) {
+      await this.getSettings(shop);
+      const keys = Object.keys(fields);
+      if (!keys.length) return this.getSettings(shop);
+      const sets = keys.map((k, i) => `${k} = $${i + 2}`).join(', ');
+      await q(`UPDATE settings SET ${sets}, updated_at = NOW() WHERE shop = $1`, [shop, ...keys.map((k) => fields[k])]);
+      return this.getSettings(shop);
+    },
+
+    // ---------- shipments ----------
+    // Atomically claim an order. Returns the row if we got the lock, or null
+    // if the order is already sent / currently processing.
+    // Each claim writes a random token; we only own the row if it comes back
+    // with OUR token (robust even if a driver returns the conflicting row).
+    async claimShipment(shop, orderId, orderName) {
+      const token = crypto.randomUUID();
+      const inserted = await one(
+        `INSERT INTO shipments (shop, shopify_order_id, order_name, status, attempts, claim_token)
+         VALUES ($1,$2,$3,'processing',1,$4)
+         ON CONFLICT (shop, shopify_order_id) DO NOTHING
+         RETURNING *`,
+        [shop, String(orderId), orderName || null, token]
+      );
+      if (inserted && inserted.claim_token === token) return inserted;
+      // Existing row: allow retry only if it previously failed / was skipped,
+      // or got stuck in 'processing' (e.g. server crashed mid-request) for 10+ min.
+      return one(
+        `UPDATE shipments SET status = 'processing', attempts = attempts + 1, error = NULL, claim_token = $3, updated_at = NOW()
+         WHERE shop = $1 AND shopify_order_id = $2
+           AND (status IN ('failed','skipped')
+                OR (status = 'processing' AND updated_at < NOW() - INTERVAL '10 minutes'))
+         RETURNING *`,
+        [shop, String(orderId), token]
+      );
+    },
+
+    getShipment: (shop, orderId) =>
+      one('SELECT * FROM shipments WHERE shop = $1 AND shopify_order_id = $2', [shop, String(orderId)]),
+
+    async finishShipment(shop, orderId, fields) {
+      const keys = Object.keys(fields);
+      const sets = keys.map((k, i) => `${k} = $${i + 3}`).join(', ');
+      return one(
+        `UPDATE shipments SET ${sets}, updated_at = NOW() WHERE shop = $1 AND shopify_order_id = $2 RETURNING *`,
+        [shop, String(orderId), ...keys.map((k) => fields[k])]
+      );
+    },
+
+    async recordSkip(shop, orderId, orderName, reason) {
+      await q(
+        `INSERT INTO shipments (shop, shopify_order_id, order_name, status, error)
+         VALUES ($1,$2,$3,'skipped',$4)
+         ON CONFLICT (shop, shopify_order_id) DO NOTHING`,
+        [shop, String(orderId), orderName || null, reason]
+      );
+    },
+
+    listShipments: async (shop, limit = 50) =>
+      (await q('SELECT * FROM shipments WHERE shop = $1 ORDER BY created_at DESC LIMIT $2', [shop, limit])).rows,
+
+    async shipmentsForOrders(shop, orderIds) {
+      if (!orderIds.length) return [];
+      return (await q('SELECT * FROM shipments WHERE shop = $1 AND shopify_order_id = ANY($2)', [shop, orderIds.map(String)])).rows;
+    },
+
+    async countSentThisMonth(shop) {
+      const row = await one(
+        `SELECT COUNT(*)::int AS n FROM shipments
+         WHERE shop = $1 AND counted = TRUE AND created_at >= date_trunc('month', NOW())`,
+        [shop]
+      );
+      return row ? Number(row.n) : 0;
+    },
+
+    findShipmentByConsignment: (shop, consignmentId) =>
+      one('SELECT * FROM shipments WHERE shop = $1 AND consignment_id = $2', [shop, String(consignmentId)]),
+
+    async redactOrders(shop, orderIds) {
+      if (!orderIds.length) return;
+      await q('DELETE FROM shipments WHERE shop = $1 AND shopify_order_id = ANY($2)', [shop, orderIds.map(String)]);
+    },
+  };
+}
+
+module.exports = { makeDb, SCHEMA };

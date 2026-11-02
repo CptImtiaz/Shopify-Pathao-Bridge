@@ -1,0 +1,41 @@
+# Shopify app configuration. Push it with:  shopify app deploy
+# Replace the two placeholders below before deploying.
+
+client_id = "YOUR_SHOPIFY_CLIENT_ID"
+name = "ShipBridge for Pathao Courier"
+application_url = "https://YOUR-APP.up.railway.app"
+embedded = true
+
+[access_scopes]
+# Orders contain customer names/phones/addresses -> also request
+# "Protected customer data" access in the Partner Dashboard.
+scopes = "read_orders,write_orders"
+
+[auth]
+redirect_urls = [ "https://YOUR-APP.up.railway.app/auth/callback" ]
+
+[webhooks]
+api_version = "2026-10"
+
+  [[webhooks.subscriptions]]
+  topics = [ "orders/create" ]
+  uri = "/webhooks/orders/create"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app_subscriptions/update" ]
+  uri = "/webhooks/app_subscriptions/update"
+
+  # Mandatory privacy webhooks (required for the App Store)
+  [[webhooks.subscriptions]]
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+  uri = "/webhooks/compliance"
+
+[pos]
+embedded = false
+
+[build]
+include_config_on_deploy = true

@@ -1,0 +1,8 @@
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+#banners > * { display: block; margin-bottom: 12px; }
+.plan-card { border: 1px solid #e3e3e3; border-radius: 12px; padding: 16px; background: #fff; }
+.plan-card.current { border-color: #303030; box-shadow: 0 0 0 1px #303030; }
+.plan-card ul { margin: 8px 0 12px; padding-left: 18px; color: #4a4a4a; }
+.price { font-size: 24px; font-weight: 650; }
+.err { color: #8e1f0b; font-size: 12px; display: block; max-width: 340px; }
+.muted { color: #616161; font-size: 12px; }

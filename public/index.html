@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="shopify-api-key" content="%SHOPIFY_API_KEY%" />
+  <title>ShipBridge for Pathao</title>
+  <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
+  <script src="https://cdn.shopify.com/shopifycloud/polaris.js"></script>
+  <link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+  <s-page heading="ShipBridge for Pathao" inlinesize="base">
+    <div id="banners"></div>
+
+    <s-section heading="Orders" id="orders-section">
+      <s-stack direction="inline" gap="small-200" alignitems="center" paddingblockend="base">
+        <s-button variant="primary" id="send-selected" disabled>Send selected to Pathao</s-button>
+        <s-button id="reload-orders" icon="refresh">Refresh</s-button>
+        <s-text color="subdued" id="usage-text"></s-text>
+      </s-stack>
+      <s-table id="orders-table" loading>
+        <s-table-header-row>
+          <s-table-header listslot="inline"><span class="sr">Select</span></s-table-header>
+          <s-table-header listslot="primary">Order</s-table-header>
+          <s-table-header>Customer</s-table-header>
+          <s-table-header format="currency">Cash to collect</s-table-header>
+          <s-table-header listslot="secondary">Pathao</s-table-header>
+          <s-table-header>Actions</s-table-header>
+        </s-table-header-row>
+        <s-table-body id="orders-body"></s-table-body>
+      </s-table>
+    </s-section>
+
+    <s-section heading="1. Connect your Pathao account">
+      <s-paragraph color="subdued">
+        Find these in the Pathao Merchant Panel under <b>Developers API → Merchant API Credentials</b>.
+        Your secret and password are encrypted and never shown again.
+      </s-paragraph>
+      <s-grid gridtemplatecolumns="1fr 1fr" gap="base" paddingblock="base">
+        <s-select label="Environment" id="pathao_env">
+          <s-option value="production">Live (production)</s-option>
+          <s-option value="sandbox">Sandbox (testing)</s-option>
+        </s-select>
+        <s-text-field label="Client ID" id="pathao_client_id" autocomplete="off"></s-text-field>
+        <s-password-field label="Client secret" id="pathao_client_secret" autocomplete="off"></s-password-field>
+        <s-text-field label="Merchant login email" id="pathao_username" autocomplete="off"></s-text-field>
+        <s-password-field label="Merchant login password" id="pathao_password" autocomplete="new-password"></s-password-field>
+        <s-select label="Pickup store" id="pathao_store_id" details="Click “Save & test connection” to load your stores">
+          <s-option value="">— none —</s-option>
+        </s-select>
+      </s-grid>
+      <s-stack direction="inline" gap="small-200">
+        <s-button variant="primary" id="save-connection">Save &amp; test connection</s-button>
+        <s-text id="connection-status"></s-text>
+      </s-stack>
+    </s-section>
+
+    <s-section heading="2. Shipping rules">
+      <s-stack gap="base">
+        <s-switch id="auto_send" label="Automatically send new orders to Pathao"
+          details="Only orders placed after you switch this on are sent. Redeploys never resend old orders."></s-switch>
+        <s-grid gridtemplatecolumns="1fr 1fr" gap="base">
+          <s-select label="Delivery type" id="delivery_type">
+            <s-option value="48">Normal delivery</s-option>
+            <s-option value="12">On-demand delivery</s-option>
+          </s-select>
+          <s-select label="Item type" id="item_type">
+            <s-option value="2">Parcel</s-option>
+            <s-option value="1">Document</s-option>
+          </s-select>
+          <s-number-field label="Default weight (kg)" id="default_weight" min="0.5" max="10" step="0.1"
+            details="Used when products have no weight set in Shopify"></s-number-field>
+          <s-text-field label="Skip orders with this tag" id="skip_tag"></s-text-field>
+        </s-grid>
+        <s-checkbox id="only_cod" label="Only auto-send cash-on-delivery (unpaid) orders"></s-checkbox>
+        <s-checkbox id="tag_orders" label="Tag Shopify orders (pathao-sent, pathao-delivered…) and save the consignment ID"></s-checkbox>
+        <s-stack direction="inline"><s-button variant="primary" id="save-rules">Save rules</s-button></s-stack>
+      </s-stack>
+    </s-section>
+
+    <s-section heading="3. Delivery status updates (optional)">
+      <s-paragraph color="subdued">
+        In the Pathao Merchant Panel open <b>Developers API → Webhook integration</b> and paste these values.
+        Delivered / returned orders will then be tagged in Shopify automatically.
+      </s-paragraph>
+      <s-grid gridtemplatecolumns="2fr 1fr" gap="base" paddingblock="base">
+        <s-text-field label="Callback URL" id="wh_url" readonly></s-text-field>
+        <s-text-field label="Secret" id="wh_secret" readonly></s-text-field>
+      </s-grid>
+    </s-section>
+
+    <s-section heading="Plan">
+      <s-grid gridtemplatecolumns="1fr 1fr" gap="base" id="plans"></s-grid>
+    </s-section>
+
+    <s-stack direction="inline" justifycontent="center" paddingblock="large">
+      <s-link href="/privacy" target="_blank">Privacy policy</s-link>
+    </s-stack>
+  </s-page>
+
+  <script src="/assets/app.js"></script>
+</body>
+</html>
