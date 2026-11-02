@@ -29,13 +29,10 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
     totalOutstandingSet { shopMoney { amount } }
     shippingAddress { name firstName lastName phone address1 address2 city province zip country countryCodeV2 }
     billingAddress { name phone }
-    customer { firstName lastName phone }
-    lineItems(first: 100) {
-      nodes {
-        title quantity
-        variant { inventoryItem { measurement { weight { value unit } } } }
-      }
-    }`;
+    lineItems(first: 100) { nodes { title quantity } }`;
+  // Only order + shipping-address fields: needs read_orders and the Name/Phone/Address
+  // protected fields, nothing else. (Weights come from the orders/create webhook,
+  // which includes grams; dashboard sends use the default weight.)
 
   async function listRecentOrders(shop, opts, first = 30) {
     const data = await graphql(

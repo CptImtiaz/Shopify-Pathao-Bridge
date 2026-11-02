@@ -142,9 +142,9 @@ test('manual send from dashboard, failure then retry after merchant fixes the or
   assert.equal(byId['700'].ok, false);
   assert.match(byId['700'].error, /not a valid Bangladesh mobile/);
 
-  // Weight from GraphQL measurement: 2 x 400g = 0.8kg
   const sent = JSON.parse(a.fake.calls.filter((c) => c.url.endsWith('/aladdin/api/v1/orders'))[0].body);
-  assert.equal(sent.item_weight, 0.8);
+  const q = a.fake.calls.find((c) => c.body && c.body.includes('OneOrder')).body;
+  assert.ok(!/customer \{|variant|email/.test(q), 'order query asks only for permitted fields');
   assert.equal(sent.recipient_phone, '01712345678');
 
   // Merchant fixes the phone in Shopify and retries
