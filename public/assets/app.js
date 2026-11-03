@@ -69,6 +69,7 @@
       : '<a href="#plans-section" class="link" id="see-plans">Upgrade for unlimited orders</a>';
 
     const banners = [];
+    if (b.webhooks && b.webhooks.ok === false) banners.push(`<s-banner tone="critical" heading="New orders can't reach the app">Shopify refused to set up order notifications, so auto-send can't work: ${esc(b.webhooks.error)}</s-banner>`);
     if (s.pathao_env === 'sandbox') banners.push('<s-banner tone="warning">Sandbox mode: orders go to Pathao\'s test system, not real couriers.</s-banner>');
     if (u.limit && u.used >= u.limit) banners.push(`<s-banner tone="critical" heading="Monthly limit reached">You've sent ${u.used} of ${u.limit} orders on the Free plan. Upgrade to Pro to keep sending this month.</s-banner>`);
     else if (ready && !s.auto_send) banners.push('<s-banner tone="info">You\'re connected. Turn on <b>Auto-send new orders</b> above, or send orders manually from the list below.</s-banner>');

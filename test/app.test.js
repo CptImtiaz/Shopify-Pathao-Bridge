@@ -324,3 +324,20 @@ test('settings rejects a non-numeric store id instead of crashing', async (t) =>
   assert.match(r.data.error, /valid Pathao store/);
   assert.equal((await a.api('/settings', { method: 'POST', body: { pathao_store_id: '77' } })).data.settings.pathao_store_id, 77);
 });
+
+test('opening the app registers order/uninstall/billing webhooks once, and fixes stale ones', async (t) => {
+  const a = await startApp();
+  t.after(() => a.close());
+  a.fake.state.webhooks.push({ id: 'gid://shopify/WebhookSubscription/old', topic: 'ORDERS_CREATE', uri: 'https://old.example.com/hook' });
+  const r = await a.api('/bootstrap');
+  assert.equal(r.data.webhooks.ok, true);
+  const hooks = a.fake.state.webhooks.map((w) => `${w.topic} ${w.uri}`).sort();
+  assert.deepEqual(hooks, [
+    'APP_SUBSCRIPTIONS_UPDATE https://app.example.com/webhooks/app_subscriptions/update',
+    'APP_UNINSTALLED https://app.example.com/webhooks/app/uninstalled',
+    'ORDERS_CREATE https://app.example.com/webhooks/orders/create',
+  ]);
+  const before = a.fake.calls.filter((c) => c.body && c.body.includes('webhookSubscriptionCreate')).length;
+  await a.api('/bootstrap');
+  assert.equal(a.fake.calls.filter((c) => c.body && c.body.includes('webhookSubscriptionCreate')).length, before, 'no duplicates on reopen');
+});

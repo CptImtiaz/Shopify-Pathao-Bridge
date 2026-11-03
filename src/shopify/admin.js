@@ -88,6 +88,41 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
     );
   }
 
+  // ---------------- webhooks (registered by the app itself) ----------------
+  // Shop-level subscriptions, created on app open. Safe to call repeatedly:
+  // only missing or wrongly-addressed topics are (re)created.
+  const APP_WEBHOOKS = [
+    ['ORDERS_CREATE', '/webhooks/orders/create'],
+    ['APP_UNINSTALLED', '/webhooks/app/uninstalled'],
+    ['APP_SUBSCRIPTIONS_UPDATE', '/webhooks/app_subscriptions/update'],
+  ];
+
+  async function ensureWebhooks(shop, opts) {
+    const data = await graphql(shop, `{ webhookSubscriptions(first: 50) { nodes { id topic uri } } }`, {}, opts);
+    const existing = data.webhookSubscriptions.nodes || [];
+    const created = [];
+    for (const [topic, path] of APP_WEBHOOKS) {
+      const uri = `${config.appUrl}${path}`;
+      if (existing.some((w) => w.topic === topic && w.uri === uri)) continue;
+      // Remove stale subscriptions for this topic pointing somewhere else.
+      for (const w of existing.filter((x) => x.topic === topic && x.uri !== uri)) {
+        await graphql(shop, `mutation Del($id: ID!) { webhookSubscriptionDelete(id: $id) { userErrors { message } } }`, { id: w.id }, opts);
+      }
+      const r = await graphql(
+        shop,
+        `mutation Sub($topic: WebhookSubscriptionTopic!, $sub: WebhookSubscriptionInput!) {
+          webhookSubscriptionCreate(topic: $topic, webhookSubscription: $sub) { webhookSubscription { id } userErrors { field message } }
+        }`,
+        { topic, sub: { uri, format: 'JSON' } },
+        opts
+      );
+      const errs = r.webhookSubscriptionCreate.userErrors;
+      if (errs.length) throw new Error(`Webhook ${topic}: ${errs.map((e) => e.message).join('; ')}`);
+      created.push(topic);
+    }
+    return created;
+  }
+
   // ---------------- billing (Shopify Billing API) ----------------
 
   async function activePlan(shop, opts) {
@@ -140,7 +175,7 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
     if (errs.length) throw new Error(errs.map((e) => e.message).join('; '));
   }
 
-  return { graphql, listRecentOrders, getOrder, annotateOrder, removeTags, activePlan, createSubscription, cancelSubscription };
+  return { graphql, listRecentOrders, getOrder, annotateOrder, removeTags, activePlan, createSubscription, cancelSubscription, ensureWebhooks };
 }
 
 module.exports = { makeAdmin };

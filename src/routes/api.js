@@ -78,7 +78,13 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, cipher, lo
     if (!settings.webhook_secret) {
       settings = await db.updateSettings(req.shop, { webhook_secret: crypto.randomBytes(16).toString('hex') });
     }
-    const { plan, subscription } = await syncPlan(req.shop, req.opts);
+    const [{ plan, subscription }, webhooks] = await Promise.all([
+      syncPlan(req.shop, req.opts),
+      admin.ensureWebhooks(req.shop, req.opts).then(
+        (created) => { if (created.length) log.info(`[${req.shop}] registered webhooks: ${created.join(', ')}`); return { ok: true }; },
+        (e) => { log.error(`[${req.shop}] webhook registration failed: ${e.message}`); return { ok: false, error: e.message }; }
+      ),
+    ]);
     const used = await db.countSentThisMonth(req.shop);
     return {
       shop: req.shop,
@@ -88,6 +94,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, cipher, lo
       usage: { used, limit: PLANS[plan].monthlyOrderLimit },
       plans: Object.values(PLANS),
       pathaoWebhook: { url: `${config.appUrl}/pathao/webhook/${req.shop}`, secret: settings.webhook_secret },
+      webhooks,
     };
   }));
 

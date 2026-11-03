@@ -50,6 +50,7 @@ function fakeFetch() {
     orders: {},
     activeSubscriptions: [],
     nextConsignment: 1000,
+    webhooks: [],
   };
 
   const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -80,6 +81,13 @@ function fakeFetch() {
       if (query.includes('OneOrder')) {
         const id = variables.id.split('/').pop();
         return json(200, { data: { order: state.orders[id] || null } });
+      }
+      if (query.includes('webhookSubscriptions(')) return json(200, { data: { webhookSubscriptions: { nodes: state.webhooks } } });
+      if (query.includes('webhookSubscriptionDelete')) { state.webhooks = state.webhooks.filter((w) => w.id !== variables.id); return json(200, { data: { webhookSubscriptionDelete: { userErrors: [] } } }); }
+      if (query.includes('webhookSubscriptionCreate')) {
+        const w = { id: `gid://shopify/WebhookSubscription/${state.webhooks.length + 1}`, topic: variables.topic, uri: variables.sub.uri };
+        state.webhooks.push(w);
+        return json(200, { data: { webhookSubscriptionCreate: { webhookSubscription: { id: w.id }, userErrors: [] } } });
       }
       if (query.includes('tagsAdd')) return json(200, { data: { tagsAdd: { userErrors: [] } } });
       if (query.includes('metafieldsSet')) return json(200, { data: { metafieldsSet: { userErrors: [] } } });
