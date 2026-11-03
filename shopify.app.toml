@@ -9,7 +9,7 @@ embedded = true
 [access_scopes]
 # Orders contain customer names/phones/addresses -> also request
 # "Protected customer data" access in the Partner Dashboard.
-scopes = "read_orders,write_orders"
+scopes = "read_orders,write_orders,read_fulfillments,write_fulfillments,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders"
 
 [auth]
 redirect_urls = [ "https://shopify-pathao-app.vercel.app/auth/callback" ]

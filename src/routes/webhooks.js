@@ -13,7 +13,7 @@ const PATHAO_INTEGRATION_HEADER = 'X-Pathao-Merchant-Webhook-Integration-Secret'
 
 // `defer` keeps background work alive after the response is sent (Vercel's
 // waitUntil). On a normal always-on server it can just let the promise run.
-function makeWebhookRouter({ config, db, admin, shipping, notifier, log = console, defer = (p) => p }) {
+function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, notifier, log = console, defer = (p) => p }) {
   const router = express.Router();
   const raw = express.raw({ type: '*/*', limit: '2mb' });
 
@@ -111,10 +111,16 @@ function makeWebhookRouter({ config, db, admin, shipping, notifier, log = consol
     if (shipment) {
       const status = event.replace(/^order\./, '') || 'updated';
       await db.finishShipment(shop, shipment.shopify_order_id, { pathao_status: status });
-      if (settings.tag_orders && ['delivered', 'returned', 'delivery-failed'].includes(status)) {
-        await admin.annotateOrder(shop, shipment.shopify_order_id, { tags: [`pathao-${status}`] })
-          .catch((e) => log.warn(`[${shop}] tag failed: ${e.message}`));
-      }
+      res.status(202).send('OK');
+      // Update Shopify after acknowledging Pathao.
+      defer((async () => {
+        if (fulfillment) await fulfillment.sync(shop, shipment.shopify_order_id, { status });
+        if (settings.tag_orders && ['delivered', 'returned', 'delivery-failed'].includes(status)) {
+          await admin.annotateOrder(shop, shipment.shopify_order_id, { tags: [`pathao-${status}`] })
+            .catch((e) => log.warn(`[${shop}] tag failed: ${e.message}`));
+        }
+      })().catch((e) => log.error(`[${shop}] pathao webhook follow-up failed: ${e.message}`)));
+      return undefined;
     }
     return res.status(202).send('OK');
   });

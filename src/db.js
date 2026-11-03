@@ -85,6 +85,12 @@ const SCHEMA = [
   `ALTER TABLE sms_log ADD COLUMN IF NOT EXISTS phone TEXT`,
   `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS phone TEXT`,
   `ALTER TABLE settings ADD COLUMN IF NOT EXISTS pathao_webhook_at TIMESTAMPTZ`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS sync_fulfillment BOOLEAN NOT NULL DEFAULT TRUE`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS fulfill_when TEXT NOT NULL DEFAULT 'booked'`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS notify_customer BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS shopify_fulfillment_id TEXT`,
+  `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS shopify_event TEXT`,
+  `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS sync_error TEXT`,
   `CREATE INDEX IF NOT EXISTS shipments_shop_phone ON shipments (shop, phone)`,
 ];
 

@@ -11,7 +11,7 @@ const { PLANS } = require('../plans');
 const { DEFAULT_TEMPLATE, SOURCES } = require('../sms/sms');
 const { listCouriers, AVAILABLE } = require('../couriers');
 
-function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, cipher, log = console }) {
+function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillment = null, notifier, cipher, log = console }) {
   const router = express.Router();
   router.use(express.json({ limit: '200kb' }));
 
@@ -43,6 +43,24 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, 
     }
   };
 
+  // Scopes this version needs. Stores that installed before an upgrade keep
+  // their old token until they approve the new permissions in Shopify.
+  const REQUIRED_SCOPES = ['write_orders', 'write_fulfillments', 'write_merchant_managed_fulfillment_orders'];
+  function missingScopes(scope) {
+    if (!scope) return { missing: [], known: false };
+    const have = new Set(String(scope).split(',').map((x) => x.trim()));
+    return { missing: REQUIRED_SCOPES.filter((x) => !have.has(x)), known: true };
+  }
+
+  // If the stored token predates newly approved scopes, swap it for a fresh one.
+  async function currentPermissions(req) {
+    let p = missingScopes((await db.getShop(req.shop))?.scope);
+    if (p.missing.length && req.opts?.sessionToken) {
+      try { await tokens.exchange(req.shop, req.opts.sessionToken); p = missingScopes((await db.getShop(req.shop))?.scope); } catch (e) { log.warn(`[${req.shop}] token refresh for scopes failed: ${e.message}`); }
+    }
+    return p;
+  }
+
   function publicSettings(s) {
     return {
       pathao_env: s.pathao_env,
@@ -59,6 +77,9 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, 
       skip_tag: s.skip_tag,
       only_cod: s.only_cod,
       tag_orders: s.tag_orders,
+      sync_fulfillment: s.sync_fulfillment !== false,
+      fulfill_when: s.fulfill_when || 'booked',
+      notify_customer: Boolean(s.notify_customer),
       default_note: s.default_note || '',
       default_courier: s.default_courier || 'pathao',
       connected: pathao.hasCredentials(s),
@@ -112,6 +133,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, 
       plans: Object.values(PLANS),
       pathaoWebhook: { url: `${config.appUrl}/pathao/webhook/${req.shop}`, secret: settings.webhook_secret, lastAt: settings.pathao_webhook_at || null, live: Boolean(settings.webhook_secret && settings.pathao_webhook_at) },
       webhooks,
+      permissions: await currentPermissions(req),
     };
   }));
 
@@ -150,6 +172,9 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, 
     if (b.skip_tag !== undefined) f.skip_tag = String(b.skip_tag).trim().slice(0, 40);
     if (b.only_cod !== undefined) f.only_cod = Boolean(b.only_cod);
     if (b.tag_orders !== undefined) f.tag_orders = Boolean(b.tag_orders);
+    if (b.sync_fulfillment !== undefined) f.sync_fulfillment = Boolean(b.sync_fulfillment);
+    if (b.fulfill_when !== undefined) f.fulfill_when = b.fulfill_when === 'picked' ? 'picked' : 'booked';
+    if (b.notify_customer !== undefined) f.notify_customer = Boolean(b.notify_customer);
     // ---- Pathao webhook secret (merchant can set their own) ----
     if (b.webhook_secret !== undefined) {
       const w = String(b.webhook_secret).trim();
@@ -255,6 +280,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, 
           shipment: s ? {
             status: s.status, courier: s.courier || 'pathao', consignmentId: s.consignment_id, pathaoStatus: s.pathao_status,
             error: s.error, deliveryFee: s.delivery_fee == null ? null : Number(s.delivery_fee), updatedAt: s.updated_at,
+            shopifySynced: Boolean(s.shopify_fulfillment_id), shopifyEvent: s.shopify_event || null, syncError: s.sync_error || null,
           } : null,
         };
       }),
@@ -289,6 +315,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, 
     const info = await pathao.orderInfo(await db.getSettings(req.shop), s.consignment_id);
     const status = info.order_status_slug || info.order_status || s.pathao_status;
     await db.finishShipment(req.shop, req.params.id, { pathao_status: status });
+    if (fulfillment) await fulfillment.sync(req.shop, req.params.id, { status });
     return { pathaoStatus: status };
   }));
 

@@ -120,6 +120,7 @@
               <button data-section="api" class="active"><svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M11 12l9-9M17 6l3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>API Configuration</button>
               <button data-section="webhook"><svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Webhook</button>
               <button data-section="defaults"><svg viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="16" cy="6" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="10" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="18" r="2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>Default Settings</button>
+              <button data-section="sync"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 13.7-5.7L20 8.5M20 4v4.5h-4.5M20 12a8 8 0 0 1-13.7 5.7L4 15.5M4 20v-4.5h4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Shopify Status Sync</button>
             </aside>
 
             <div class="detail-main">
@@ -193,6 +194,33 @@
                   </div>
                 </div>
                 <div class="section-foot"><button class="btn danger-text" data-reset="defaults">Reset</button><s-button variant="primary" id="save-defaults">Save</s-button></div>
+              </div>
+
+              <div class="card section" data-section-panel="sync" hidden>
+                <div class="section-head">
+                  <span class="sec-icon green"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 13.7-5.7L20 8.5M20 4v4.5h-4.5M20 12a8 8 0 0 1-13.7 5.7L4 15.5M4 20v-4.5h4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                  <div><h2>Shopify Status Sync</h2><p class="meta">Mark orders fulfilled in Shopify with the Pathao tracking number, and update the delivery status as Pathao reports it.</p></div>
+                </div>
+                <div class="form">
+                  <div id="perm-note"></div>
+                  <label class="check-row"><input type="checkbox" id="sync_fulfillment" /> Update fulfillment and delivery status in Shopify</label>
+                  <div class="radio-group">
+                    <div class="label">Mark the Shopify order as fulfilled</div>
+                    <label class="radio-row"><input type="radio" name="fulfill_when" value="booked" /> When the parcel is booked with Pathao</label>
+                    <label class="radio-row"><input type="radio" name="fulfill_when" value="picked" /> When the Pathao rider picks it up</label>
+                  </div>
+                  <label class="check-row"><input type="checkbox" id="notify_customer" /> Email the customer Shopify's shipping confirmation with the tracking link</label>
+                  <div class="sync-flow">
+                    <div class="label">What customers and your team see in Shopify</div>
+                    <ol>
+                      <li><b>Fulfilled</b> — tracking number = Pathao consignment, with a Pathao tracking link</li>
+                      <li><b>Picked up</b> → <b>In transit</b> → <b>Out for delivery</b> → <b>Delivered</b></li>
+                      <li><b>Attempted delivery</b>, <b>Delayed</b> (on hold) or <b>Failed</b> (returned) when that happens</li>
+                    </ol>
+                    <p class="meta">Updates arrive through the Pathao webhook, so set that up first.</p>
+                  </div>
+                </div>
+                <div class="section-foot"><button class="btn danger-text" data-reset="sync">Reset</button><s-button variant="primary" id="save-sync">Save</s-button></div>
               </div>
             </div>
           </div>

@@ -62,6 +62,7 @@
   function renderBanners() {
     const b = state.boot, s = b.settings, out = [];
     if (b.webhooks && b.webhooks.ok === false) out.push(`<s-banner tone="critical" heading="New orders can't reach the app">Shopify refused to set up order notifications: ${esc(b.webhooks.error)}</s-banner>`);
+    if (permMissing() && s.sync_fulfillment !== false) out.push('<s-banner tone="warning" heading="Approve new Shopify permissions">ShipBridge can now mark orders fulfilled and update delivery status in Shopify. Shopify needs your approval first. <a class="link" href="#" data-perm>Review permissions</a></s-banner>');
     if (s.pathao_env === 'sandbox') out.push('<s-banner tone="warning">Pathao is in sandbox mode: bookings go to the test system, not real couriers.</s-banner>');
     if (b.usage.limit && b.usage.used >= b.usage.limit) out.push(`<s-banner tone="critical" heading="Monthly limit reached">You've used all ${b.usage.limit} orders on the Free plan. <a class="link" href="/plans" data-link>Upgrade to keep shipping</a>.</s-banner>`);
     $('banners').innerHTML = out.join('');
@@ -102,7 +103,7 @@
     if (/return/.test(ps)) return 'returned';
     if (/cancel/.test(ps)) return 'cancelled';
     if (/pickup|pending|request/.test(ps) && !/picked/.test(ps)) return 'pending';
-    if (/transit|picked|hub|on.?the.?way|out.?for|fail|hold|exchange/.test(ps)) return 'shipping';
+    if (/transit|picked|hub|sorting|assigned.?for.?delivery|on.?the.?way|out.?for|fail|hold|exchange/.test(ps)) return 'shipping';
     return 'pending';
   }
   const TABS = [['all', 'All'], ['new', 'New'], ['pending', 'Pending'], ['shipping', 'Shipping'], ['delivered', 'Delivered'], ['returned', 'Returned'], ['cancelled', 'Cancelled'], ['failed', 'Failed']];
@@ -116,7 +117,7 @@
     const map = [
       [/partial/, 'Partially delivered'], [/paid.?return/, 'Paid return'], [/deliver.*fail|fail.*deliver/, 'Delivery failed'],
       [/deliver/, 'Delivered'], [/return/, 'Returned'], [/pickup.?fail/, 'Pickup failed'], [/pickup.?cancel|cancel/, 'Cancelled'],
-      [/assigned.?for.?pickup/, 'Rider assigned'], [/pickup.?request|^pending$|^created$/, 'Pending pickup'], [/picked/, 'Picked up'],
+      [/assigned.?for.?delivery/, 'Out for delivery'], [/sorting/, 'At sorting hub'], [/assigned.?for.?pickup/, 'Rider assigned'], [/pickup.?request|^pending$|^created$/, 'Pending pickup'], [/picked/, 'Picked up'],
       [/last.?mile|hub/, 'At delivery hub'], [/transit/, 'In transit'], [/out.?for/, 'Out for delivery'], [/hold/, 'On hold'], [/exchange/, 'Exchange'],
     ];
     const hit = map.find(([re]) => re.test(s));
@@ -158,7 +159,11 @@
     const tone = STATUS_BADGE[k][1];
     const label = s && s.status === 'sent' ? courierLabel(s.pathaoStatus) : STATUS_BADGE[k][0];
     let extra = '';
-    if (s && s.status === 'sent' && s.consignmentId) extra = `<span class="sub">${esc(s.consignmentId)}${s.deliveryFee != null ? ` · ৳${esc(s.deliveryFee)}` : ''}</span>`;
+    if (s && s.status === 'sent' && s.consignmentId) {
+      extra = `<span class="sub">${esc(s.consignmentId)}${s.deliveryFee != null ? ` · ৳${esc(s.deliveryFee)}` : ''}</span>`;
+      if (s.syncError) extra += `<span class="err" title="${esc(s.syncError)}">Shopify not updated: ${esc(s.syncError)}</span>`;
+      else if (s.shopifySynced) extra += '<span class="synced"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Updated in Shopify</span>';
+    }
     if (s && (s.status === 'failed' || s.status === 'skipped')) extra = `<span class="err">${esc(s.error)}</span>`;
     return `<span class="badge ${tone}">${label}</span>${extra}`;
   }
@@ -348,6 +353,9 @@
     const pill = $('pathao-status');
     pill.textContent = ready ? 'Configured' : s.connected ? 'Choose a store' : 'Not configured';
     pill.className = `status-pill ${ready ? 'ok' : s.connected ? 'warn' : ''}`;
+    $('perm-note').innerHTML = permMissing()
+      ? '<span class="wh-wait">Shopify permission needed: <a class="link" href="#" data-perm>approve fulfillment access</a>. Until then bookings still work, but Shopify won\'t be updated.</span>'
+      : '<span class="live big"><i></i>Shopify access approved.</span>';
     const wh = state.boot.pathaoWebhook || {};
     $('wh-state').innerHTML = wh.live
       ? `<span class="live big"><i></i>Connected — last update from Pathao ${esc(ago(wh.lastAt))}. Delivery statuses update automatically.</span>`
@@ -377,6 +385,9 @@
     setVal('default_weight', s.default_weight);
     setVal('default_note', s.default_note);
     $$('input[name=delivery_type]').forEach((r) => { r.checked = String(r.value) === String(s.delivery_type); });
+    $('sync_fulfillment').checked = s.sync_fulfillment !== false;
+    $('notify_customer').checked = Boolean(s.notify_customer);
+    $$('input[name=fulfill_when]').forEach((r) => { r.checked = r.value === (s.fulfill_when || 'booked'); });
   }
   async function saveConnection() {
     const body = { pathao_env: $('pathao_env').value, pathao_client_id: $('pathao_client_id').value, pathao_username: $('pathao_username').value };
@@ -416,6 +427,22 @@
     if ($('is_default').checked) body.default_courier = 'pathao';
     apply(await api('/settings', { method: 'POST', body }));
     fillForms(); renderAll(); toast('Default settings saved');
+  }
+
+  async function saveSync() {
+    const fw = ($$('input[name=fulfill_when]').find((r) => r.checked) || {}).value || 'booked';
+    apply(await api('/settings', { method: 'POST', body: { sync_fulfillment: $('sync_fulfillment').checked, fulfill_when: fw, notify_customer: $('notify_customer').checked } }));
+    fillForms(); renderAll(); toast('Shopify sync settings saved');
+  }
+  const permMissing = () => Boolean(state.boot && state.boot.permissions && state.boot.permissions.missing && state.boot.permissions.missing.length);
+  async function requestPermissions() {
+    const missing = state.boot.permissions.missing;
+    if (window.shopify && shopify.scopes && shopify.scopes.request) {
+      try { await shopify.scopes.request(missing); } catch (e) { /* fall through to reload */ }
+    }
+    await refreshBoot();
+    if (permMissing()) toast('Still waiting for approval — reopen the app from Shopify admin and accept the update', true);
+    else toast('Permissions approved');
   }
 
   // ---------------- plans ----------------
@@ -467,6 +494,7 @@
       state.settingsTab = 'couriers'; state.detail = true; state.section = open.dataset.sec || 'api';
       fillForms(); navigate('/settings'); renderSettings(); return;
     }
+    if (t.closest('[data-perm]')) { ev.preventDefault(); try { await requestPermissions(); } catch (e) { toast(e.message, true); } return; }
     const reset = t.closest('[data-reset]');
     if (reset) { fillForms(); toast('Changes discarded'); return; }
     if (t.closest('#copy-url')) {
@@ -481,7 +509,7 @@
     if (pick && !pick.disabled) { const ids = state.menuFor || []; closeMenu(); try { await assign(ids, pick.dataset.pick); } catch (e) { toast(e.message, true); } return; }
     if (t.closest('#bulk-clear')) { state.selected.clear(); renderOrders(); return; }
 
-    const b = t.closest('#bulk-default,#reload-orders,#save-connection,#save-webhook,#save-defaults,[data-track],[data-plan],[data-downgrade]');
+    const b = t.closest('#bulk-default,#reload-orders,#save-connection,#save-webhook,#save-defaults,#save-sync,[data-track],[data-plan],[data-downgrade]');
     if (!b) return;
     try {
       if (b.id === 'bulk-default') return await busy(b, () => assign([...state.selected], state.boot.settings.default_courier || 'pathao'));
@@ -489,6 +517,7 @@
       if (b.id === 'save-connection') return await busy(b, saveConnection);
       if (b.id === 'save-webhook') return await busy(b, saveWebhook);
       if (b.id === 'save-defaults') return await busy(b, saveDefaults);
+      if (b.id === 'save-sync') return await busy(b, saveSync);
       if (b.dataset.track) return await busy(b, async () => { await api(`/orders/${b.dataset.track}/refresh`, { method: 'POST' }); await loadOrders(); });
       if (b.dataset.plan) return await busy(b, async () => { const r = await api('/billing/subscribe', { method: 'POST', body: { plan: b.dataset.plan } }); window.open(r.confirmationUrl, '_top'); });
       if (b.dataset.downgrade) {

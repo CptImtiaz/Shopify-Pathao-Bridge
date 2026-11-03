@@ -114,3 +114,17 @@ Merged from `Shopify-ISMS-Bridge`. Each merchant can send customers an order-con
 
 ## Security note about the old repo
 The original `Shopify-Pathao-Bridge` repo contains a committed `env` file with Shopify credentials. Its server also exposes order and customer data (`/shopify/orders`, `/shopify/customers`) and an order-creation endpoint, all without authentication. **Rotate the Shopify client secret and your Pathao API secret/password, make the repo private, and shut that server down** once this app replaces it.
+
+## Shopify status sync (Pathao → Shopify)
+
+Merged from Shopify-PathoOrderStatus. When a parcel is booked (or picked up, per
+setting) the Shopify order is fulfilled with tracking company "Pathao", the
+consignment ID as tracking number and `https://merchant.pathao.com/tracking?...`
+as tracking URL. ON_HOLD fulfillment orders are released first; orders already
+fulfilled by hand get the tracking attached. Each Pathao webhook then adds a
+Shopify fulfillment event (CONFIRMED, CARRIER_PICKED_UP, IN_TRANSIT,
+OUT_FOR_DELIVERY, ATTEMPTED_DELIVERY, DELIVERED, DELAYED, FAILURE).
+
+Extra scopes: `write_fulfillments`, `write_merchant_managed_fulfillment_orders`
+(plus their read_ scopes). Release a new app version with these scopes; stores
+approve them the next time they open the app.

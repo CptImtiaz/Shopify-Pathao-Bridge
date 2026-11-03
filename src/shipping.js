@@ -3,7 +3,7 @@
 const { PLANS } = require('./plans');
 const { buildPathaoOrder } = require('./pathao/mapper');
 
-function makeShipping({ db, pathao, admin, log = console }) {
+function makeShipping({ db, pathao, admin, fulfillment = null, log = console }) {
   async function limitReached(shop) {
     const row = await db.getShop(shop);
     const plan = PLANS[(row && row.plan) || 'free'] || PLANS.free;
@@ -57,7 +57,9 @@ function makeShipping({ db, pathao, admin, log = console }) {
       }
 
       log.info(`[${shop}] ${order.name} -> Pathao consignment ${result.consignmentId}`);
-      return { ok: true, shipment };
+      // Mark fulfilled in Shopify with the Pathao tracking (if the shop wants it now).
+      if (fulfillment) await fulfillment.sync(shop, order.id);
+      return { ok: true, shipment: (await db.getShipment(shop, order.id)) || shipment };
     } catch (e) {
       log.error(`[${shop}] ${order.name} failed: ${e.message}`);
       return fail('failed', e.message || 'Unknown error');

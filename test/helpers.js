@@ -53,6 +53,8 @@ function fakeFetch() {
     webhooks: [],
     sms: [],
     smsFail: null,
+    fo: {}, // orderId -> [{ id, status, fulfillmentHolds, fulfillments }]
+    fulfillments: [], events: [], trackingUpdates: [], released: [], fulfillDenied: false,
   };
 
   const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -91,6 +93,27 @@ function fakeFetch() {
         state.webhooks.push(w);
         return json(200, { data: { webhookSubscriptionCreate: { webhookSubscription: { id: w.id }, userErrors: [] } } });
       }
+      if (query.includes('query FO(')) {
+        if (state.fulfillDenied) return json(200, { errors: [{ message: 'Access denied for fulfillmentOrders field. Required access: `read_merchant_managed_fulfillment_orders`', extensions: { code: 'ACCESS_DENIED' } }] });
+        const id = variables.id.split('/').pop();
+        if (!state.orders[id]) return json(200, { data: { order: null } });
+        state.fo[id] = state.fo[id] || [{ id: `gid://shopify/FulfillmentOrder/${id}1`, status: 'OPEN', fulfillmentHolds: [], fulfillments: { nodes: [] } }];
+        return json(200, { data: { order: { id: variables.id, name: `#${id}`, fulfillmentOrders: { nodes: state.fo[id] } } } });
+      }
+      if (query.includes('fulfillmentOrderReleaseHold')) {
+        state.released.push(variables.id);
+        const fo = Object.values(state.fo).flat().find((f) => f.id === variables.id);
+        fo.status = 'OPEN'; fo.fulfillmentHolds = [];
+        return json(200, { data: { fulfillmentOrderReleaseHold: { fulfillmentOrder: fo, userErrors: [] } } });
+      }
+      if (query.includes('fulfillmentCreate(')) {
+        const f = { id: `gid://shopify/Fulfillment/${state.fulfillments.length + 1}`, input: variables.f };
+        state.fulfillments.push(f);
+        for (const l of variables.f.lineItemsByFulfillmentOrder) { const fo = Object.values(state.fo).flat().find((x) => x.id === l.fulfillmentOrderId); fo.status = 'CLOSED'; fo.fulfillments.nodes.push({ id: f.id, status: 'SUCCESS' }); }
+        return json(200, { data: { fulfillmentCreate: { fulfillment: { id: f.id, status: 'SUCCESS' }, userErrors: [] } } });
+      }
+      if (query.includes('fulfillmentTrackingInfoUpdate')) { state.trackingUpdates.push(variables); return json(200, { data: { fulfillmentTrackingInfoUpdate: { fulfillment: { id: variables.id }, userErrors: [] } } }); }
+      if (query.includes('fulfillmentEventCreate')) { state.events.push(variables.e); return json(200, { data: { fulfillmentEventCreate: { fulfillmentEvent: { id: 'e', status: variables.e.status }, userErrors: [] } } }); }
       if (query.includes('tagsAdd')) return json(200, { data: { tagsAdd: { userErrors: [] } } });
       if (query.includes('metafieldsSet')) return json(200, { data: { metafieldsSet: { userErrors: [] } } });
       if (query.includes('appSubscriptionCreate')) {

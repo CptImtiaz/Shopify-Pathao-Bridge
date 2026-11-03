@@ -11,6 +11,7 @@ const { makeTokenManager, isValidShop } = require('./shopify/auth');
 const { makeAdmin } = require('./shopify/admin');
 const { makePathao } = require('./pathao/client');
 const { makeShipping } = require('./shipping');
+const { makeFulfillmentSync } = require('./shopify/fulfillment');
 const { makeSmsClient } = require('./sms/sms');
 const { makeNotifier } = require('./sms/notifier');
 const { makeWebhookRouter } = require('./routes/webhooks');
@@ -25,7 +26,8 @@ function createApp({ config, pool, fetchImpl = fetch, log = console, defer = (p)
   const tokens = makeTokenManager({ config, db, cipher, fetchImpl });
   const admin = makeAdmin({ config, tokens, fetchImpl });
   const pathao = makePathao({ config, db, cipher, fetchImpl });
-  const shipping = makeShipping({ db, pathao, admin, log });
+  const fulfillment = makeFulfillmentSync({ admin, db, log });
+  const shipping = makeShipping({ db, pathao, admin, fulfillment, log });
   const notifier = makeNotifier({ db, cipher, smsClient: makeSmsClient({ fetchImpl, apiUrl: config.smsApiUrl }), log });
 
   const app = express();
@@ -36,8 +38,8 @@ function createApp({ config, pool, fetchImpl = fetch, log = console, defer = (p)
   app.use('/admin', makeOwnerRouter({ config, db }));
 
   // Webhooks need the raw body for HMAC, so mount before any JSON parser.
-  app.use(makeWebhookRouter({ config, db, admin, shipping, notifier: config.smsFeature ? notifier : null, log, defer }));
-  app.use('/api', makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, cipher, log }));
+  app.use(makeWebhookRouter({ config, db, admin, shipping, fulfillment, notifier: config.smsFeature ? notifier : null, log, defer }));
+  app.use('/api', makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillment, notifier, cipher, log }));
 
   // Static assets (JS/CSS) and public pages (privacy policy).
   app.use('/assets', express.static(path.join(PUBLIC_DIR, 'assets'), { maxAge: '1h' }));
