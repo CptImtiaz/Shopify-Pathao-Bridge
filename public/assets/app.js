@@ -160,7 +160,8 @@
     let extra = '';
     if (s && s.status === 'sent' && s.consignmentId) {
       extra = `<span class="sub">${esc(s.consignmentId)}${s.deliveryFee != null ? ` · ৳${esc(s.deliveryFee)}` : ''}</span>`;
-      if (s.syncError) extra += `<span class="err" title="${esc(s.syncError)}">Shopify not updated: ${esc(s.syncError)}</span>`;
+      // Permission problems are explained once in Settings, not on every row.
+      if (s.syncError && !/permission/i.test(s.syncError)) extra += `<span class="sub" title="${esc(s.syncError)}">Shopify not updated</span>`;
       else if (s.shopifySynced) extra += '<span class="synced"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Updated in Shopify</span>';
     }
     if (s && (s.status === 'failed' || s.status === 'skipped')) extra = `<span class="err">${esc(s.error)}</span>`;

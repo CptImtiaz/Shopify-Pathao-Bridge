@@ -224,6 +224,13 @@ function makeDb(pool) {
       return (await q('SELECT * FROM shipments WHERE shop = $1 AND shopify_order_id = ANY($2)', [shop, orderIds.map(String)])).rows;
     },
 
+    async pendingShopifySync(shop, limit = 25) {
+      return (await q(
+        `SELECT shopify_order_id FROM shipments WHERE shop = $1 AND status = 'sent' AND consignment_id IS NOT NULL
+           AND shopify_fulfillment_id IS NULL AND sync_error LIKE '%permission%' ORDER BY updated_at DESC LIMIT $2`, [shop, limit]
+      )).rows.map((r) => r.shopify_order_id);
+    },
+
     async historyForPhones(shop, phones) {
       const list = [...new Set(phones.filter(Boolean))];
       if (!list.length) return [];

@@ -58,6 +58,11 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
     if (p.missing.length && req.opts?.sessionToken) {
       try { await tokens.exchange(req.shop, req.opts.sessionToken); p = missingScopes((await db.getShop(req.shop))?.scope); } catch (e) { log.warn(`[${req.shop}] token refresh for scopes failed: ${e.message}`); }
     }
+    // Once access is granted, catch up orders that couldn't be updated before.
+    if (p.known && !p.missing.length && fulfillment) {
+      const ids = await db.pendingShopifySync(req.shop);
+      for (const id of ids) await fulfillment.sync(req.shop, id);
+    }
     return p;
   }
 

@@ -97,3 +97,20 @@ test('sync can be turned off; missing permission is reported, booking still succ
   assert.equal(b.settings.sync_fulfillment, true);
   assert.ok(Array.isArray(b.permissions.missing));
 });
+
+test('orders that failed for missing permission are caught up once access is granted', async (t) => {
+  const a = await ready(t);
+  a.fake.state.fulfillDenied = true;
+  a.fake.state.orders['705'] = gqlOrder(705);
+  await a.api('/orders/send', { method: 'POST', body: { ids: ['705'] } });
+  assert.equal(a.fake.state.fulfillments.length, 0);
+  a.fake.state.fulfillDenied = false;
+  a.fake.state.scope = 'write_orders,write_fulfillments,write_merchant_managed_fulfillment_orders';
+  await a.db.saveShopTokens(SHOP, { ...(await a.db.getShop(SHOP)), accessTokenEnc: (await a.db.getShop(SHOP)).access_token_enc, accessExpiresAt: (await a.db.getShop(SHOP)).access_expires_at, refreshTokenEnc: (await a.db.getShop(SHOP)).refresh_token_enc, refreshExpiresAt: (await a.db.getShop(SHOP)).refresh_expires_at, scope: a.fake.state.scope });
+  const b = (await a.api('/bootstrap')).data;
+  assert.deepEqual(b.permissions.missing, []);
+  assert.equal(a.fake.state.fulfillments.length, 1);
+  const o = (await a.api('/orders')).data.orders.find((x) => x.id === '705');
+  assert.equal(o.shipment.shopifySynced, true);
+  assert.equal(o.shipment.syncError, null);
+});
