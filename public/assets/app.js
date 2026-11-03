@@ -172,7 +172,7 @@
     if (o.shipment && o.shipment.status === 'sent') {
       const c = courierInfo(o.shipment.courier || 'pathao');
       const when = ago(o.shipment.updatedAt);
-      if (webhookLive()) return `<span class="courier-chip">${mono(c)}${esc(c.name)}</span><span class="live" title="Status updates automatically from the Pathao webhook"><i></i>Auto-updating${when ? ` · ${esc(when)}` : ''}</span>`;
+      if (webhookLive()) return `<span class="courier-chip">${mono(c)}${esc(c.name)}</span><span class="live" title="Webhook connected — status updates instantly from Pathao"><i></i>Live</span>`;
       return `<span class="courier-chip">${mono(c)}${esc(c.name)}<button class="icon-mini" data-track="${esc(o.id)}" title="Webhook not connected — refresh this status now" aria-label="Refresh status"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></span><span class="sub">${when ? `Updated ${esc(when)}` : ''}</span>`;
     }
     if (o.shipment && o.shipment.status === 'processing') return '<span class="sub">Sending…</span>';
