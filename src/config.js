@@ -40,7 +40,7 @@ function load() {
     billingTest: bool('BILLING_TEST', true),
     adminPassword: process.env.ADMIN_PASSWORD || '',
     supportEmail: process.env.SUPPORT_EMAIL || '',
-    supportWhatsapp: process.env.SUPPORT_WHATSAPP || '',
+    supportWhatsapp: process.env.SUPPORT_WHATSAPP || '+60199944971',
 
     pathaoProductionUrl: process.env.PATHAO_BASE_URL || 'https://api-hermes.pathao.com',
     pathaoSandboxUrl: process.env.PATHAO_SANDBOX_URL || 'https://courier-api-sandbox.pathao.com',
