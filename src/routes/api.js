@@ -7,7 +7,7 @@ const express = require('express');
 const { verifySessionToken, AuthError } = require('../shopify/auth');
 const { fromGraphql, normalizePhone } = require('../pathao/mapper');
 const { assessOrder } = require('../fraud');
-const { PLANS } = require('../plans');
+const { PLANS, intervalFromSubscriptionName } = require('../plans');
 const { DEFAULT_TEMPLATE, SOURCES } = require('../sms/sms');
 const { listCouriers, AVAILABLE } = require('../couriers');
 
@@ -82,6 +82,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
       skip_tag: s.skip_tag,
       only_cod: s.only_cod,
       tag_orders: s.tag_orders,
+      hold_risky: s.hold_risky !== false,
       sync_fulfillment: s.sync_fulfillment !== false,
       fulfill_when: s.fulfill_when || 'booked',
       notify_customer: Boolean(s.notify_customer),
@@ -177,6 +178,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
     if (b.skip_tag !== undefined) f.skip_tag = String(b.skip_tag).trim().slice(0, 40);
     if (b.only_cod !== undefined) f.only_cod = Boolean(b.only_cod);
     if (b.tag_orders !== undefined) f.tag_orders = Boolean(b.tag_orders);
+    if (b.hold_risky !== undefined) f.hold_risky = Boolean(b.hold_risky);
     if (b.sync_fulfillment !== undefined) f.sync_fulfillment = Boolean(b.sync_fulfillment);
     if (b.fulfill_when !== undefined) f.fulfill_when = b.fulfill_when === 'picked' ? 'picked' : 'booked';
     if (b.notify_customer !== undefined) f.notify_customer = Boolean(b.notify_customer);
@@ -271,6 +273,8 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
           customer: n.shipping.name || n.fallbackName || '',
           phone: n.shipping.phone || n.fallbackPhones.find(Boolean) || '',
           city: n.shipping.city || '',
+          address: [n.shipping.address1, n.shipping.address2, n.shipping.city].filter(Boolean).join(', '),
+          phoneNormalized: phone,
           total: n.total,
           currency: o.totalPriceSet?.shopMoney?.currencyCode || '',
           cod: n.outstanding != null ? n.outstanding : n.paid ? 0 : n.total,
@@ -336,10 +340,48 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
   router.post('/sms/test', wrap(async (req) => notifier.sendTest(req.shop, req.body?.phone)));
 
   // ---- billing ----
+  router.get('/billing', wrap(async (req) => {
+    const [{ plan, subscription }, used, history] = await Promise.all([
+      syncPlan(req.shop, req.opts),
+      db.countSentThisMonth(req.shop),
+      admin.billingHistory(req.shop, req.opts).catch((e) => { log.warn(`[${req.shop}] billing history failed: ${e.message}`); return []; }),
+    ]);
+    const handle = req.shop.replace('.myshopify.com', '');
+    return {
+      plan,
+      interval: subscription ? intervalFromSubscriptionName(subscription.name) : null,
+      subscription: subscription ? { name: subscription.name, status: subscription.status, currentPeriodEnd: subscription.currentPeriodEnd, trialDays: subscription.trialDays, test: subscription.test } : null,
+      usage: { used, limit: PLANS[plan].monthlyOrderLimit },
+      plans: Object.values(PLANS),
+      history,
+      shopifyBillingUrl: `https://admin.shopify.com/store/${handle}/settings/billing`,
+      testMode: Boolean(config.billingTest),
+    };
+  }));
+
   router.post('/billing/subscribe', wrap(async (req) => {
     const plan = req.body?.plan;
+    const interval = req.body?.interval === 'yearly' ? 'yearly' : 'monthly';
     if (!PLANS[plan] || PLANS[plan].price <= 0) throw Object.assign(new Error('Unknown plan'), { status: 400 });
-    return { confirmationUrl: await admin.createSubscription(req.shop, plan, req.opts) };
+    return { confirmationUrl: await admin.createSubscription(req.shop, plan, req.opts, interval) };
+  }));
+
+  // ---- support ----
+  const TOPICS = ['setup', 'orders', 'delivery', 'billing', 'other'];
+  router.get('/support', wrap(async (req) => ({
+    tickets: (await db.listTickets(req.shop)).map((t) => ({ id: t.id, topic: t.topic, message: t.message, orderName: t.order_name, status: t.status, createdAt: t.created_at })),
+    contact: { email: config.supportEmail || null, whatsapp: config.supportWhatsapp || null },
+  })));
+  router.post('/support', wrap(async (req) => {
+    const b = req.body || {};
+    const email = String(b.email || '').trim();
+    const message = String(b.message || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 200) throw Object.assign(new Error('Enter a valid email so we can reply'), { status: 400 });
+    if (message.length < 10) throw Object.assign(new Error('Tell us a little more (at least 10 characters)'), { status: 400 });
+    const topic = TOPICS.includes(b.topic) ? b.topic : 'other';
+    const t = await db.createTicket(req.shop, { email, topic, message: message.slice(0, 4000), orderName: b.order_name ? String(b.order_name).slice(0, 40) : null });
+    log.info(`[${req.shop}] support ticket #${t.id} (${topic})`);
+    return { id: t.id };
   }));
 
   router.post('/billing/cancel', wrap(async (req) => {

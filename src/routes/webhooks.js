@@ -4,7 +4,8 @@
 const express = require('express');
 const { verifyWebhookHmac, isValidShop } = require('../shopify/auth');
 const { safeEqual } = require('../crypto');
-const { fromWebhook, autoSendSkipReason } = require('../pathao/mapper');
+const { fromWebhook, autoSendSkipReason, normalizePhone } = require('../pathao/mapper');
+const { assessOrder } = require('../fraud');
 const { planFromSubscriptionName } = require('../plans');
 
 // Pathao's webhook setup check expects this header on a 202 response.
@@ -50,6 +51,18 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, no
           await db.recordSkip(shop, order.id, order.name, reason);
         }
         return;
+      }
+      // Hold high-risk orders for the merchant instead of booking them.
+      if (settings.hold_risky) {
+        const phone = [order.shipping.phone, ...order.fallbackPhones].filter(Boolean).map(normalizePhone).find((p) => p.valid)?.phone;
+        const history = phone ? (await db.historyForPhones(shop, [phone])).filter((h) => h.shopify_order_id !== order.id) : [];
+        const day = Date.now() - 24 * 3600 * 1000;
+        const fraud = assessOrder(order, { history, duplicates: history.filter((h) => h.created_at && new Date(h.created_at).getTime() > day) });
+        if (fraud.level === 'high') {
+          const why = (fraud.reasons.find((r) => r.level === 'high') || fraud.reasons[0] || {}).text || 'high fraud risk';
+          await db.recordSkip(shop, order.id, order.name, `Held for review: ${why}`);
+          return;
+        }
       }
       await shipping.sendOrder(shop, order);
     })();

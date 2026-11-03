@@ -86,6 +86,17 @@ const SCHEMA = [
   `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS phone TEXT`,
   `ALTER TABLE settings ADD COLUMN IF NOT EXISTS pathao_webhook_at TIMESTAMPTZ`,
   `ALTER TABLE settings ADD COLUMN IF NOT EXISTS sync_fulfillment BOOLEAN NOT NULL DEFAULT TRUE`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS hold_risky BOOLEAN NOT NULL DEFAULT TRUE`,
+  `CREATE TABLE IF NOT EXISTS support_tickets (
+    id SERIAL PRIMARY KEY,
+    shop TEXT NOT NULL,
+    email TEXT NOT NULL,
+    topic TEXT NOT NULL,
+    message TEXT NOT NULL,
+    order_name TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
   `ALTER TABLE settings ADD COLUMN IF NOT EXISTS fulfill_when TEXT NOT NULL DEFAULT 'booked'`,
   `ALTER TABLE settings ADD COLUMN IF NOT EXISTS notify_customer BOOLEAN NOT NULL DEFAULT FALSE`,
   `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS shopify_fulfillment_id TEXT`,
@@ -145,6 +156,7 @@ function makeDb(pool) {
     },
 
     async deleteShopData(shop) {
+      await q('DELETE FROM support_tickets WHERE shop = $1', [shop]);
       await q('DELETE FROM sms_log WHERE shop = $1', [shop]);
       await q('DELETE FROM shipments WHERE shop = $1', [shop]);
       await q('DELETE FROM settings WHERE shop = $1', [shop]);
@@ -224,6 +236,17 @@ function makeDb(pool) {
       return (await q('SELECT * FROM shipments WHERE shop = $1 AND shopify_order_id = ANY($2)', [shop, orderIds.map(String)])).rows;
     },
 
+    async createTicket(shop, t) {
+      return one(`INSERT INTO support_tickets (shop, email, topic, message, order_name) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        [shop, t.email, t.topic, t.message, t.orderName || null]);
+    },
+    async listTickets(shop, limit = 20) {
+      return (await q('SELECT id, topic, message, order_name, status, created_at FROM support_tickets WHERE shop = $1 ORDER BY created_at DESC LIMIT $2', [shop, limit])).rows;
+    },
+    async allTickets(limit = 50) {
+      return (await q('SELECT * FROM support_tickets ORDER BY created_at DESC LIMIT $1', [limit])).rows;
+    },
+
     async pendingShopifySync(shop, limit = 25) {
       return (await q(
         `SELECT shopify_order_id FROM shipments WHERE shop = $1 AND status = 'sent' AND consignment_id IS NOT NULL
@@ -234,7 +257,7 @@ function makeDb(pool) {
     async historyForPhones(shop, phones) {
       const list = [...new Set(phones.filter(Boolean))];
       if (!list.length) return [];
-      return (await q('SELECT shopify_order_id, phone, status, pathao_status FROM shipments WHERE shop = $1 AND phone = ANY($2)', [shop, list])).rows;
+      return (await q('SELECT shopify_order_id, phone, status, pathao_status, created_at FROM shipments WHERE shop = $1 AND phone = ANY($2)', [shop, list])).rows;
     },
 
     // Owner overview: one row per installed shop, no customer data.

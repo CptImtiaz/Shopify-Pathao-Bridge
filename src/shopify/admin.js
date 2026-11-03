@@ -1,6 +1,6 @@
 // Thin GraphQL Admin API client plus the queries/mutations the app uses.
 
-const { PLANS, subscriptionName, planFromSubscriptionName } = require('../plans');
+const { PLANS, INTERVALS, subscriptionName, planFromSubscriptionName } = require('../plans');
 
 function makeAdmin({ config, tokens, fetchImpl = fetch }) {
   async function graphql(shop, query, variables = {}, opts = {}) {
@@ -145,7 +145,7 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
     return sub ? { plan: planFromSubscriptionName(sub.name), subscription: sub } : { plan: 'free', subscription: null };
   }
 
-  async function createSubscription(shop, planKey, opts) {
+  async function createSubscription(shop, planKey, opts, interval = 'monthly') {
     const plan = PLANS[planKey];
     if (!plan || plan.price <= 0) throw new Error('Unknown paid plan');
     const storeHandle = shop.replace('.myshopify.com', '');
@@ -160,17 +160,35 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
         }
       }`,
       {
-        name: subscriptionName(planKey),
+        name: subscriptionName(planKey, interval),
         returnUrl,
         trialDays: plan.trialDays || 0,
         test: config.billingTest,
-        lineItems: [{ plan: { appRecurringPricingDetails: { price: { amount: plan.price, currencyCode: 'USD' }, interval: 'EVERY_30_DAYS' } } }],
+        lineItems: [{ plan: { appRecurringPricingDetails: { price: { amount: interval === 'yearly' ? plan.yearlyPrice : plan.price, currencyCode: 'USD' }, interval: INTERVALS[interval] || INTERVALS.monthly } } }],
       },
       opts
     );
     const r = data.appSubscriptionCreate;
     if (r.userErrors.length) throw new Error(r.userErrors.map((e) => e.message).join('; '));
     return r.confirmationUrl;
+  }
+
+  // Past and current subscriptions for the Billing page.
+  async function billingHistory(shop, opts) {
+    const data = await graphql(
+      shop,
+      `{ currentAppInstallation { allSubscriptions(first: 20, reverse: true) { nodes {
+          id name status createdAt currentPeriodEnd trialDays test
+          lineItems { plan { pricingDetails { __typename ... on AppRecurringPricing { interval price { amount currencyCode } } } } }
+        } } } }`,
+      {},
+      opts
+    );
+    return (data.currentAppInstallation.allSubscriptions.nodes || []).map((s) => {
+      const p = s.lineItems?.[0]?.plan?.pricingDetails || {};
+      return { id: s.id, name: s.name, status: s.status, createdAt: s.createdAt, currentPeriodEnd: s.currentPeriodEnd, trialDays: s.trialDays, test: s.test,
+        price: p.price ? Number(p.price.amount) : null, currency: p.price?.currencyCode || 'USD', interval: p.interval === 'ANNUAL' ? 'yearly' : 'monthly' };
+    });
   }
 
   async function cancelSubscription(shop, subscriptionId, opts) {
@@ -184,7 +202,7 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
     if (errs.length) throw new Error(errs.map((e) => e.message).join('; '));
   }
 
-  return { graphql, listRecentOrders, getOrder, annotateOrder, removeTags, activePlan, createSubscription, cancelSubscription, ensureWebhooks };
+  return { graphql, listRecentOrders, getOrder, annotateOrder, removeTags, activePlan, createSubscription, cancelSubscription, billingHistory, ensureWebhooks };
 }
 
 module.exports = { makeAdmin };

@@ -29,7 +29,7 @@ function makeOwnerRouter({ config, db }) {
 
   router.get('/', async (req, res, next) => {
     try {
-      const [shops, failures] = await Promise.all([db.ownerOverview(), db.recentFailures(25)]);
+      const [shops, failures, tickets] = await Promise.all([db.ownerOverview(), db.recentFailures(25), db.allTickets(50)]);
       const active = shops.filter((s) => !s.uninstalled_at);
       const paid = active.filter((s) => s.plan !== 'free');
       const mrr = paid.reduce((t, s) => t + ((PLANS[s.plan] && PLANS[s.plan].price) || 0), 0);
@@ -57,6 +57,9 @@ ${shops.map((s) => `<tr><td><a href="https://${esc(s.shop)}" target="_blank" rel
 <td>${s.pathao_connected ? `<span class="b g">Connected</span>${s.pathao_env === 'sandbox' ? ' <span class="b y">Sandbox</span>' : ''}` : '<span class="b">Not set up</span>'}</td>
 <td>${s.auto_send ? 'On' : 'Off'}</td><td>${esc(s.sent_month)}</td><td>${s.failed_week ? `<span class="b r">${esc(s.failed_week)}</span>` : '0'}</td>
 <td>${esc(day(s.installed_at))}</td><td>${esc(day(s.last_activity))}</td><td style="white-space:normal;max-width:320px;font-size:12px">${esc(s.scope)}</td></tr>`).join('') || '<tr><td colspan="10">No installs yet</td></tr>'}
+</table></div>
+<div class="card"><h2>Support requests</h2><table><tr><th>When</th><th>Shop</th><th>Topic</th><th>Reply to</th><th>Order</th><th>Message</th></tr>
+${tickets.map((t) => `<tr><td>${esc(new Date(t.created_at).toISOString().slice(0, 16).replace('T', ' '))}</td><td>${esc(t.shop)}</td><td><span class="b">${esc(t.topic)}</span></td><td><a href="mailto:${esc(t.email)}">${esc(t.email)}</a></td><td>${esc(t.order_name || '—')}</td><td class="err" style="color:#15171a">${esc(t.message)}</td></tr>`).join('') || '<tr><td colspan="6">None yet</td></tr>'}
 </table></div>
 <div class="card"><h2>Recent failed bookings</h2><table><tr><th>When</th><th>Shop</th><th>Order</th><th>Error</th></tr>
 ${failures.map((f) => `<tr><td>${esc(new Date(f.updated_at).toISOString().slice(0, 16).replace('T', ' '))}</td><td>${esc(f.shop)}</td><td>${esc(f.order_name)}</td><td class="err">${esc(f.error)}</td></tr>`).join('') || '<tr><td colspan="4">None</td></tr>'}

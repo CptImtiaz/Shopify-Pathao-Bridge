@@ -79,7 +79,7 @@ function fakeFetch() {
     if (url.includes('/graphql.json')) {
       const { query, variables } = JSON.parse(body);
       if (query.includes('currentAppInstallation')) {
-        return json(200, { data: { currentAppInstallation: { activeSubscriptions: state.activeSubscriptions } } });
+        return json(200, { data: { currentAppInstallation: { activeSubscriptions: state.activeSubscriptions, allSubscriptions: { nodes: state.allSubscriptions || [] } } } });
       }
       if (query.includes('RecentOrders')) return json(200, { data: { orders: { nodes: Object.values(state.orders) } } });
       if (query.includes('OneOrder')) {
@@ -117,6 +117,7 @@ function fakeFetch() {
       if (query.includes('tagsAdd')) return json(200, { data: { tagsAdd: { userErrors: [] } } });
       if (query.includes('metafieldsSet')) return json(200, { data: { metafieldsSet: { userErrors: [] } } });
       if (query.includes('appSubscriptionCreate')) {
+        state.lastSubscription = variables;
         return json(200, { data: { appSubscriptionCreate: { confirmationUrl: 'https://admin.shopify.com/charges/confirm/1', appSubscription: { id: 'gid://shopify/AppSubscription/1' }, userErrors: [] } } });
       }
       if (query.includes('appSubscriptionCancel')) return json(200, { data: { appSubscriptionCancel: { userErrors: [] } } });

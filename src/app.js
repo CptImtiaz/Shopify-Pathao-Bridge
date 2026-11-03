@@ -54,7 +54,7 @@ function createApp({ config, pool, fetchImpl = fetch, log = console, defer = (p)
 
   // Embedded app shell. Shopify loads this inside the admin iframe.
   const shell = fs.readFileSync(path.join(VIEWS_DIR, 'index.html'), 'utf8').replace(/%SHOPIFY_API_KEY%/g, config.shopifyApiKey);
-  app.get(['/', '/app', '/settings', '/couriers', '/sms', '/plans'], (req, res) => {
+  app.get(['/', '/app', '/settings', '/couriers', '/sms', '/plans', '/billing', '/support'], (req, res) => {
     const shop = String(req.query.shop || '');
     // Required for embedded apps: only Shopify admin may frame this page.
     const ancestors = isValidShop(shop) ? `https://${shop} https://admin.shopify.com` : 'https://admin.shopify.com';
