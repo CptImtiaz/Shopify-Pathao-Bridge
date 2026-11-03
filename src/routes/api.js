@@ -8,6 +8,7 @@ const { verifySessionToken, AuthError } = require('../shopify/auth');
 const { fromGraphql } = require('../pathao/mapper');
 const { PLANS } = require('../plans');
 const { DEFAULT_TEMPLATE, SOURCES } = require('../sms/sms');
+const { listCouriers, AVAILABLE } = require('../couriers');
 
 function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, cipher, log = console }) {
   const router = express.Router();
@@ -95,13 +96,15 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, 
         (e) => { log.error(`[${req.shop}] webhook registration failed: ${e.message}`); return { ok: false, error: e.message }; }
       ),
     ]);
-    const used = await db.countSentThisMonth(req.shop);
+    const [used, stats] = await Promise.all([db.countSentThisMonth(req.shop), db.monthStats(req.shop)]);
     return {
       shop: req.shop,
       settings: publicSettings(settings),
       plan,
       trialEndsOrRenews: subscription ? subscription.currentPeriodEnd : null,
       usage: { used, limit: PLANS[plan].monthlyOrderLimit },
+      stats,
+      couriers: listCouriers(settings, { pathao }),
       plans: Object.values(PLANS),
       pathaoWebhook: { url: `${config.appUrl}/pathao/webhook/${req.shop}`, secret: settings.webhook_secret },
       webhooks,
@@ -123,6 +126,10 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, 
       .some((k) => k in f && f[k] !== current[k]);
     if (credsChanged) Object.assign(f, { pathao_token_enc: null, pathao_refresh_enc: null, pathao_token_expires_at: null });
 
+    if (b.default_courier !== undefined) {
+      if (!AVAILABLE.includes(b.default_courier)) throw Object.assign(new Error('That courier is not available yet'), { status: 400 });
+      f.default_courier = b.default_courier;
+    }
     if (b.pathao_store_id !== undefined) {
       const id = b.pathao_store_id === '' || b.pathao_store_id === null ? null : Number(b.pathao_store_id);
       if (id !== null && !Number.isInteger(id)) throw Object.assign(new Error('Please choose a valid Pathao store'), { status: 400 });
@@ -172,7 +179,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, 
     }
 
     const saved = await db.updateSettings(req.shop, f);
-    return { settings: publicSettings(saved) };
+    return { settings: publicSettings(saved), couriers: listCouriers(saved, { pathao }) };
   }));
 
   // ---- Pathao connection test + store list ----
@@ -246,6 +253,14 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, 
     await db.finishShipment(req.shop, req.params.id, { pathao_status: status });
     return { pathaoStatus: status };
   }));
+
+  // ---- SMS log ----
+  router.get('/sms/log', wrap(async (req) => ({
+    items: (await db.listSms(req.shop, 50)).map((r) => ({
+      orderId: r.shopify_order_id, orderName: r.order_name, status: r.status, error: r.error,
+      phone: r.phone ? r.phone.replace(/^(\d{5})\d{4}(\d{4})$/, '$1••••$2') : null, at: r.updated_at || r.created_at,
+    })),
+  })));
 
   // ---- SMS test ----
   router.post('/sms/test', wrap(async (req) => notifier.sendTest(req.shop, req.body?.phone)));

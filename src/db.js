@@ -66,6 +66,8 @@ const SCHEMA = [
   `ALTER TABLE settings ADD COLUMN IF NOT EXISTS sms_source TEXT NOT NULL DEFAULT 'web'`,
   `ALTER TABLE settings ADD COLUMN IF NOT EXISTS sms_template TEXT`,
   `ALTER TABLE settings ADD COLUMN IF NOT EXISTS sms_since TIMESTAMPTZ`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS default_courier TEXT NOT NULL DEFAULT 'pathao'`,
+  `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS courier TEXT NOT NULL DEFAULT 'pathao'`,
   `CREATE TABLE IF NOT EXISTS sms_log (
     id SERIAL PRIMARY KEY,
     shop TEXT NOT NULL,
@@ -78,6 +80,8 @@ const SCHEMA = [
     UNIQUE (shop, shopify_order_id)
   )`,
   `CREATE INDEX IF NOT EXISTS shipments_consignment ON shipments (consignment_id)`,
+  `ALTER TABLE sms_log ADD COLUMN IF NOT EXISTS order_name TEXT`,
+  `ALTER TABLE sms_log ADD COLUMN IF NOT EXISTS phone TEXT`,
 ];
 
 function makeDb(pool) {
@@ -223,12 +227,12 @@ function makeDb(pool) {
       one('SELECT * FROM shipments WHERE shop = $1 AND consignment_id = $2', [shop, String(consignmentId)]),
 
     // ---------- sms log (one confirmation SMS per order) ----------
-    async claimSms(shop, orderId) {
+    async claimSms(shop, orderId, orderName) {
       const token = crypto.randomUUID();
       const row = await one(
-        `INSERT INTO sms_log (shop, shopify_order_id, status, claim_token) VALUES ($1,$2,'sending',$3)
+        `INSERT INTO sms_log (shop, shopify_order_id, order_name, status, claim_token) VALUES ($1,$2,$4,'sending',$3)
          ON CONFLICT (shop, shopify_order_id) DO NOTHING RETURNING *`,
-        [shop, String(orderId), token]
+        [shop, String(orderId), token, orderName || null]
       );
       if (row && row.claim_token === token) return row;
       return one(
@@ -237,13 +241,28 @@ function makeDb(pool) {
         [shop, String(orderId), token]
       );
     },
-    async finishSms(shop, orderId, status, error) {
-      await q(`UPDATE sms_log SET status = $3, error = $4, updated_at = NOW() WHERE shop = $1 AND shopify_order_id = $2`,
-        [shop, String(orderId), status, error || null]);
+    async finishSms(shop, orderId, status, error, phone) {
+      await q(`UPDATE sms_log SET status = $3, error = $4, phone = COALESCE($5, phone), updated_at = NOW() WHERE shop = $1 AND shopify_order_id = $2`,
+        [shop, String(orderId), status, error || null, phone || null]);
     },
-    async recordSmsSkip(shop, orderId, reason) {
-      await q(`INSERT INTO sms_log (shop, shopify_order_id, status, error) VALUES ($1,$2,'skipped',$3)
-               ON CONFLICT (shop, shopify_order_id) DO NOTHING`, [shop, String(orderId), reason]);
+    async recordSmsSkip(shop, orderId, reason, orderName) {
+      await q(`INSERT INTO sms_log (shop, shopify_order_id, order_name, status, error) VALUES ($1,$2,$4,'skipped',$3)
+               ON CONFLICT (shop, shopify_order_id) DO NOTHING`, [shop, String(orderId), reason, orderName || null]);
+    },
+    listSms: async (shop, limit = 50) =>
+      (await q('SELECT * FROM sms_log WHERE shop = $1 ORDER BY created_at DESC LIMIT $2', [shop, limit])).rows,
+    async monthStats(shop) {
+      const ship = (await q(
+        `SELECT status, COUNT(*)::int AS n FROM shipments WHERE shop = $1 AND created_at >= date_trunc('month', NOW()) GROUP BY status`, [shop])).rows;
+      const sms = (await q(
+        `SELECT status, COUNT(*)::int AS n FROM sms_log WHERE shop = $1 AND created_at >= date_trunc('month', NOW()) GROUP BY status`, [shop])).rows;
+      const pick = (rows, st) => Number((rows.find((r) => r.status === st) || {}).n || 0);
+      return {
+        shipped: pick(ship, 'sent'),
+        shipFailed: pick(ship, 'failed') + pick(ship, 'skipped'),
+        smsSent: pick(sms, 'sent'),
+        smsFailed: pick(sms, 'failed'),
+      };
     },
     async smsForOrders(shop, orderIds) {
       if (!orderIds.length) return [];

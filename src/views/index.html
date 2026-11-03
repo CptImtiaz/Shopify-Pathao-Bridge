@@ -4,161 +4,279 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="shopify-api-key" content="%SHOPIFY_API_KEY%" />
-  <title>ShipBridge for Pathao</title>
+  <title>ShipBridge</title>
   <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
   <script src="https://cdn.shopify.com/shopifycloud/polaris.js"></script>
   <link rel="stylesheet" href="/assets/app.css" />
 </head>
 <body>
-  <s-page heading="ShipBridge for Pathao" inlinesize="large">
+  <!-- Shopify admin sidebar navigation -->
+  <s-app-nav>
+    <s-link href="/" rel="home">Dashboard</s-link>
+    <s-link href="/couriers">Couriers</s-link>
+    <s-link href="/sms">SMS</s-link>
+    <s-link href="/plans">Plans</s-link>
+  </s-app-nav>
+
+  <div class="shell">
+    <!-- top bar -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 15c3-5 15-5 18 0" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M3 16.5h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="9" y="5" width="6" height="6" rx="1.2" fill="currentColor"/></svg>
+        </div>
+        <div>
+          <div class="brand-name">ShipBridge</div>
+          <div class="brand-sub" id="brand-sub">Couriers &amp; SMS for Shopify</div>
+        </div>
+      </div>
+      <nav class="tabs" id="tabs">
+        <a href="/" data-nav="dashboard">Dashboard</a>
+        <a href="/couriers" data-nav="couriers">Couriers</a>
+        <a href="/sms" data-nav="sms">SMS</a>
+        <a href="/plans" data-nav="plans">Plans</a>
+      </nav>
+    </header>
+
     <div id="banners"></div>
 
-    <!-- At a glance -->
-    <div class="stats" id="stats" hidden>
-      <div class="card stat">
-        <div class="stat-label">Pathao account</div>
-        <div class="stat-value" id="stat-pathao">—</div>
-        <div class="stat-sub" id="stat-pathao-sub"></div>
-      </div>
-      <div class="card stat">
-        <div class="stat-label">Auto-send new orders</div>
-        <div class="stat-row">
-          <s-switch id="auto_send" accessibilitylabel="Automatically send new orders to Pathao"></s-switch>
-          <span class="stat-value small" id="stat-auto">Off</span>
+    <!-- ===================== DASHBOARD ===================== -->
+    <main class="page" data-page="dashboard">
+      <div class="page-head">
+        <div>
+          <h1 id="greeting">Dashboard</h1>
+          <p class="lead">Your orders, deliveries and customer messages in one place.</p>
         </div>
-        <div class="stat-sub">New paid or COD orders go to Pathao instantly</div>
+        <s-button variant="primary" id="send-selected" disabled>Send to courier</s-button>
       </div>
-      <div class="card stat">
-        <div class="stat-label">Orders sent this month</div>
-        <div class="stat-value" id="stat-usage">0</div>
-        <div class="meter"><div class="meter-fill" id="usage-bar"></div></div>
-        <div class="stat-sub" id="stat-usage-sub"></div>
-      </div>
-      <div class="card stat">
-        <div class="stat-label">Plan</div>
-        <div class="stat-value" id="stat-plan">Free</div>
-        <div class="stat-sub" id="stat-plan-sub"></div>
-      </div>
-    </div>
 
-    <!-- Connect Pathao (full form when not connected / editing) -->
-    <s-section id="connect-section" heading="Connect your Pathao account" hidden>
-      <div class="steps-hint">
-        <span class="num">1</span> Open the <b>Pathao Merchant Panel → Developers API → Merchant API Credentials</b>
-        <span class="num">2</span> Copy your details below
-        <span class="num">3</span> Choose the store parcels are picked up from
-      </div>
-      <s-grid gridtemplatecolumns="1fr 1fr" gap="base" paddingblock="base">
-        <s-text-field label="Client ID" id="pathao_client_id" autocomplete="off"></s-text-field>
-        <s-password-field label="Client secret" id="pathao_client_secret" autocomplete="off"></s-password-field>
-        <s-text-field label="Merchant login email" id="pathao_username" autocomplete="off"></s-text-field>
-        <s-password-field label="Merchant login password" id="pathao_password" autocomplete="new-password"></s-password-field>
-        <s-select label="Environment" id="pathao_env">
-          <s-option value="production">Live</s-option>
-          <s-option value="sandbox">Sandbox (testing only)</s-option>
-        </s-select>
-        <s-select label="Pickup store" id="pathao_store_id" details="Loads after a successful connection">
-          <s-option value="">—</s-option>
-        </s-select>
-      </s-grid>
-      <s-stack direction="inline" gap="small-200" alignitems="center">
-        <s-button variant="primary" id="save-connection">Connect Pathao</s-button>
-        <s-button variant="tertiary" id="cancel-edit" hidden>Cancel</s-button>
-        <span class="muted">Your secret and password are encrypted and never shown again.</span>
-      </s-stack>
-    </s-section>
+      <section class="setup card" id="setup" hidden>
+        <div class="setup-head">
+          <div class="ring" id="setup-ring"><span id="setup-count">0/4</span></div>
+          <div>
+            <h2>Finish setting up</h2>
+            <p class="muted">A few steps and orders start shipping on their own.</p>
+          </div>
+        </div>
+        <ol class="checklist" id="checklist"></ol>
+      </section>
 
-    <!-- Orders -->
-    <s-section heading="Orders">
-      <div class="toolbar">
+      <section class="kpis">
+        <div class="card kpi">
+          <div class="kpi-icon blue"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z M3 7v10l9 4 9-4V7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></div>
+          <div class="kpi-label">Shipped this month</div>
+          <div class="kpi-value" id="k-shipped">0</div>
+          <div class="kpi-sub" id="k-shipped-sub"></div>
+        </div>
+        <div class="card kpi">
+          <div class="kpi-icon amber"><svg viewBox="0 0 24 24"><path d="M12 3l10 18H2L12 3z M12 10v5 M12 18h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="kpi-label">Needs attention</div>
+          <div class="kpi-value" id="k-attention">0</div>
+          <div class="kpi-sub">Failed or skipped orders</div>
+        </div>
+        <div class="card kpi">
+          <div class="kpi-icon green"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4V5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></div>
+          <div class="kpi-label">SMS sent this month</div>
+          <div class="kpi-value" id="k-sms">0</div>
+          <div class="kpi-sub" id="k-sms-sub"></div>
+        </div>
+        <div class="card kpi">
+          <div class="kpi-icon violet"><svg viewBox="0 0 24 24"><path d="M4 19V9 M10 19V5 M16 19v-7 M22 19H2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+          <div class="kpi-label">Plan usage</div>
+          <div class="kpi-value" id="k-usage">0</div>
+          <div class="meter"><div class="meter-fill" id="usage-bar"></div></div>
+          <div class="kpi-sub" id="k-usage-sub"></div>
+        </div>
+      </section>
+
+      <section class="card panel">
+        <div class="panel-head">
+          <div>
+            <h2>Orders</h2>
+            <p class="muted" id="auto-line">Auto-send is off</p>
+          </div>
+          <div class="panel-tools">
+            <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><input id="search" placeholder="Search order or customer" /></div>
+            <s-button id="reload-orders" icon="refresh" accessibilitylabel="Refresh orders"></s-button>
+          </div>
+        </div>
         <div class="filters" id="filters">
           <button class="pill active" data-filter="all">All <span id="c-all"></span></button>
           <button class="pill" data-filter="todo">To send <span id="c-todo"></span></button>
-          <button class="pill" data-filter="sent">Sent <span id="c-sent"></span></button>
+          <button class="pill" data-filter="sent">Shipped <span id="c-sent"></span></button>
           <button class="pill" data-filter="problem">Needs attention <span id="c-problem"></span></button>
         </div>
-        <s-stack direction="inline" gap="small-200">
-          <s-button id="reload-orders" icon="refresh" accessibilitylabel="Refresh orders"></s-button>
-          <s-button variant="primary" id="send-selected" disabled>Send to Pathao</s-button>
-        </s-stack>
-      </div>
-      <s-table id="orders-table" loading>
-        <s-table-header-row>
-          <s-table-header listslot="inline"><span class="sr">Select</span></s-table-header>
-          <s-table-header listslot="primary">Order</s-table-header>
-          <s-table-header>Customer</s-table-header>
-          <s-table-header format="currency">Cash to collect</s-table-header>
-          <s-table-header listslot="secondary">Status</s-table-header>
-          <s-table-header><span class="sr">Actions</span></s-table-header>
-        </s-table-header-row>
-        <s-table-body id="orders-body"></s-table-body>
-      </s-table>
-      <div class="empty" id="orders-empty" hidden></div>
-    </s-section>
+        <s-table id="orders-table" loading>
+          <s-table-header-row>
+            <s-table-header listslot="inline"><span class="sr">Select</span></s-table-header>
+            <s-table-header listslot="primary">Order</s-table-header>
+            <s-table-header>Customer</s-table-header>
+            <s-table-header format="currency">Cash to collect</s-table-header>
+            <s-table-header listslot="secondary">Delivery</s-table-header>
+            <s-table-header>SMS</s-table-header>
+            <s-table-header><span class="sr">Actions</span></s-table-header>
+          </s-table-header-row>
+          <s-table-body id="orders-body"></s-table-body>
+        </s-table>
+        <div class="empty" id="orders-empty" hidden></div>
+      </section>
+    </main>
 
-    <!-- SMS notifications -->
-    <s-section heading="SMS notifications" id="sms-section">
-      <div class="sms-head">
+    <!-- ===================== COURIERS ===================== -->
+    <main class="page" data-page="couriers" hidden>
+      <div class="page-head">
         <div>
-          <div class="stat-row">
-            <s-switch id="sms_enabled" accessibilitylabel="Send order confirmation SMS"></s-switch>
-            <b id="sms-state">Off</b>
+          <h1>Couriers</h1>
+          <p class="lead">Connect the delivery services you use. New orders go to your default courier.</p>
+        </div>
+      </div>
+
+      <section class="courier-grid" id="courier-grid"></section>
+
+      <!-- Pathao detail -->
+      <section class="card panel" id="pathao-panel">
+        <div class="panel-head">
+          <div class="courier-title">
+            <span class="mono" style="--c:#E8202A">P</span>
+            <div>
+              <h2>Pathao Courier</h2>
+              <p class="muted" id="pathao-sub">Not connected</p>
+            </div>
           </div>
-          <div class="muted" id="sms-sub">Customers get a confirmation SMS when they place an order (SSL Wireless).</div>
+          <s-badge id="pathao-badge">Not connected</s-badge>
         </div>
-        <s-badge id="sms-badge">Not set up</s-badge>
-      </div>
-      <s-grid gridtemplatecolumns="1fr 1fr" gap="base" paddingblock="base">
-        <s-select label="Send SMS for" id="sms_source" details="Online store = orders customers place on your website. Manual = orders you create in Shopify admin.">
-          <s-option value="all">All orders</s-option>
-          <s-option value="web">Online store orders only</s-option>
-          <s-option value="manual">Manual orders only</s-option>
-        </s-select>
-        <div></div>
-        <s-password-field label="SSL Wireless API token" id="sms_token" autocomplete="off"></s-password-field>
-        <s-text-field label="SID (sender ID)" id="sms_sid" autocomplete="off"></s-text-field>
-      </s-grid>
-      <s-text-area label="Message" id="sms_template" rows="3" maxlength="600"
-        details="You can use {{name}}, {{order_number}}, {{items}}, {{total}} and {{currency}}"></s-text-area>
-      <div class="sms-preview" id="sms-preview"></div>
-      <div class="sms-actions">
-        <s-button variant="primary" id="save-sms">Save SMS settings</s-button>
-        <div class="sms-test">
-          <s-text-field label="Test number" labelaccessibilityvisibility="exclusive" id="sms_test_phone" placeholder="Test number, e.g. 01712345678"></s-text-field>
-          <s-button id="test-sms">Send test SMS</s-button>
+
+        <div class="split">
+          <div class="split-main">
+            <h3>Account</h3>
+            <p class="muted small">Pathao Merchant Panel → <b>Developers API → Merchant API Credentials</b>. Secrets are encrypted and never shown again.</p>
+            <s-grid gridtemplatecolumns="1fr 1fr" gap="base" paddingblock="base">
+              <s-text-field label="Client ID" id="pathao_client_id" autocomplete="off"></s-text-field>
+              <s-password-field label="Client secret" id="pathao_client_secret" autocomplete="off"></s-password-field>
+              <s-text-field label="Merchant login email" id="pathao_username" autocomplete="off"></s-text-field>
+              <s-password-field label="Merchant login password" id="pathao_password" autocomplete="new-password"></s-password-field>
+              <s-select label="Environment" id="pathao_env">
+                <s-option value="production">Live</s-option>
+                <s-option value="sandbox">Sandbox (testing only)</s-option>
+              </s-select>
+              <s-select label="Pickup store" id="pathao_store_id" details="Loads after a successful connection">
+                <s-option value="">—</s-option>
+              </s-select>
+            </s-grid>
+            <s-button variant="primary" id="save-connection">Connect Pathao</s-button>
+          </div>
+          <aside class="split-side">
+            <div class="side-card">
+              <div class="row-between">
+                <div>
+                  <b>Auto-send new orders</b>
+                  <div class="muted small">Book every new order with Pathao instantly.</div>
+                </div>
+                <s-switch id="auto_send" accessibilitylabel="Automatically send new orders to Pathao"></s-switch>
+              </div>
+            </div>
+            <div class="side-card">
+              <b>Delivery status updates</b>
+              <div class="muted small">Paste these in Pathao → Developers API → Webhook integration to tag delivered and returned orders automatically.</div>
+              <s-text-field label="Callback URL" id="wh_url" readonly></s-text-field>
+              <s-text-field label="Secret" id="wh_secret" readonly></s-text-field>
+            </div>
+          </aside>
         </div>
-      </div>
-    </s-section>
+      </section>
+    </main>
 
-    <!-- Plans -->
-    <s-section heading="Plans" id="plans-section">
-      <div class="plans" id="plans"></div>
-      <p class="muted center">Billed securely through your Shopify invoice. Upgrade, downgrade or cancel anytime.</p>
-    </s-section>
-
-    <!-- Connected account details (when connected) -->
-    <s-section heading="Pathao connection" id="account-section" hidden>
-      <div class="account-row">
+    <!-- ===================== SMS ===================== -->
+    <main class="page" data-page="sms" hidden>
+      <div class="page-head">
         <div>
-          <div class="kv"><span>Login</span><b id="acc-user"></b></div>
-          <div class="kv"><span>Pickup store</span><b id="acc-store"></b></div>
-          <div class="kv"><span>Environment</span><b id="acc-env"></b></div>
+          <h1>SMS notifications</h1>
+          <p class="lead">Send customers an order confirmation by SMS through SSL Wireless.</p>
         </div>
-        <s-button id="edit-connection">Edit connection</s-button>
+        <div class="head-switch">
+          <s-badge id="sms-badge">Not set up</s-badge>
+          <s-switch id="sms_enabled" accessibilitylabel="Send order confirmation SMS"></s-switch>
+        </div>
       </div>
-      <details class="more">
-        <summary>Delivery status updates (optional)</summary>
-        <p class="muted">In the Pathao Merchant Panel open <b>Developers API → Webhook integration</b> and paste these.
-          Delivered and returned orders are then tagged in Shopify automatically.</p>
-        <s-grid gridtemplatecolumns="2fr 1fr" gap="base">
-          <s-text-field label="Callback URL" id="wh_url" readonly></s-text-field>
-          <s-text-field label="Secret" id="wh_secret" readonly></s-text-field>
-        </s-grid>
-      </details>
-    </s-section>
 
-    <div class="footer"><s-link href="/privacy" target="_blank">Privacy policy</s-link></div>
-  </s-page>
+      <section class="sms-stats">
+        <div class="chip-stat"><span class="dot green"></span><b id="s-sent">0</b> sent this month</div>
+        <div class="chip-stat"><span class="dot red"></span><b id="s-failed">0</b> failed</div>
+        <div class="chip-stat"><span class="dot gray"></span><span id="s-mode">Online store orders only</span></div>
+      </section>
+
+      <div class="split">
+        <section class="card panel split-main">
+          <h2>Settings</h2>
+          <div class="field-block">
+            <div class="label">Send SMS for</div>
+            <div class="segmented" id="sms-source">
+              <button data-source="all">All orders</button>
+              <button data-source="web">Online store</button>
+              <button data-source="manual">Manual orders</button>
+            </div>
+            <div class="muted small" id="source-help"></div>
+          </div>
+          <s-grid gridtemplatecolumns="1fr 1fr" gap="base" paddingblock="base">
+            <s-password-field label="SSL Wireless API token" id="sms_token" autocomplete="off"></s-password-field>
+            <s-text-field label="SID (sender ID)" id="sms_sid" autocomplete="off"></s-text-field>
+          </s-grid>
+          <s-text-area label="Message" id="sms_template" rows="4" maxlength="600"
+            details="Use {{name}}, {{order_number}}, {{items}}, {{total}} and {{currency}}"></s-text-area>
+          <div class="placeholders" id="placeholders">
+            <button data-ph="name">+ name</button><button data-ph="order_number">+ order number</button><button data-ph="items">+ items</button><button data-ph="total">+ total</button><button data-ph="currency">+ currency</button>
+          </div>
+          <div class="sms-actions">
+            <s-button variant="primary" id="save-sms">Save settings</s-button>
+          </div>
+        </section>
+
+        <aside class="split-side">
+          <div class="phone">
+            <div class="phone-top"><span id="phone-sid">SENDER</span></div>
+            <div class="bubble" id="sms-preview"></div>
+            <div class="phone-meta" id="sms-count"></div>
+          </div>
+          <div class="card panel test-card">
+            <b>Send a test</b>
+            <div class="muted small">Check your token, SID and delivery to a real phone.</div>
+            <div class="test-row">
+              <s-text-field label="Phone number" labelaccessibilityvisibility="exclusive" id="sms_test_phone" placeholder="01712345678"></s-text-field>
+              <s-button id="test-sms">Send</s-button>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <section class="card panel">
+        <div class="panel-head">
+          <h2>Recent messages</h2>
+          <s-button id="reload-sms" icon="refresh" accessibilitylabel="Refresh messages"></s-button>
+        </div>
+        <div id="sms-log"></div>
+      </section>
+    </main>
+
+    <!-- ===================== PLANS ===================== -->
+    <main class="page" data-page="plans" hidden>
+      <div class="page-head">
+        <div>
+          <h1>Plans</h1>
+          <p class="lead">Billed through your Shopify invoice. Change or cancel anytime.</p>
+        </div>
+      </div>
+      <section class="card usage-card">
+        <div class="row-between">
+          <div><b>This month</b><div class="muted small" id="plan-usage-text"></div></div>
+          <div class="kpi-value" id="plan-usage-num"></div>
+        </div>
+        <div class="meter big"><div class="meter-fill" id="plan-usage-bar"></div></div>
+      </section>
+      <section class="plans" id="plans"></section>
+    </main>
+
+    <footer class="footer"><a href="/privacy" target="_blank">Privacy policy</a></footer>
+  </div>
 
   <script src="/assets/app.js"></script>
 </body>

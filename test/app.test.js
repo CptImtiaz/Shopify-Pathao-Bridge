@@ -341,3 +341,33 @@ test('opening the app registers order/uninstall/billing webhooks once, and fixes
   await a.api('/bootstrap');
   assert.equal(a.fake.calls.filter((c) => c.body && c.body.includes('webhookSubscriptionCreate')).length, before, 'no duplicates on reopen');
 });
+
+test('courier registry, monthly stats, SMS history and page routes', async (t) => {
+  const a = await startApp();
+  t.after(() => a.close());
+  let boot = (await a.api('/bootstrap')).data;
+  const keys = boot.couriers.map((c) => c.key);
+  assert.ok(keys.includes('pathao') && keys.includes('steadfast'));
+  assert.equal(boot.couriers.find((c) => c.key === 'pathao').status, 'not_connected');
+  assert.equal(boot.couriers.find((c) => c.key === 'steadfast').status, 'coming_soon');
+  assert.equal(boot.couriers.find((c) => c.key === 'pathao').isDefault, true);
+  assert.equal((await a.api('/settings', { method: 'POST', body: { default_courier: 'steadfast' } })).status, 400);
+
+  const r = await a.api('/settings', { method: 'POST', body: { pathao_client_id: 'c', pathao_client_secret: 's', pathao_username: 'u', pathao_password: 'p', pathao_store_id: 77, pathao_store_name: 'Main', sms_token: 't', sms_sid: 'S', sms_enabled: true, sms_source: 'all' } });
+  assert.equal(r.data.couriers.find((c) => c.key === 'pathao').status, 'connected');
+  await new Promise((res) => setTimeout(res, 20));
+  await a.webhook('/webhooks/orders/create', { id: 41, name: '#41', created_at: new Date(Date.now() + 1000).toISOString(), source_name: 'web', currency: 'BDT', total_price: '100', tags: '',
+    shipping_address: { name: 'A', phone: '01712345678', address1: 'House 1, Road 2, Banani' }, line_items: [] }, 'orders/create');
+  await a.settle();
+  boot = (await a.api('/bootstrap')).data;
+  assert.equal(boot.stats.smsSent, 1);
+  const log = (await a.api('/sms/log')).data.items;
+  assert.equal(log[0].orderName, '#41');
+  assert.equal(log[0].phone, '88017••••5678', 'phone masked in history');
+
+  for (const p of ['/couriers', '/sms', '/plans']) {
+    const res = await fetch(`${a.base}${p}?shop=${SHOP}&host=x&embedded=1`);
+    assert.equal(res.status, 200, p);
+    assert.match(await res.text(), /data-page="sms"/);
+  }
+});
