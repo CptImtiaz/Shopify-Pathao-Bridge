@@ -233,7 +233,7 @@ function makeDb(pool) {
     // Owner overview: one row per installed shop, no customer data.
     async ownerOverview() {
       const [shops, agg] = await Promise.all([
-        q(`SELECT s.shop, s.plan, s.installed_at, s.uninstalled_at, st.pathao_client_id, st.pathao_env, st.auto_send
+        q(`SELECT s.shop, s.plan, s.scope, s.installed_at, s.uninstalled_at, st.pathao_client_id, st.pathao_env, st.auto_send
            FROM shops s LEFT JOIN settings st ON st.shop = s.shop`),
         q(`SELECT shop,
                   SUM(CASE WHEN counted = TRUE AND created_at >= date_trunc('month', NOW()) THEN 1 ELSE 0 END)::int AS sent_month,
@@ -245,7 +245,7 @@ function makeDb(pool) {
       return shops.rows.map((s) => {
         const a = byShop.get(s.shop) || {};
         return {
-          shop: s.shop, plan: s.plan, installed_at: s.installed_at, uninstalled_at: s.uninstalled_at,
+          shop: s.shop, plan: s.plan, scope: s.scope || '', installed_at: s.installed_at, uninstalled_at: s.uninstalled_at,
           pathao_connected: Boolean(s.pathao_client_id), pathao_env: s.pathao_env, auto_send: Boolean(s.auto_send),
           sent_month: Number(a.sent_month) || 0, failed_week: Number(a.failed_week) || 0, last_activity: a.last_activity || null,
         };

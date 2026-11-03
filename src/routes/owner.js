@@ -50,13 +50,13 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px 16p
 td.err{white-space:normal;color:#8e0b21;max-width:520px}</style></head><body><div class="wrap">
 <h1>ShipBridge owner dashboard</h1><p class="meta">Live from the app database · ${esc(new Date().toUTCString())}</p>
 <div class="tiles">${tiles.map(([k, v]) => `<div class="tile"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>
-<div class="card"><h2>Shops</h2><table><tr><th>Shop</th><th>Status</th><th>Plan</th><th>Pathao</th><th>Auto-send</th><th>Sent this month</th><th>Failed (7 days)</th><th>Installed</th><th>Last activity</th></tr>
+<div class="card"><h2>Shops</h2><table><tr><th>Shop</th><th>Status</th><th>Plan</th><th>Pathao</th><th>Auto-send</th><th>Sent this month</th><th>Failed (7 days)</th><th>Installed</th><th>Last activity</th><th>Granted scopes</th></tr>
 ${shops.map((s) => `<tr><td><a href="https://${esc(s.shop)}" target="_blank" rel="noopener">${esc(s.shop)}</a></td>
 <td>${s.uninstalled_at ? `<span class="b r">Uninstalled ${esc(day(s.uninstalled_at))}</span>` : '<span class="b g">Active</span>'}</td>
 <td><span class="b ${s.plan !== 'free' ? 'g' : ''}">${esc((PLANS[s.plan] && PLANS[s.plan].name) || s.plan)}</span></td>
 <td>${s.pathao_connected ? `<span class="b g">Connected</span>${s.pathao_env === 'sandbox' ? ' <span class="b y">Sandbox</span>' : ''}` : '<span class="b">Not set up</span>'}</td>
 <td>${s.auto_send ? 'On' : 'Off'}</td><td>${esc(s.sent_month)}</td><td>${s.failed_week ? `<span class="b r">${esc(s.failed_week)}</span>` : '0'}</td>
-<td>${esc(day(s.installed_at))}</td><td>${esc(day(s.last_activity))}</td></tr>`).join('') || '<tr><td colspan="9">No installs yet</td></tr>'}
+<td>${esc(day(s.installed_at))}</td><td>${esc(day(s.last_activity))}</td><td style="white-space:normal;max-width:320px;font-size:12px">${esc(s.scope)}</td></tr>`).join('') || '<tr><td colspan="10">No installs yet</td></tr>'}
 </table></div>
 <div class="card"><h2>Recent failed bookings</h2><table><tr><th>When</th><th>Shop</th><th>Order</th><th>Error</th></tr>
 ${failures.map((f) => `<tr><td>${esc(new Date(f.updated_at).toISOString().slice(0, 16).replace('T', ' '))}</td><td>${esc(f.shop)}</td><td>${esc(f.order_name)}</td><td class="err">${esc(f.error)}</td></tr>`).join('') || '<tr><td colspan="4">None</td></tr>'}
