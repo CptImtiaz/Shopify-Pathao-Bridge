@@ -7,6 +7,7 @@ const express = require('express');
 const { verifySessionToken, AuthError } = require('../shopify/auth');
 const { fromGraphql, normalizePhone } = require('../pathao/mapper');
 const { assessOrder } = require('../fraud');
+const { summarise, RANGES } = require('../stats');
 const { PLANS, intervalFromSubscriptionName } = require('../plans');
 const { DEFAULT_TEMPLATE, SOURCES } = require('../sms/sms');
 const { listCouriers, AVAILABLE } = require('../couriers');
@@ -245,6 +246,11 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
   }));
 
   // ---- orders ----
+  router.get('/stats', wrap(async (req) => {
+    const range = RANGES.includes(req.query.range) ? req.query.range : 'month';
+    return summarise(await db.shipmentsForStats(req.shop), { range });
+  }));
+
   router.get('/orders', wrap(async (req) => {
     const orders = await admin.listRecentOrders(req.shop, req.opts, 50, { rich: true });
     const norm = orders.map(fromGraphql);

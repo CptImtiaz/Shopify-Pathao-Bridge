@@ -325,6 +325,10 @@ function makeDb(pool) {
     },
     listSms: async (shop, limit = 50) =>
       (await q('SELECT * FROM sms_log WHERE shop = $1 ORDER BY created_at DESC LIMIT $2', [shop, limit])).rows,
+    async shipmentsForStats(shop, limit = 20000) {
+      return (await q(`SELECT status, pathao_status, amount_to_collect, delivery_fee, created_at FROM shipments WHERE shop = $1 ORDER BY created_at DESC LIMIT $2`, [shop, limit])).rows;
+    },
+
     async monthStats(shop) {
       const ship = (await q(
         `SELECT status, COUNT(*)::int AS n FROM shipments WHERE shop = $1 AND created_at >= date_trunc('month', NOW()) GROUP BY status`, [shop])).rows;

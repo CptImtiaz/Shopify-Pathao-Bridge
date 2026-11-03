@@ -7,7 +7,7 @@
   const state = {
     boot: null, orders: [], loaded: false, selected: new Set(), focus: null,
     page: 'orders', group: null, stage: null, risk: 'any', search: '',
-    section: undefined, settingsTab: 'couriers', billing: null, period: 'monthly', support: null, checks: null, menuFor: null,
+    section: undefined, settingsTab: 'couriers', billing: null, period: 'monthly', range: 'month', stats: null, support: null, checks: null, menuFor: null,
   };
 
   // ---------------- helpers ----------------
@@ -45,7 +45,8 @@
   }
   const setVal = (id, v) => { const el = $(id); if (el) el.value = v == null ? '' : String(v); };
   const courier = (key) => (state.boot.couriers || []).find((c) => c.key === key) || { key, name: key, color: '#6B7875' };
-  const cmono = (c) => `<span class="cmono" style="background:${esc(c.color)}">${esc(c.name.charAt(0))}</span>`;
+  const LOGOS = { pathao: '/assets/couriers/pathao-mark.png' };
+  const cmono = (c, cls = '') => (LOGOS[c.key] ? `<img class="cmono logo-img ${cls}" src="${LOGOS[c.key]}" alt="${esc(c.name)}" />` : `<span class="cmono ${cls}" style="background:${esc(c.color)}">${esc(c.name.charAt(0))}</span>`);
   const webhookLive = () => Boolean(state.boot && state.boot.pathaoWebhook && state.boot.pathaoWebhook.live);
   const permMissing = () => Boolean(state.boot && state.boot.permissions && state.boot.permissions.missing && state.boot.permissions.missing.length);
   const S = () => state.boot.settings;
@@ -187,22 +188,47 @@
     $('send-new-label').textContent = `Send ${ready.length} new order${ready.length === 1 ? '' : 's'} to Pathao`;
     renderStats();
   }
-  function renderStats() {
-    if (!state.loaded) { $('stats').innerHTML = ''; return; }
-    const u = state.boot.usage, os = state.orders, count = (fn) => os.filter(fn).length;
-    const withCourier = count((o) => o.shipment && o.shipment.status === 'sent');
-    const delivered = count((o) => stageOf(o).key === 'delivered');
-    const attention = count((o) => stageOf(o).key === 'problems' || held(o) || (o.fraud && o.fraud.level === 'high' && !o.shipment));
-    const waiting = count((o) => canSend(o));
-    const pct = u.limit ? Math.min(100, Math.round((u.used / u.limit) * 100)) : 100;
-    const tiles = [
-      ['usage', 'Orders this month', u.limit ? `${u.used}<small> / ${u.limit}</small>` : `${u.used}`, `<span class="meter wide"><i style="width:${pct}%" class="${pct >= 80 && u.limit ? 'm-high' : 'm-brand'}"></i></span>`, '<path d="M4 7h16l-1.5 11h-13z M8 7a4 4 0 0 1 8 0"/>'],
-      ['wait', 'Waiting for courier', waiting, '<span class="sub">Not sent yet</span>', '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v4.8l3 1.8"/>'],
-      ['sent', 'With courier', withCourier, `<span class="sub">${delivered} delivered</span>`, '<path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.7"/><circle cx="17" cy="17.5" r="1.7"/>'],
-      ['alert', 'Needs attention', attention, '<span class="sub">Failed, returned or high risk</span>', '<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/>'],
-    ];
-    $('stats').innerHTML = tiles.map(([k, label, value, foot, icon]) => `<div class="card stat st-${k}"><span class="st-icon"><svg viewBox="0 0 24 24" aria-hidden="true">${icon}</svg></span>
-      <div class="st-body"><span class="st-label">${label}</span><b class="st-value">${value}</b>${foot}</div></div>`).join('');
+  function renderStats() { renderOverview(); }
+  async function loadStats() {
+    try { state.stats = await api(`/stats?range=${state.range}`); renderOverview(); } catch (e) { /* overview is optional */ }
+  }
+  const RANGE_TXT = { today: 'today', '7d': 'in the last 7 days', month: 'this month', all: 'since you started' };
+  function renderOverview() {
+    $$('#range-seg button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.range === state.range)));
+    const st = state.stats;
+    if (!st) { $('ov-kpis').innerHTML = '<div class="card kpi skeleton"></div>'.repeat(6); $('ov-chart').innerHTML = ''; return; }
+    const pct = (n, d) => (d ? Math.round((n / d) * 100) : 0);
+    const sr = st.successRate;
+    const srCol = sr == null ? '#9ca3af' : sr >= 85 ? '#22c55e' : sr >= 65 ? '#f59e0b' : '#ef4444';
+    $('ov-sub').textContent = `Parcels booked through ShipBridge ${RANGE_TXT[st.range]}`;
+    const kpi = (cls, icon, label, value, foot) => `<div class="card kpi k-${cls}"><div class="kpi-top"><span class="k-icon"><svg viewBox="0 0 24 24" aria-hidden="true">${icon}</svg></span><span class="k-label">${label}</span></div><b class="k-value">${value}</b>${foot}</div>`;
+    const way = st.onTheWay || 0;
+    $('ov-kpis').innerHTML = [
+      kpi('total', '<path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7M12 11v10"/>', 'Total booked', st.sent,
+        `<span class="k-foot">${st.notSent ? `${st.notSent} not sent · ` : ''}${st.avgFee != null ? `avg fee ${taka(st.avgFee)}` : 'No fees yet'}</span>`),
+      kpi('way', '<path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.6"/><circle cx="17" cy="17.5" r="1.6"/>', 'In transit', way,
+        `<span class="k-split"><i style="flex:${st.booked || 0}" class="s1"></i><i style="flex:${st.picked || 0}" class="s2"></i><i style="flex:${st.transit || 0}" class="s3"></i>${way ? '' : '<i style="flex:1" class="s0"></i>'}</span>
+         <span class="k-foot">${st.booked} booked · ${st.picked} picked up · ${st.transit} on the road</span>`),
+      kpi('done', '<path d="M5 12.5l4.5 4.5L19 7.5"/>', 'Delivered', st.delivered,
+        `<span class="k-foot"><b>${taka(st.codCollected)}</b> cash collected</span>`),
+      kpi('bad', '<path d="M9 14l-5-5 5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>', 'Returned & failed', st.problems,
+        `<span class="k-foot">${st.returned} returned · ${st.cancelled} cancelled · ${st.failed} failed</span>`),
+      `<div class="card kpi k-rate"><div class="kpi-top"><span class="k-label">Success rate</span></div>
+        <div class="rate"><span class="rate-ring" style="background:conic-gradient(${srCol} 0 ${sr || 0}%, #eceef2 ${sr || 0}% 100%)"><b>${sr == null ? '—' : sr + '%'}</b></span>
+        <span class="k-foot">${sr == null ? 'Shows once parcels finish' : `${st.delivered} of ${st.delivered + st.problems} finished parcels delivered`}</span></div></div>`,
+      kpi('cash', '<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M7 9v.01M17 15v.01"/>', 'Cash with riders', taka(st.codOnTheWay),
+        `<span class="k-foot">COD on parcels not delivered yet · fees ${taka(st.fees)}</span>`),
+    ].join('');
+    const max = Math.max(1, ...st.daily.map((d) => d.booked));
+    const totB = st.daily.reduce((t, d) => t + d.booked, 0), totD = st.daily.reduce((t, d) => t + d.delivered, 0);
+    $('ov-chart').innerHTML = `<div class="ch-head"><div><b>Last 14 days</b><span class="meta">${totB} booked · ${totD} delivered</span></div>
+        <span class="legend"><i class="lb"></i>Booked<i class="ld"></i>Delivered</span></div>
+      <div class="bars">${st.daily.map((d, i) => {
+        const dt = new Date(`${d.date}T00:00:00`);
+        return `<div class="bar-col" title="${esc(dt.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))}: ${d.booked} booked, ${d.delivered} delivered">
+          <div class="bar-stack"><span class="b-booked" style="height:${pct(d.booked, max)}%"><span class="b-del" style="height:${pct(d.delivered, d.booked || 1)}%"></span></span></div>
+          <span class="bar-x">${i % 2 === 1 || i === 13 ? dt.getDate() : ''}</span></div>`;
+      }).join('')}</div>`;
   }
 
   const STAGES = [
@@ -409,6 +435,7 @@
     try {
       state.orders = (await api('/orders')).orders;
       state.loaded = true;
+      loadStats();
       const ok = new Set(state.orders.filter(canSend).map((o) => o.id));
       [...state.selected].forEach((id) => { if (!ok.has(id)) state.selected.delete(id); });
       renderOrders();
@@ -459,8 +486,8 @@
     const steps = setupSteps().filter((x) => ['account', 'store', 'webhook', 'shopify'].includes(x.key));
     const done = steps.filter((x) => x.done).length;
     const pct = Math.round((done / steps.length) * 100);
-    $('cx-hero').innerHTML = `<div class="hero-l"><span class="cmono big" style="background:${esc(p.color)}">P</span>
-        <div><div class="hero-title"><h2>Pathao</h2>${ready ? '<span class="badge green">Connected</span>' : '<span class="badge yellow">Setup needed</span>'}${webhookLive() ? '<span class="live-pill"><i></i>Live</span>' : ''}${s.pathao_env === 'sandbox' ? '<span class="badge yellow">Test mode</span>' : ''}</div>
+    $('cx-hero').innerHTML = `<div class="hero-l"><img class="hero-logo" src="/assets/couriers/pathao-logo.svg" alt="Pathao" />
+        <div><div class="hero-title">${ready ? '<span class="badge green">Connected</span>' : '<span class="badge yellow">Setup needed</span>'}${webhookLive() ? '<span class="live-pill"><i></i>Live</span>' : ''}${s.pathao_env === 'sandbox' ? '<span class="badge yellow">Test mode</span>' : ''}</div>
         <p class="meta">${esc(p.tagline || '')}</p></div></div>
       <div class="hero-r"><span class="hero-ring" style="background:conic-gradient(#4f46e5 0 ${pct}%, #e4e5f7 ${pct}% 100%)"><b>${done}/${steps.length}</b></span><span class="meta">${done === steps.length ? 'All set' : 'steps done'}</span></div>
       <div class="hero-facts"><div><span>Pickup store</span><b>${esc(s.pathao_store_name || (s.pathao_store_id ? 'Store #' + s.pathao_store_id : '—'))}</b></div>
@@ -669,6 +696,8 @@
     if (t.closest('#reload-stores')) { const b = t.closest('button'); try { await busy(b, async () => { await loadStores(S().pathao_store_id); renderAll(); toast('Stores reloaded'); }); } catch (e) { toast(e.message, true); } return; }
 
     // billing
+    const rg = t.closest('[data-range]');
+    if (rg) { state.range = rg.dataset.range; renderOverview(); loadStats(); return; }
     const per = t.closest('[data-period]');
     if (per) { state.period = per.dataset.period; renderBilling(); return; }
 

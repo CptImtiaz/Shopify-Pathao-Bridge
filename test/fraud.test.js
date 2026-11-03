@@ -42,3 +42,36 @@ test('high COD is flagged without hiding worse problems', () => {
   assert.equal(r.level, 'low');
   assert.match(r.reasons.map((x) => x.text).join(' '), /High cash-on-delivery/);
 });
+
+test('dashboard overview counts every shipment by delivery stage, COD and success rate', () => {
+  const { summarise } = require('../src/stats');
+  const now = new Date('2026-11-03T12:00:00');
+  const at = (d) => new Date(`2026-11-0${d}T10:00:00`);
+  const rows = [
+    { status: 'sent', pathao_status: 'delivered', amount_to_collect: 1000, delivery_fee: 60, created_at: at(1) },
+    { status: 'sent', pathao_status: 'partial-delivery', amount_to_collect: 500, delivery_fee: 60, created_at: at(2) },
+    { status: 'sent', pathao_status: 'in-transit', amount_to_collect: 800, delivery_fee: 70, created_at: at(3) },
+    { status: 'sent', pathao_status: 'assigned-for-delivery', amount_to_collect: 200, delivery_fee: 60, created_at: at(3) },
+    { status: 'sent', pathao_status: 'picked', amount_to_collect: 300, delivery_fee: 60, created_at: at(3) },
+    { status: 'sent', pathao_status: 'Pending', amount_to_collect: 100, delivery_fee: 60, created_at: at(3) },
+    { status: 'sent', pathao_status: 'returned', amount_to_collect: 900, delivery_fee: 60, created_at: at(2) },
+    { status: 'failed', pathao_status: null, amount_to_collect: null, delivery_fee: null, created_at: at(3) },
+    { status: 'sent', pathao_status: 'delivered', amount_to_collect: 999, delivery_fee: 60, created_at: new Date('2026-10-20T10:00:00') },
+  ];
+  const m = summarise(rows, { range: 'month', now });
+  assert.equal(m.sent, 7);
+  assert.equal(m.delivered, 2);
+  assert.equal(m.transit, 2);
+  assert.equal(m.picked, 1);
+  assert.equal(m.booked, 1);
+  assert.equal(m.onTheWay, 4);
+  assert.equal(m.returned, 1);
+  assert.equal(m.notSent, 1);
+  assert.equal(m.successRate, 67);
+  assert.equal(m.codCollected, 1500);
+  assert.equal(m.codOnTheWay, 1400);
+  assert.equal(m.daily.length, 14);
+  assert.equal(m.daily[13].booked, 4);
+  assert.equal(summarise(rows, { range: 'all', now }).delivered, 3);
+  assert.equal(summarise(rows, { range: 'today', now }).sent, 4);
+});
