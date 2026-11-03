@@ -406,3 +406,40 @@ test('SMS coming soon: cannot be enabled and never sends; webhook secret + defau
   assert.equal(list[0].shipment.courier, 'pathao');
   assert.ok('fulfillment' in list[0] && 'items' in list[0]);
 });
+
+test('orders include product images and a fraud check using delivery history', async () => {
+  const t = await startApp();
+  try {
+    await t.api('/settings', { method: 'POST', body: { pathao_client_id: 'c', pathao_client_secret: 's', pathao_username: 'u@x.com', pathao_password: 'p' } });
+    await t.api('/settings', { method: 'POST', body: { pathao_store_id: 77 } });
+    t.fake.state.orders['501'] = gqlOrder(501, { lineItems: { nodes: [{ title: 'Laddu box', quantity: 2, image: { url: 'https://cdn.shopify.com/laddu.jpg' } }] } });
+    t.fake.state.orders['502'] = gqlOrder(502);
+    assert.equal((await t.api('/orders/send', { method: 'POST', body: { ids: ['501'] } })).data.results[0].ok, true);
+    await t.db.finishShipment(SHOP, '501', { pathao_status: 'Return' });
+    const { data } = await t.api('/orders');
+    const o501 = data.orders.find((o) => o.id === '501');
+    const o502 = data.orders.find((o) => o.id === '502');
+    assert.equal(o501.products[0].image, 'https://cdn.shopify.com/laddu.jpg');
+    assert.equal(o502.fraud.history.returned, 1);
+    assert.equal(o502.fraud.level, 'medium'); // same phone: one past return + a same-day duplicate
+    assert.ok(o502.fraud.reasons.length >= 2);
+  } finally { t.close(); }
+});
+
+test('owner admin page needs ADMIN_PASSWORD and shows shops without customer data', async () => {
+  const off = await startApp();
+  try { assert.equal((await fetch(off.base + '/admin')).status, 404); } finally { off.close(); }
+  const t = await startApp({ adminPassword: 'owner-pass-123' });
+  try {
+    await t.api('/bootstrap');
+    assert.equal((await fetch(t.base + '/admin')).status, 401);
+    const bad = await fetch(t.base + '/admin', { headers: { Authorization: 'Basic ' + Buffer.from('x:wrong').toString('base64') } });
+    assert.equal(bad.status, 401);
+    const ok = await fetch(t.base + '/admin', { headers: { Authorization: 'Basic ' + Buffer.from('me:owner-pass-123').toString('base64') } });
+    assert.equal(ok.status, 200);
+    const html = await ok.text();
+    assert.match(html, /demo-store\.myshopify\.com/);
+    assert.match(html, /Active installs/);
+    assert.doesNotMatch(html, /Rahim/);
+  } finally { t.close(); }
+});

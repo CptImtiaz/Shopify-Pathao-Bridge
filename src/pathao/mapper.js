@@ -68,8 +68,10 @@ function fromGraphql(o) {
     },
     fallbackName: o.billingAddress?.name || [o.customer?.firstName, o.customer?.lastName].filter(Boolean).join(' '),
     fallbackPhones: [o.billingAddress?.phone, o.customer?.phone, o.phone],
+    risk: o.risk || null,
     items: (o.lineItems?.nodes || []).map((li) => ({
       title: li.title,
+      image: li.image?.url || null,
       quantity: Number(li.quantity) || 0,
       grams: gramsFromMeasurement(li.variant?.inventoryItem?.measurement?.weight),
     })),

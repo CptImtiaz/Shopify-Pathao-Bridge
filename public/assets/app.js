@@ -4,7 +4,7 @@
 
   const $ = (id) => document.getElementById(id);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
-  const state = { boot: null, orders: [], selected: new Set(), tab: 'all', search: '', page: 'dashboard', settingsTab: 'couriers', section: 'api', detail: false, menuFor: null, loaded: false };
+  const state = { boot: null, orders: [], selected: new Set(), tab: 'all', risk: 'all', search: '', page: 'dashboard', settingsTab: 'couriers', section: 'api', detail: false, menuFor: null, loaded: false };
 
   // ---------------- helpers ----------------
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -146,13 +146,84 @@
     if (o.shipment && o.shipment.status === 'processing') return '<span class="sub">Sending…</span>';
     return '<span class="sub">—</span>';
   }
+  const RISKS = [['all', 'All risk'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low'], ['safe', 'Safe'], ['pending', 'Checking']];
+  const RISK_ICON = {
+    high: '<svg viewBox="0 0 24 24"><path d="M12 3l9 16H3z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 10v4M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    medium: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 8v5M12 16h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+    low: '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+    safe: '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    pending: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  };
+  function productsCell(o) {
+    const ps = o.products || [];
+    const thumbs = ps.slice(0, 3).map((p, i) => p.image
+      ? `<img class="thumb" style="z-index:${5 - i}" src="${esc(p.image)}" alt="${esc(p.title)}" loading="lazy" />`
+      : `<span class="thumb ph" style="z-index:${5 - i}">${esc((p.title || '?').charAt(0).toUpperCase())}</span>`).join('');
+    const more = o.itemCount > 1 ? ` · ${o.itemCount} items` : '';
+    const first = ps[0] ? `${ps[0].title}${ps[0].quantity > 1 ? ` ×${ps[0].quantity}` : ''}` : (o.items || '—');
+    return `<div class="prod"><div class="thumbs">${thumbs || '<span class="thumb ph">–</span>'}</div>
+      <div class="prod-t"><span class="t" title="${esc(o.items)}">${esc(first)}</span><span class="sub">${ps.length > 1 ? `+${ps.length - 1} more` : ''}${more}</span></div></div>`;
+  }
+  function fraudCell(o) {
+    const f = o.fraud;
+    if (!f) return '<span class="sub">—</span>';
+    const h = f.history || {};
+    const sub = h.total ? `${h.successRate != null ? h.successRate + '% success' : 'In progress'} · ${h.total} parcel${h.total > 1 ? 's' : ''}` : 'No history yet';
+    return `<button class="risk risk-${esc(f.level)}" data-fraud="${esc(o.id)}">${RISK_ICON[f.level] || ''}<span>${esc(f.label)}</span></button>
+      <span class="meter"><i style="width:${Number(f.score) || 0}%" class="m-${esc(f.level)}"></i></span><span class="sub">${esc(sub)}</span>`;
+  }
+  function openFraud(anchor, id) {
+    const o = state.orders.find((x) => x.id === id);
+    if (!o || !o.fraud) return;
+    const f = o.fraud, h = f.history || {};
+    const pop = $('fraud-pop');
+    const shop = { high: 'High risk', medium: 'Needs review', low: 'No issues found', pending: 'Still analysing', none: 'No result', unavailable: 'Not available' }[f.shopify] || '—';
+    pop.innerHTML = `<div class="fp-head risk-${esc(f.level)}">${RISK_ICON[f.level] || ''}<div><b>${esc(f.label)}</b><span>${esc(o.name)} · ${esc(o.customer || '')}</span></div><em>${Number(f.score)}/100</em></div>
+      <div class="fp-stats">
+        <div><b>${h.delivered || 0}</b><span>Delivered</span></div>
+        <div><b>${h.returned || 0}</b><span>Returned</span></div>
+        <div><b>${h.cancelled || 0}</b><span>Cancelled</span></div>
+        <div><b>${h.successRate != null ? h.successRate + '%' : '—'}</b><span>Success</span></div>
+      </div>
+      <ul class="fp-reasons">${f.reasons.map((r) => `<li class="t-${esc(r.tone || '')}">${esc(r.text)}</li>`).join('') || '<li>No warning signs</li>'}</ul>
+      <div class="fp-foot"><span>Shopify analysis: <b>${esc(shop)}</b></span><span>Courier network history <span class="soon">Soon</span></span></div>`;
+    const r = anchor.getBoundingClientRect();
+    show(pop, true);
+    pop.style.top = `${r.bottom + window.scrollY + 6}px`;
+    pop.style.left = `${Math.max(8, Math.min(r.left + window.scrollX - 120, window.innerWidth - pop.offsetWidth - 12))}px`;
+  }
+  function renderRiskFilter() {
+    const counts = { all: state.orders.length };
+    state.orders.forEach((o) => { const l = o.fraud ? o.fraud.level : 'pending'; counts[l] = (counts[l] || 0) + 1; });
+    $('risk-filter').innerHTML = '<span class="rf-label">Fraud check</span>' + RISKS.filter(([k]) => k === 'all' || counts[k]).map(([k, label]) =>
+      `<button data-risk="${k}" class="${state.risk === k ? 'active' : ''} ${k !== 'all' ? 'rk-' + k : ''}">${k !== 'all' ? '<i></i>' : ''}${label} <span>${counts[k] || 0}</span></button>`).join('');
+  }
+  function renderStats() {
+    const u = state.boot.usage, os = state.orders;
+    const count = (fn) => os.filter(fn).length;
+    const assigned = count((o) => o.shipment && o.shipment.status === 'sent');
+    const delivered = count((o) => bucket(o) === 'delivered');
+    const attention = count((o) => bucket(o) === 'failed' || (o.fraud && o.fraud.level === 'high'));
+    const waiting = count((o) => canAssign(o) && !o.shipment);
+    const pct = u.limit ? Math.min(100, Math.round((u.used / u.limit) * 100)) : 100;
+    const tiles = [
+      { k: 'usage', label: 'Orders this month', value: u.limit ? `${u.used}<small> / ${u.limit}</small>` : `${u.used}`, foot: `<span class="meter wide"><i style="width:${pct}%" class="${pct >= 80 ? 'm-high' : 'm-brand'}"></i></span>`, icon: '<path d="M4 7h16l-1.5 11h-13z M8 7a4 4 0 0 1 8 0" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>' },
+      { k: 'wait', label: 'Waiting for courier', value: waiting, foot: '<span class="sub">Not assigned yet</span>', icon: '<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M12 7.5v4.8l3 1.8" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>' },
+      { k: 'sent', label: 'With courier', value: assigned, foot: `<span class="sub">${delivered} delivered</span>`, icon: '<path d="M3 7h11v9H3zM14 10h4l3 3v3h-7" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="7" cy="17.5" r="1.7" fill="currentColor"/><circle cx="17" cy="17.5" r="1.7" fill="currentColor"/>' },
+      { k: 'alert', label: 'Needs attention', value: attention, foot: '<span class="sub">Failed or high risk</span>', icon: '<path d="M12 3l9 16H3z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M12 10v4M12 17h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' },
+    ];
+    $('stats').innerHTML = tiles.map((t) => `<div class="card stat st-${t.k}"><span class="st-icon"><svg viewBox="0 0 24 24">${t.icon}</svg></span>
+      <div class="st-body"><span class="st-label">${t.label}</span><b class="st-value">${t.value}</b>${t.foot}</div></div>`).join('');
+  }
+
   function filtered() {
     const q = state.search.trim().toLowerCase();
     return state.orders.filter((o) => (state.tab === 'all' || bucket(o) === state.tab)
+      && (state.risk === 'all' || (o.fraud && o.fraud.level === state.risk))
       && (!q || `${o.name} ${o.customer} ${o.phone} ${o.city} ${o.shipment ? o.shipment.consignmentId : ''}`.toLowerCase().includes(q)));
   }
   function renderOrders() {
-    renderTabs();
+    renderTabs(); renderRiskFilter(); renderStats();
     const rows = filtered();
     show($('orders-loading'), false);
     const empty = $('orders-empty');
@@ -167,11 +238,12 @@
         return `<tr class="${sel ? 'selected' : ''}">
           <td class="c-check">${canAssign(o) ? `<input type="checkbox" data-select="${esc(o.id)}" ${sel ? 'checked' : ''} aria-label="Select ${esc(o.name)}" />` : ''}</td>
           <td><span class="o-name">${esc(o.name)}</span><span class="sub">${esc(when(o.createdAt))}</span></td>
-          <td class="items"><span class="t" title="${esc(o.items)}">${esc(o.items || '—')}</span><span class="sub">${o.itemCount || 0} item${o.itemCount === 1 ? '' : 's'}</span></td>
+          <td class="items">${productsCell(o)}</td>
           <td><b>${esc(o.customer) || '—'}</b><span class="sub">${esc(o.phone || o.city || '')}</span></td>
-          <td><span class="amount">${esc(money(o.total))}</span><span class="sub">${payBadge(o)}${o.cod > 0 && String(o.financial).toUpperCase() !== 'PAID' ? ` COD ${esc(money(o.cod))}` : ''}</span></td>
+          <td><span class="amount">${esc(money(o.total))}</span><span class="sub">${payBadge(o)}</span>${o.cod > 0 && String(o.financial).toUpperCase() !== 'PAID' ? `<span class="sub">COD ${esc(money(o.cod))}</span>` : ''}</td>
           <td>${fulfillBadge(o)}</td>
           <td>${statusCell(o)}</td>
+          <td class="fraud">${fraudCell(o)}</td>
           <td>${courierCell(o)}</td>
         </tr>`;
       }).join('');
@@ -220,7 +292,7 @@
     m.style.left = `${Math.min(r.left + window.scrollX, window.innerWidth - 240)}px`;
     show(m, true);
   }
-  function closeMenu() { show($('courier-menu'), false); state.menuFor = null; }
+  function closeMenu() { show($('courier-menu'), false); show($('fraud-pop'), false); state.menuFor = null; }
 
   // ---------------- settings ----------------
   const STATUS_PILL = { connected: ['Configured', 'ok'], needs_store: ['Choose a store', 'warn'], not_connected: ['Not configured', ''], coming_soon: ['Coming soon', ''] };
@@ -342,7 +414,11 @@
 
   document.addEventListener('click', async (ev) => {
     const t = ev.target;
-    if (!t.closest('#courier-menu') && !t.closest('[data-assign]') && !t.closest('#bulk-menu-btn')) closeMenu();
+    if (!t.closest('#courier-menu') && !t.closest('#fraud-pop') && !t.closest('[data-assign]') && !t.closest('#bulk-menu-btn') && !t.closest('[data-fraud]')) closeMenu();
+    const fr = t.closest('[data-fraud]');
+    if (fr) { closeMenu(); openFraud(fr, fr.dataset.fraud); return; }
+    const rk = t.closest('[data-risk]');
+    if (rk) { state.risk = rk.dataset.risk; renderOrders(); return; }
     const link = t.closest('a[data-link]');
     if (link) { ev.preventDefault(); navigate(link.getAttribute('href')); return; }
     if (t.closest('#setup-toggle')) { $('setup').classList.toggle('collapsed'); return; }
@@ -366,7 +442,7 @@
       return;
     }
     const assignBtn = t.closest('[data-assign]');
-    if (assignBtn) { openMenu(assignBtn, [assignBtn.dataset.assign]); return; }
+    if (assignBtn) { show($('fraud-pop'), false); openMenu(assignBtn, [assignBtn.dataset.assign]); return; }
     if (t.closest('#bulk-menu-btn')) { openMenu($('bulk-menu-btn'), [...state.selected]); return; }
     const pick = t.closest('[data-pick]');
     if (pick && !pick.disabled) { const ids = state.menuFor || []; closeMenu(); try { await assign(ids, pick.dataset.pick); } catch (e) { toast(e.message, true); } return; }

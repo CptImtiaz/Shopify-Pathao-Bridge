@@ -30,20 +30,29 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
     shippingAddress { name firstName lastName phone address1 address2 city province zip country countryCodeV2 }
     billingAddress { name phone }
     lineItems(first: 100) { nodes { title quantity } }`;
+  // Extra fields for the dashboard: product thumbnails and Shopify's fraud analysis.
+  // Both need only read_orders; if a store/API version refuses them we fall back.
+  const RICH_FIELDS = ORDER_FIELDS.replace('lineItems(first: 100) { nodes { title quantity } }',
+    'lineItems(first: 100) { nodes { title quantity image { url(transform: { maxWidth: 120, maxHeight: 120 }) } } }') +
+    ' risk { recommendation assessments { riskLevel facts { description sentiment } } }';
   // Only order + shipping-address fields: needs read_orders and the Name/Phone/Address
   // protected fields, nothing else. (Weights come from the orders/create webhook,
   // which includes grams; dashboard sends use the default weight.)
 
-  async function listRecentOrders(shop, opts, first = 30) {
-    const data = await graphql(
+  async function listRecentOrders(shop, opts, first = 30, { rich = false } = {}) {
+    const run = async (fields) => (await graphql(
       shop,
       `query RecentOrders($first: Int!) {
-        orders(first: $first, sortKey: CREATED_AT, reverse: true) { nodes { ${ORDER_FIELDS} } }
+        orders(first: $first, sortKey: CREATED_AT, reverse: true) { nodes { ${fields} } }
       }`,
       { first },
       opts
-    );
-    return data.orders.nodes;
+    )).orders.nodes;
+    if (!rich) return run(ORDER_FIELDS);
+    try { return await run(RICH_FIELDS); } catch (e) {
+      if (e.status === 401) throw e;
+      return run(ORDER_FIELDS);
+    }
   }
 
   async function getOrder(shop, legacyId, opts) {

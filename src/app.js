@@ -3,6 +3,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { makeOwnerRouter } = require('./routes/owner');
 const express = require('express');
 const { makeCipher } = require('./crypto');
 const { makeDb } = require('./db');
@@ -32,6 +33,7 @@ function createApp({ config, pool, fetchImpl = fetch, log = console, defer = (p)
   app.set('trust proxy', true);
 
   app.get('/health', (req, res) => res.json({ ok: true }));
+  app.use('/admin', makeOwnerRouter({ config, db }));
 
   // Webhooks need the raw body for HMAC, so mount before any JSON parser.
   app.use(makeWebhookRouter({ config, db, admin, shipping, notifier: config.smsFeature ? notifier : null, log, defer }));

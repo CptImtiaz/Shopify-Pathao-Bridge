@@ -36,6 +36,7 @@ function makeShipping({ db, pathao, admin, log = console }) {
       if (limitMsg) return await fail('skipped', limitMsg);
 
       const { payload, errors } = buildPathaoOrder(order, settings);
+      if (payload && payload.recipient_phone) await db.finishShipment(shop, order.id, { phone: payload.recipient_phone });
       if (errors.length) return await fail('failed', errors.join('. '));
 
       const result = await pathao.createOrder(settings, payload);

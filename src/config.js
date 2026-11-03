@@ -38,6 +38,7 @@ function load() {
 
     // Billing. Keep BILLING_TEST=true until the app is approved; test charges cost nothing.
     billingTest: bool('BILLING_TEST', true),
+    adminPassword: process.env.ADMIN_PASSWORD || '',
 
     pathaoProductionUrl: process.env.PATHAO_BASE_URL || 'https://api-hermes.pathao.com',
     pathaoSandboxUrl: process.env.PATHAO_SANDBOX_URL || 'https://courier-api-sandbox.pathao.com',

@@ -5,7 +5,8 @@
 const crypto = require('crypto');
 const express = require('express');
 const { verifySessionToken, AuthError } = require('../shopify/auth');
-const { fromGraphql } = require('../pathao/mapper');
+const { fromGraphql, normalizePhone } = require('../pathao/mapper');
+const { assessOrder } = require('../fraud');
 const { PLANS } = require('../plans');
 const { DEFAULT_TEMPLATE, SOURCES } = require('../sms/sms');
 const { listCouriers, AVAILABLE } = require('../couriers');
@@ -213,15 +214,26 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, 
 
   // ---- orders ----
   router.get('/orders', wrap(async (req) => {
-    const orders = await admin.listRecentOrders(req.shop, req.opts, 50);
+    const orders = await admin.listRecentOrders(req.shop, req.opts, 50, { rich: true });
+    const norm = orders.map(fromGraphql);
+    const phoneOf = (n) => [n.shipping.phone, ...n.fallbackPhones].filter(Boolean).map(normalizePhone).find((p) => p.valid)?.phone || null;
+    const phones = norm.map(phoneOf);
+    const history = await db.historyForPhones(req.shop, phones);
     const ids = orders.map((o) => String(o.legacyResourceId));
     const [shipments, smsRows] = await Promise.all([db.shipmentsForOrders(req.shop, ids), db.smsForOrders(req.shop, ids)]);
     const byId = new Map(shipments.map((s) => [s.shopify_order_id, s]));
     const smsById = new Map(smsRows.map((s) => [s.shopify_order_id, s]));
     return {
-      orders: orders.map((o) => {
-        const n = fromGraphql(o);
+      orders: orders.map((o, idx) => {
+        const n = norm[idx];
         const s = byId.get(n.id);
+        const phone = phones[idx];
+        const day = 24 * 3600 * 1000;
+        const fraud = assessOrder(n, {
+          history: phone ? history.filter((h) => h.phone === phone && h.shopify_order_id !== n.id) : [],
+          duplicates: phone ? norm.filter((m, j) => j !== idx && phones[j] === phone && !m.cancelled
+            && Math.abs(new Date(m.createdAt) - new Date(n.createdAt)) < day) : [],
+        });
         return {
           id: n.id,
           name: n.name,
@@ -236,6 +248,8 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, 
           fulfillment: o.displayFulfillmentStatus || null,
           items: n.items.map((i) => `${i.title} x${i.quantity}`).join(', '),
           itemCount: n.items.reduce((t, i) => t + i.quantity, 0),
+          products: n.items.slice(0, 4).map((i) => ({ title: i.title, quantity: i.quantity, image: i.image })),
+          fraud,
           cancelled: n.cancelled,
           sms: smsById.has(n.id) ? { status: smsById.get(n.id).status, error: smsById.get(n.id).error } : null,
           shipment: s ? {

@@ -140,7 +140,7 @@ function gqlOrder(id, extra = {}) {
   };
 }
 
-async function startApp({ smsFeature = true } = {}) {
+async function startApp({ smsFeature = true, adminPassword = '' } = {}) {
   const fake = fakeFetch();
   const logs = [];
   const log = { info: (m) => logs.push(m), warn: (m) => logs.push(m), error: (...m) => logs.push(m.join(' ')) };
@@ -150,7 +150,7 @@ async function startApp({ smsFeature = true } = {}) {
     encryptionKey: crypto.randomBytes(32).toString('hex'), billingTest: true,
     pathaoProductionUrl: 'https://api-hermes.pathao.com', pathaoSandboxUrl: 'https://courier-api-sandbox.pathao.com',
     pathaoIntegrationSecret: 'integration-uuid',
-    smsFeature,
+    smsFeature, adminPassword,
   };
   const { app, db } = createApp({ config, pool: memPool(), fetchImpl: fake.impl, log });
   await db.migrate();

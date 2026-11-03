@@ -83,6 +83,8 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS shipments_consignment ON shipments (consignment_id)`,
   `ALTER TABLE sms_log ADD COLUMN IF NOT EXISTS order_name TEXT`,
   `ALTER TABLE sms_log ADD COLUMN IF NOT EXISTS phone TEXT`,
+  `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS phone TEXT`,
+  `CREATE INDEX IF NOT EXISTS shipments_shop_phone ON shipments (shop, phone)`,
 ];
 
 function makeDb(pool) {
@@ -213,6 +215,40 @@ function makeDb(pool) {
     async shipmentsForOrders(shop, orderIds) {
       if (!orderIds.length) return [];
       return (await q('SELECT * FROM shipments WHERE shop = $1 AND shopify_order_id = ANY($2)', [shop, orderIds.map(String)])).rows;
+    },
+
+    async historyForPhones(shop, phones) {
+      const list = [...new Set(phones.filter(Boolean))];
+      if (!list.length) return [];
+      return (await q('SELECT shopify_order_id, phone, status, pathao_status FROM shipments WHERE shop = $1 AND phone = ANY($2)', [shop, list])).rows;
+    },
+
+    // Owner overview: one row per installed shop, no customer data.
+    async ownerOverview() {
+      const [shops, agg] = await Promise.all([
+        q(`SELECT s.shop, s.plan, s.installed_at, s.uninstalled_at, st.pathao_client_id, st.pathao_env, st.auto_send
+           FROM shops s LEFT JOIN settings st ON st.shop = s.shop`),
+        q(`SELECT shop,
+                  SUM(CASE WHEN counted = TRUE AND created_at >= date_trunc('month', NOW()) THEN 1 ELSE 0 END)::int AS sent_month,
+                  SUM(CASE WHEN status = 'failed' AND updated_at >= NOW() - INTERVAL '7 days' THEN 1 ELSE 0 END)::int AS failed_week,
+                  MAX(updated_at) AS last_activity
+           FROM shipments GROUP BY shop`),
+      ]);
+      const byShop = new Map(agg.rows.map((r) => [r.shop, r]));
+      return shops.rows.map((s) => {
+        const a = byShop.get(s.shop) || {};
+        return {
+          shop: s.shop, plan: s.plan, installed_at: s.installed_at, uninstalled_at: s.uninstalled_at,
+          pathao_connected: Boolean(s.pathao_client_id), pathao_env: s.pathao_env, auto_send: Boolean(s.auto_send),
+          sent_month: Number(a.sent_month) || 0, failed_week: Number(a.failed_week) || 0, last_activity: a.last_activity || null,
+        };
+      }).sort((x, y) => (Boolean(x.uninstalled_at) - Boolean(y.uninstalled_at)) || (new Date(y.installed_at || 0) - new Date(x.installed_at || 0)));
+    },
+
+    async recentFailures(limit = 20) {
+      return (await q(
+        `SELECT shop, order_name, error, updated_at FROM shipments WHERE status = 'failed' ORDER BY updated_at DESC LIMIT $1`, [limit]
+      )).rows;
     },
 
     async countSentThisMonth(shop) {

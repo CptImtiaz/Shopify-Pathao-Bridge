@@ -32,6 +32,9 @@
         </div>
       </div>
 
+      <!-- Stats -->
+      <section class="stats" id="stats"></section>
+
       <!-- Setup guide -->
       <section class="card setup" id="setup" hidden>
         <div class="setup-top" id="setup-toggle">
@@ -52,6 +55,7 @@
             <input id="search" placeholder="Search orders by number, customer, phone or parcel…" /></div>
         </div>
         <div class="status-tabs" id="status-tabs"></div>
+        <div class="risk-filter" id="risk-filter"></div>
 
         <div class="bulkbar" id="bulkbar" hidden>
           <span class="bulk-count" id="bulk-count">0 selected</span>
@@ -68,11 +72,12 @@
               <tr>
                 <th class="c-check"><input type="checkbox" id="check-all" aria-label="Select all" /></th>
                 <th>Order</th>
-                <th>Items</th>
+                <th>Products</th>
                 <th>Customer</th>
                 <th>Payment</th>
                 <th>Fulfillment</th>
                 <th>Status</th>
+                <th>Fraud check</th>
                 <th>Courier</th>
               </tr>
             </thead>
@@ -229,6 +234,7 @@
     <footer class="footer"><a href="/privacy" target="_blank">Privacy policy</a></footer>
   </div>
 
+  <div class="menu fraud-pop" id="fraud-pop" hidden></div>
   <div class="menu" id="courier-menu" hidden></div>
   <script src="/assets/app.js"></script>
 </body>

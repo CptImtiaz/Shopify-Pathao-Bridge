@@ -7,7 +7,7 @@ const PLANS = {
     name: 'Free',
     price: 0,
     monthlyOrderLimit: 50,
-    features: ['50 orders / month', 'Auto-send new orders', 'Bulk send & retry', 'Delivery status sync'],
+    features: ['50 orders / month', 'Auto-send new orders', 'Fraud check on every order', 'Bulk send & retry', 'Delivery status sync'],
   },
   pro: {
     key: 'pro',
