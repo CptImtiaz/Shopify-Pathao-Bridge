@@ -7,8 +7,9 @@ const express = require('express');
 const { verifySessionToken, AuthError } = require('../shopify/auth');
 const { fromGraphql } = require('../pathao/mapper');
 const { PLANS } = require('../plans');
+const { DEFAULT_TEMPLATE, SOURCES } = require('../sms/sms');
 
-function makeApiRouter({ config, db, tokens, admin, pathao, shipping, cipher, log = console }) {
+function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, cipher, log = console }) {
   const router = express.Router();
   router.use(express.json({ limit: '200kb' }));
 
@@ -57,6 +58,15 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, cipher, lo
       only_cod: s.only_cod,
       tag_orders: s.tag_orders,
       connected: pathao.hasCredentials(s),
+      sms: {
+        enabled: s.sms_enabled,
+        configured: Boolean(s.sms_token_enc && s.sms_sid),
+        has_token: Boolean(s.sms_token_enc),
+        sid: s.sms_sid || '',
+        source: s.sms_source || 'web',
+        template: s.sms_template || DEFAULT_TEMPLATE,
+        sources: Object.entries(SOURCES).map(([key, v]) => ({ key, label: v.label })),
+      },
     };
   }
 
@@ -129,6 +139,28 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, cipher, lo
     if (b.skip_tag !== undefined) f.skip_tag = String(b.skip_tag).trim().slice(0, 40);
     if (b.only_cod !== undefined) f.only_cod = Boolean(b.only_cod);
     if (b.tag_orders !== undefined) f.tag_orders = Boolean(b.tag_orders);
+    // ---- SMS ----
+    if (b.sms_token) f.sms_token_enc = cipher.encrypt(String(b.sms_token).trim());
+    if (b.sms_sid !== undefined) f.sms_sid = String(b.sms_sid).trim() || null;
+    if (b.sms_source !== undefined) {
+      if (!SOURCES[b.sms_source]) throw Object.assign(new Error('Unknown SMS order source'), { status: 400 });
+      f.sms_source = b.sms_source;
+    }
+    if (b.sms_template !== undefined) {
+      const t = String(b.sms_template).trim();
+      if (t.length > 600) throw Object.assign(new Error('SMS message is too long (max 600 characters)'), { status: 400 });
+      f.sms_template = t || null;
+    }
+    if (b.sms_enabled !== undefined) {
+      f.sms_enabled = Boolean(b.sms_enabled);
+      const hasToken = f.sms_token_enc || current.sms_token_enc;
+      const hasSid = f.sms_sid !== undefined ? f.sms_sid : current.sms_sid;
+      if (f.sms_enabled && !(hasToken && hasSid)) {
+        throw Object.assign(new Error('Add your SSL Wireless API token and SID before turning SMS on'), { status: 400 });
+      }
+      if (f.sms_enabled && !current.sms_enabled) f.sms_since = new Date();
+    }
+
     if (b.auto_send !== undefined) {
       f.auto_send = Boolean(b.auto_send);
       // Only orders created after auto-send is switched on get sent automatically
@@ -159,8 +191,9 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, cipher, lo
   router.get('/orders', wrap(async (req) => {
     const orders = await admin.listRecentOrders(req.shop, req.opts, 30);
     const ids = orders.map((o) => String(o.legacyResourceId));
-    const shipments = await db.shipmentsForOrders(req.shop, ids);
+    const [shipments, smsRows] = await Promise.all([db.shipmentsForOrders(req.shop, ids), db.smsForOrders(req.shop, ids)]);
     const byId = new Map(shipments.map((s) => [s.shopify_order_id, s]));
+    const smsById = new Map(smsRows.map((s) => [s.shopify_order_id, s]));
     return {
       orders: orders.map((o) => {
         const n = fromGraphql(o);
@@ -175,6 +208,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, cipher, lo
           currency: o.totalPriceSet?.shopMoney?.currencyCode || '',
           cod: n.outstanding != null ? n.outstanding : n.paid ? 0 : n.total,
           cancelled: n.cancelled,
+          sms: smsById.has(n.id) ? { status: smsById.get(n.id).status, error: smsById.get(n.id).error } : null,
           shipment: s ? {
             status: s.status, consignmentId: s.consignment_id, pathaoStatus: s.pathao_status,
             error: s.error, deliveryFee: s.delivery_fee == null ? null : Number(s.delivery_fee),
@@ -212,6 +246,9 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, cipher, lo
     await db.finishShipment(req.shop, req.params.id, { pathao_status: status });
     return { pathaoStatus: status };
   }));
+
+  // ---- SMS test ----
+  router.post('/sms/test', wrap(async (req) => notifier.sendTest(req.shop, req.body?.phone)));
 
   // ---- billing ----
   router.post('/billing/subscribe', wrap(async (req) => {

@@ -147,6 +147,56 @@
     toast(msg, isErr);
   }
 
+  // ---------- SMS ----------
+  const SAMPLE = { name: 'Rahim', order_number: '#1001', items: 'Laddu box x2', total: '1250.00', currency: 'BDT' };
+  function previewSms() {
+    const t = $('sms_template').value || '';
+    $('sms-preview').textContent = Object.entries(SAMPLE).reduce((x, [k, v]) => x.split(`{{${k}}}`).join(v), t);
+  }
+  function renderSms() {
+    const m = state.boot.settings.sms;
+    setChecked('sms_enabled', m.enabled);
+    setDisabled($('sms_enabled'), !m.configured);
+    $('sms-state').textContent = m.enabled ? 'On' : 'Off';
+    const label = (m.sources.find((x) => x.key === m.source) || {}).label || '';
+    $('sms-sub').textContent = m.enabled
+      ? `Sending a confirmation SMS for: ${label.toLowerCase()}.`
+      : m.configured ? 'Switch on to send customers a confirmation SMS for new orders.'
+        : 'Add your SSL Wireless API token and SID below, then switch on.';
+    const badge = $('sms-badge');
+    badge.textContent = m.enabled ? 'Active' : m.configured ? 'Ready' : 'Not set up';
+    badge.setAttribute('tone', m.enabled ? 'success' : m.configured ? 'info' : 'neutral');
+  }
+  function fillSmsForm() {
+    const m = state.boot.settings.sms;
+    setVal('sms_source', m.source);
+    setVal('sms_sid', m.sid);
+    setVal('sms_token', '');
+    $('sms_token').setAttribute('placeholder', m.has_token ? '•••••••• saved' : '');
+    setVal('sms_template', m.template);
+    previewSms();
+  }
+  async function saveSms() {
+    const body = { sms_source: $('sms_source').value, sms_sid: $('sms_sid').value, sms_template: $('sms_template').value };
+    if ($('sms_token').value) body.sms_token = $('sms_token').value;
+    state.boot.settings = (await api('/settings', { method: 'POST', body })).settings;
+    fillSmsForm(); renderSms();
+    toast('SMS settings saved');
+  }
+  async function toggleSms(on) {
+    let msg, isErr = false;
+    try {
+      state.boot.settings = (await api('/settings', { method: 'POST', body: { sms_enabled: on } })).settings;
+      msg = on ? 'SMS notifications are on' : 'SMS notifications are off';
+    } catch (e) { msg = e.message; isErr = true; }
+    renderSms();
+    toast(msg, isErr);
+  }
+  async function testSms() {
+    const r = await api('/sms/test', { method: 'POST', body: { phone: $('sms_test_phone').value } });
+    toast(`Test SMS sent to +${r.to}`);
+  }
+
   // ---------- orders ----------
   const canSend = (o) => !o.cancelled && (!o.shipment || ['failed', 'skipped'].includes(o.shipment.status));
   function bucket(o) {
@@ -156,7 +206,15 @@
     if (o.shipment.status === 'processing') return 'other';
     return 'problem';
   }
-  function statusCell(o) {
+  function smsLine(o) {
+    if (!o.sms) return '';
+    if (o.sms.status === 'sent') return '<span class="sms-line">✉ SMS sent</span>';
+    if (o.sms.status === 'failed') return `<span class="sms-line bad">✉ SMS failed: ${esc(o.sms.error)}</span>`;
+    if (o.sms.status === 'skipped') return `<span class="sms-line">✉ No SMS: ${esc(o.sms.error)}</span>`;
+    return '';
+  }
+  function statusCell(o) { return pathaoCell(o) + smsLine(o); }
+  function pathaoCell(o) {
     const s = o.shipment;
     if (o.cancelled) return '<s-badge>Cancelled</s-badge>';
     if (!s) return '<s-badge>Not sent</s-badge>';
@@ -256,6 +314,7 @@
   async function refreshBoot() {
     state.boot = await api('/bootstrap');
     renderSummary();
+    renderSms();
     renderPlans();
   }
 
@@ -263,10 +322,12 @@
     const pill = ev.target.closest('.pill');
     if (pill) { state.filter = pill.dataset.filter; renderOrders(); return; }
     if (ev.target.closest('#see-plans')) { ev.preventDefault(); $('plans-section').scrollIntoView({ behavior: 'smooth' }); return; }
-    const t = ev.target.closest('[data-send],[data-refresh],[data-plan],[data-downgrade],#send-selected,#reload-orders,#save-connection,#edit-connection,#cancel-edit');
+    const t = ev.target.closest('[data-send],[data-refresh],[data-plan],[data-downgrade],#send-selected,#reload-orders,#save-connection,#edit-connection,#cancel-edit,#save-sms,#test-sms');
     if (!t) return;
     try {
       if (t.id === 'save-connection') return await busy(t, saveConnection);
+      if (t.id === 'save-sms') return await busy(t, saveSms);
+      if (t.id === 'test-sms') return await busy(t, testSms);
       if (t.id === 'edit-connection') { state.editing = true; fillConnectionForm(); renderSummary(); return; }
       if (t.id === 'cancel-edit') { state.editing = false; renderSummary(); return; }
       if (t.id === 'reload-orders') return await busy(t, loadOrders);
@@ -296,6 +357,8 @@
   });
   // Some Polaris controls don't bubble `change`, so listen on them directly.
   $('auto_send').addEventListener('change', () => toggleAutoSend($('auto_send').checked));
+  $('sms_enabled').addEventListener('change', () => toggleSms($('sms_enabled').checked));
+  $('sms_template').addEventListener('input', previewSms);
   $('pathao_store_id').addEventListener('change', () => {
     if (state.boot && state.boot.settings.connected) saveStore().catch((e) => toast(e.message, true));
   });
@@ -313,6 +376,7 @@
     try {
       await refreshBoot();
       fillConnectionForm();
+      fillSmsForm();
       renderSummary();
     } catch (e) {
       $('banners').innerHTML = `<s-banner tone="critical" heading="Could not load the app">${esc(e.message)}</s-banner>`;

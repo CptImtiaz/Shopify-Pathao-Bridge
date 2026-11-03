@@ -51,6 +51,8 @@ function fakeFetch() {
     activeSubscriptions: [],
     nextConsignment: 1000,
     webhooks: [],
+    sms: [],
+    smsFail: null,
   };
 
   const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -98,6 +100,12 @@ function fakeFetch() {
       return json(200, { errors: [{ message: 'unhandled query in fake' }] });
     }
 
+    if (url.includes('sslwireless.com')) {
+      const b = JSON.parse(body);
+      state.sms.push(b);
+      if (state.smsFail) return json(200, { status: 'FAILED', status_code: 4001, error_message: state.smsFail });
+      return json(200, { status: 'SUCCESS', status_code: 200, smsinfo: [{ sms_status: 'SUCCESS', status_message: 'Success', msisdn: b.sms[0].msisdn, csms_id: b.sms[0].csms_id }] });
+    }
     if (url.includes('/aladdin/api/v1/issue-token')) {
       const b = JSON.parse(body);
       if (b.password === 'wrong') return json(401, { message: 'Invalid credentials' });

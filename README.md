@@ -43,7 +43,7 @@ api/index.js           Vercel entry point
 vercel.json            Vercel routing + Singapore region
 public/                dashboard JS/CSS, privacy policy
 shopify.app.toml       app config: scopes, webhooks (push with Shopify CLI)
-test/                  22 automated tests with fake Shopify + Pathao
+test/                  30 automated tests with fake Shopify + Pathao
 ```
 
 ## Run the tests
@@ -95,6 +95,18 @@ Partner Dashboard → your app → **Distribution → Public (Shopify App Store)
 - Set `BILLING_TEST=false` in Railway once the app is approved.
 
 Review usually takes a few weeks, and the first submission often gets change requests. Fix them and resubmit.
+
+## SMS notifications (SSL Wireless)
+
+Merged from `Shopify-ISMS-Bridge`. Each merchant can send customers an order-confirmation SMS through their own SSL Wireless SMS Plus account. This runs independently of Pathao: an SMS failure never blocks a booking, and the other way round.
+
+- **Settings** are in the dashboard under *SMS notifications*: on/off, API token (encrypted), SID, message template, and a test-SMS button.
+- **"Send SMS for":** *All orders*, *Online store orders only* (`source_name = web`), or *Manual orders only* (`shopify_draft_order`, i.e. orders created in the Shopify admin).
+- **Template placeholders:** `{{name}}`, `{{order_number}}`, `{{items}}`, `{{total}}`, `{{currency}}`. The default is the Bangla confirmation text from the original bridge.
+- **Once per order:** each order gets one SMS (logged in `sms_log`); duplicate webhooks are ignored, and orders placed before SMS was switched on are skipped.
+- **Status on orders:** the orders list shows *SMS sent*, *SMS failed: reason* or *No SMS: reason*.
+- **IP whitelisting:** if your SSL Wireless account only accepts whitelisted server IPs, Vercel's changing IPs will be rejected. Ask SSL Wireless to allow your API token without IP restriction, or host on a server with a fixed outbound IP.
+- Code: `src/sms/sms.js` (provider + template + source filter), `src/sms/notifier.js` (when to send).
 
 ## Things to double-check with Pathao
 - **Webhook handshake**: Pathao's panel expects the header `X-Pathao-Merchant-Webhook-Integration-Secret` on a `202` response. The app echoes Pathao's value, or uses `PATHAO_WEBHOOK_INTEGRATION_SECRET`. Check the value in Pathao's current docs if registration fails.

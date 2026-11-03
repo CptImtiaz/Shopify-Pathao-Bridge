@@ -88,12 +88,46 @@
           <s-table-header listslot="primary">Order</s-table-header>
           <s-table-header>Customer</s-table-header>
           <s-table-header format="currency">Cash to collect</s-table-header>
-          <s-table-header listslot="secondary">Pathao status</s-table-header>
+          <s-table-header listslot="secondary">Status</s-table-header>
           <s-table-header><span class="sr">Actions</span></s-table-header>
         </s-table-header-row>
         <s-table-body id="orders-body"></s-table-body>
       </s-table>
       <div class="empty" id="orders-empty" hidden></div>
+    </s-section>
+
+    <!-- SMS notifications -->
+    <s-section heading="SMS notifications" id="sms-section">
+      <div class="sms-head">
+        <div>
+          <div class="stat-row">
+            <s-switch id="sms_enabled" accessibilitylabel="Send order confirmation SMS"></s-switch>
+            <b id="sms-state">Off</b>
+          </div>
+          <div class="muted" id="sms-sub">Customers get a confirmation SMS when they place an order (SSL Wireless).</div>
+        </div>
+        <s-badge id="sms-badge">Not set up</s-badge>
+      </div>
+      <s-grid gridtemplatecolumns="1fr 1fr" gap="base" paddingblock="base">
+        <s-select label="Send SMS for" id="sms_source" details="Online store = orders customers place on your website. Manual = orders you create in Shopify admin.">
+          <s-option value="all">All orders</s-option>
+          <s-option value="web">Online store orders only</s-option>
+          <s-option value="manual">Manual orders only</s-option>
+        </s-select>
+        <div></div>
+        <s-password-field label="SSL Wireless API token" id="sms_token" autocomplete="off"></s-password-field>
+        <s-text-field label="SID (sender ID)" id="sms_sid" autocomplete="off"></s-text-field>
+      </s-grid>
+      <s-text-area label="Message" id="sms_template" rows="3" maxlength="600"
+        details="You can use {{name}}, {{order_number}}, {{items}}, {{total}} and {{currency}}"></s-text-area>
+      <div class="sms-preview" id="sms-preview"></div>
+      <div class="sms-actions">
+        <s-button variant="primary" id="save-sms">Save SMS settings</s-button>
+        <div class="sms-test">
+          <s-text-field label="Test number" labelaccessibilityvisibility="exclusive" id="sms_test_phone" placeholder="Test number, e.g. 01712345678"></s-text-field>
+          <s-button id="test-sms">Send test SMS</s-button>
+        </div>
+      </div>
     </s-section>
 
     <!-- Plans -->

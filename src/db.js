@@ -60,6 +60,23 @@ const SCHEMA = [
   )`,
   `CREATE INDEX IF NOT EXISTS shipments_shop_created ON shipments (shop, created_at)`,
   `ALTER TABLE settings ADD COLUMN IF NOT EXISTS pathao_store_name TEXT`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS sms_enabled BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS sms_token_enc TEXT`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS sms_sid TEXT`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS sms_source TEXT NOT NULL DEFAULT 'web'`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS sms_template TEXT`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS sms_since TIMESTAMPTZ`,
+  `CREATE TABLE IF NOT EXISTS sms_log (
+    id SERIAL PRIMARY KEY,
+    shop TEXT NOT NULL,
+    shopify_order_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    error TEXT,
+    claim_token TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (shop, shopify_order_id)
+  )`,
   `CREATE INDEX IF NOT EXISTS shipments_consignment ON shipments (consignment_id)`,
 ];
 
@@ -103,7 +120,8 @@ function makeDb(pool) {
       // Drop merchant's Pathao credentials immediately on uninstall.
       await q(
         `UPDATE settings SET pathao_client_secret_enc = NULL, pathao_password_enc = NULL,
-           pathao_token_enc = NULL, pathao_refresh_enc = NULL, auto_send = FALSE WHERE shop = $1`,
+           pathao_token_enc = NULL, pathao_refresh_enc = NULL, auto_send = FALSE,
+           sms_token_enc = NULL, sms_enabled = FALSE WHERE shop = $1`,
         [shop]
       );
     },
@@ -113,6 +131,7 @@ function makeDb(pool) {
     },
 
     async deleteShopData(shop) {
+      await q('DELETE FROM sms_log WHERE shop = $1', [shop]);
       await q('DELETE FROM shipments WHERE shop = $1', [shop]);
       await q('DELETE FROM settings WHERE shop = $1', [shop]);
       await q('DELETE FROM shops WHERE shop = $1', [shop]);
@@ -203,9 +222,38 @@ function makeDb(pool) {
     findShipmentByConsignment: (shop, consignmentId) =>
       one('SELECT * FROM shipments WHERE shop = $1 AND consignment_id = $2', [shop, String(consignmentId)]),
 
+    // ---------- sms log (one confirmation SMS per order) ----------
+    async claimSms(shop, orderId) {
+      const token = crypto.randomUUID();
+      const row = await one(
+        `INSERT INTO sms_log (shop, shopify_order_id, status, claim_token) VALUES ($1,$2,'sending',$3)
+         ON CONFLICT (shop, shopify_order_id) DO NOTHING RETURNING *`,
+        [shop, String(orderId), token]
+      );
+      if (row && row.claim_token === token) return row;
+      return one(
+        `UPDATE sms_log SET status = 'sending', error = NULL, claim_token = $3, updated_at = NOW()
+         WHERE shop = $1 AND shopify_order_id = $2 AND status = 'failed' RETURNING *`,
+        [shop, String(orderId), token]
+      );
+    },
+    async finishSms(shop, orderId, status, error) {
+      await q(`UPDATE sms_log SET status = $3, error = $4, updated_at = NOW() WHERE shop = $1 AND shopify_order_id = $2`,
+        [shop, String(orderId), status, error || null]);
+    },
+    async recordSmsSkip(shop, orderId, reason) {
+      await q(`INSERT INTO sms_log (shop, shopify_order_id, status, error) VALUES ($1,$2,'skipped',$3)
+               ON CONFLICT (shop, shopify_order_id) DO NOTHING`, [shop, String(orderId), reason]);
+    },
+    async smsForOrders(shop, orderIds) {
+      if (!orderIds.length) return [];
+      return (await q('SELECT * FROM sms_log WHERE shop = $1 AND shopify_order_id = ANY($2)', [shop, orderIds.map(String)])).rows;
+    },
+
     async redactOrders(shop, orderIds) {
       if (!orderIds.length) return;
       await q('DELETE FROM shipments WHERE shop = $1 AND shopify_order_id = ANY($2)', [shop, orderIds.map(String)]);
+      await q('DELETE FROM sms_log WHERE shop = $1 AND shopify_order_id = ANY($2)', [shop, orderIds.map(String)]);
     },
   };
 }

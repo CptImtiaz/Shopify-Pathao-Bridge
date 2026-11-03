@@ -13,7 +13,7 @@ const PATHAO_INTEGRATION_HEADER = 'X-Pathao-Merchant-Webhook-Integration-Secret'
 
 // `defer` keeps background work alive after the response is sent (Vercel's
 // waitUntil). On a normal always-on server it can just let the promise run.
-function makeWebhookRouter({ config, db, admin, shipping, log = console, defer = (p) => p }) {
+function makeWebhookRouter({ config, db, admin, shipping, notifier, log = console, defer = (p) => p }) {
   const router = express.Router();
   const raw = express.raw({ type: '*/*', limit: '2mb' });
 
@@ -38,16 +38,26 @@ function makeWebhookRouter({ config, db, admin, shipping, log = console, defer =
   router.post('/webhooks/orders/create', ...shopifyWebhook(async ({ shop, payload }) => {
     const row = await db.getShop(shop);
     if (!row || row.uninstalled_at) return;
-    const settings = await db.getSettings(shop);
-    const order = fromWebhook(payload);
-    const reason = autoSendSkipReason(order, settings);
-    if (reason) {
-      if (settings.auto_send && reason !== 'Order was created before auto-send was turned on') {
-        await db.recordSkip(shop, order.id, order.name, reason);
+
+    // Pathao booking and confirmation SMS run independently: one failing
+    // never stops the other.
+    const pathaoJob = (async () => {
+      const settings = await db.getSettings(shop);
+      const order = fromWebhook(payload);
+      const reason = autoSendSkipReason(order, settings);
+      if (reason) {
+        if (settings.auto_send && reason !== 'Order was created before auto-send was turned on') {
+          await db.recordSkip(shop, order.id, order.name, reason);
+        }
+        return;
       }
-      return;
-    }
-    await shipping.sendOrder(shop, order);
+      await shipping.sendOrder(shop, order);
+    })();
+    const smsJob = notifier ? notifier.onOrderCreated(shop, payload) : Promise.resolve();
+
+    const results = await Promise.allSettled([pathaoJob, smsJob]);
+    results.filter((r) => r.status === 'rejected')
+      .forEach((r) => log.error(`[${shop}] orders/create job failed: ${r.reason && r.reason.message}`));
   }));
 
   router.post('/webhooks/app/uninstalled', ...shopifyWebhook(async ({ shop }) => {
