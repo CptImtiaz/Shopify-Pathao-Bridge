@@ -6,6 +6,9 @@
   <meta name="shopify-api-key" content="%SHOPIFY_API_KEY%" />
   <title>ShipBridge</title>
   <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/assets/app.css" />
 </head>
 <body>
@@ -13,7 +16,6 @@
     <s-link href="/" rel="home">Dashboard</s-link>
     <s-link href="/couriers">Couriers</s-link>
     <s-link href="/billing">Billing</s-link>
-    <s-link href="/support">Support</s-link>
   </s-app-nav>
 
   <div class="shell">
@@ -33,7 +35,6 @@
           <span class="live-pill" id="live-pill" hidden><i></i>Pathao live</span>
           <button class="btn ghost" id="reload-orders"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5"/></svg>Refresh</button>
           <a class="btn ghost" href="/billing" data-link><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/></svg>Billing</a>
-          <a class="btn ghost" href="/support" data-link><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 0 1 4.6 1.3c0 1.7-2.1 2-2.1 3.4M12 17h.01"/></svg>Support</a>
           <a class="btn wa" href="https://wa.me/60199944971" target="_blank" rel="noopener" aria-label="WhatsApp support +60 19-994 4971"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1.3-4A8 8 0 1 1 8 18.7z"/><path d="M9 9.5c.3 1.8 2.6 4.2 4.6 4.6l1-1.1 1.8.8c-.2 1-1 1.7-2 1.7-3.3-.3-6.1-3.1-6.4-6.4 0-1 .7-1.8 1.7-2l.8 1.8z" fill="currentColor" stroke="none"/></svg>WhatsApp</a>
           <a class="btn ghost" href="/couriers" data-link><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</a>
         </div>
@@ -41,16 +42,15 @@
 
       <section class="stats" id="stats"></section>
 
-      <section class="card setup" id="setup" hidden>
-        <button class="setup-top" id="setup-toggle" aria-expanded="true">
-          <span><b>Setup guide</b><span class="meta" id="setup-count"></span></span>
+      <section class="card setup collapsed" id="setup" hidden>
+        <button class="setup-top" id="setup-toggle" aria-expanded="false">
+          <span class="setup-ring" id="setup-ring"></span>
+          <span class="setup-txt"><b id="setup-title">Finish setting up</b><span class="meta" id="setup-count"></span></span>
+          <span class="setup-cta">Show steps</span>
           <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
         </button>
-        <div class="progress"><i id="setup-bar"></i></div>
         <ul class="steps" id="steps"></ul>
       </section>
-
-      <section class="pipeline" id="pipeline" aria-label="Delivery pipeline"></section>
 
       <section class="card list" aria-label="Orders">
         <div class="list-top">
@@ -58,7 +58,7 @@
             <input id="search" aria-label="Search orders" placeholder="Search orders by number, customer, phone or parcel…" /></label>
           <button class="btn primary" id="send-new" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.6"/><circle cx="17" cy="17.5" r="1.6"/></svg><span id="send-new-label">Send new orders</span></button>
         </div>
-        <div class="status-tabs" role="tablist" id="groups"></div>
+        <div class="pipe-tabs" role="tablist" id="pipeline" aria-label="Delivery status"></div>
         <div class="risk-filter" id="risk-chips"></div>
         <div class="table-wrap">
           <div class="list-head">
@@ -72,123 +72,87 @@
       </section>
     </main>
 
-    <!-- ===================== COURIERS / SETTINGS ===================== -->
+    <!-- ===================== COURIERS ===================== -->
     <main class="page" data-page="couriers" hidden>
-      <header class="top narrow">
+      <header class="top">
         <div class="brand">
           <a class="btn icon" href="/" data-link aria-label="Back to dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></a>
-          <div><h1>Settings</h1><p class="meta">Connect once. New orders, tracking and Shopify status then run on their own.</p></div>
+          <div><h1>Couriers</h1><p class="meta">Connect once — booking, live tracking and Shopify status then run on their own.</p></div>
         </div>
       </header>
-      <div class="narrow">
-        <nav class="settings-tabs" aria-label="Settings sections">
-          <button data-tab="couriers" class="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg>Courier Integration</button>
-          <button data-tab="sms"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 4V5z"/></svg>SMS <span class="soon">Soon</span></button>
-        </nav>
 
-        <section id="courier-list">
-          <div class="courier-grid" id="courier-grid"></div>
-        </section>
+      <div class="cx">
+        <nav class="cx-list" id="courier-nav" aria-label="Couriers"></nav>
 
-        <section id="courier-detail" hidden>
-          <div class="detail-top">
-            <a href="#" class="back-link" id="back-couriers"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>All couriers</a>
-            <span class="meta" id="steps-count"></span>
+        <section class="cx-main" id="pathao-setup" aria-label="Pathao setup">
+          <div class="card cx-hero" id="cx-hero"></div>
+
+          <div class="step" data-step="account">
+            <button class="step-row" data-toggle-step="account"><span class="step-dot"></span><span class="step-text"><b>Pathao account</b><span class="meta" data-summary></span></span><span class="step-act"></span></button>
+            <div class="step-body">
+              <div class="seg" role="radiogroup" aria-label="Pathao environment" id="env-seg">
+                <button role="radio" data-env="production">Live</button><button role="radio" data-env="sandbox">Test (sandbox)</button>
+              </div>
+              <div class="grid2">
+                <label class="field"><span>Client ID</span><input id="pathao_client_id" autocomplete="off" /></label>
+                <label class="field"><span>Client secret</span><input id="pathao_client_secret" type="password" autocomplete="new-password" /></label>
+                <label class="field"><span>Merchant email</span><input id="pathao_username" type="email" autocomplete="off" /></label>
+                <label class="field"><span>Password</span><input id="pathao_password" type="password" autocomplete="new-password" /></label>
+              </div>
+              <p class="hint">Find these in Pathao Merchant Panel → Developers API. Secrets are stored encrypted.</p>
+              <div class="sec-foot"><button class="btn primary" id="save-connection">Save &amp; connect</button></div>
+            </div>
           </div>
-          <div class="cdetail">
-            <nav class="card detail-nav" aria-label="Pathao settings">
-              <div class="detail-brand"><span class="cmono" style="background:#E8202A">P</span><b>Pathao</b><span class="status-pill" id="pathao-status"></span></div>
-              <button data-section="account"><span class="nav-dot" data-dot="account"></span>API Configuration</button>
-              <button data-section="store"><span class="nav-dot" data-dot="store"></span>Pickup store</button>
-              <button data-section="webhook"><span class="nav-dot" data-dot="webhook"></span>Webhook</button>
-              <button data-section="defaults"><span class="nav-dot ok"></span>Default Settings</button>
-              <button data-section="shopify"><span class="nav-dot" data-dot="shopify"></span>Shopify Status Sync</button>
-            </nav>
 
-            <div class="sections">
-              <!-- API -->
-              <div class="card section" data-panel="account">
-                <div class="sec-head"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3"/></svg></span>
-                  <div><h2>API Configuration</h2><p class="meta">From Pathao Merchant Panel → Developers API. Secrets are stored encrypted.</p></div></div>
-                <div class="form">
-                  <div class="seg" role="radiogroup" aria-label="Pathao environment" id="env-seg">
-                    <button role="radio" data-env="production">Live</button>
-                    <button role="radio" data-env="sandbox">Test (sandbox)</button>
-                  </div>
-                  <div class="grid2">
-                    <label class="field"><span>Client ID</span><input id="pathao_client_id" autocomplete="off" /></label>
-                    <label class="field"><span>Client secret</span><input id="pathao_client_secret" type="password" autocomplete="new-password" /></label>
-                    <label class="field"><span>Merchant email</span><input id="pathao_username" type="email" autocomplete="off" /></label>
-                    <label class="field"><span>Password</span><input id="pathao_password" type="password" autocomplete="new-password" /></label>
-                  </div>
-                </div>
-                <div class="sec-foot"><button class="btn primary" id="save-connection">Save &amp; connect</button></div>
-              </div>
+          <div class="step" data-step="store">
+            <button class="step-row" data-toggle-step="store"><span class="step-dot"></span><span class="step-text"><b>Pickup store</b><span class="meta" data-summary></span></span><span class="step-act"></span></button>
+            <div class="step-body">
+              <label class="field"><span>Riders collect parcels from</span><select id="pathao_store_id"><option value="">Connect your account first</option></select></label>
+              <div class="sec-foot"><button class="btn" id="reload-stores">Reload stores</button></div>
+            </div>
+          </div>
 
-              <!-- store -->
-              <div class="card section" data-panel="store" hidden>
-                <div class="sec-head"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10l1.5-5h13L20 10M4 10v9h16v-9M4 10h16M9 19v-5h6v5"/></svg></span>
-                  <div><h2>Pickup store</h2><p class="meta">Where Pathao riders collect your parcels.</p></div></div>
-                <label class="field"><span>Store</span><select id="pathao_store_id"><option value="">Connect your account first</option></select></label>
-                <div class="sec-foot"><button class="btn" id="reload-stores">Reload stores</button></div>
-              </div>
+          <div class="step" data-step="webhook">
+            <button class="step-row" data-toggle-step="webhook"><span class="step-dot"></span><span class="step-text"><b>Live delivery updates</b><span class="meta" data-summary>Pathao tells ShipBridge the moment a parcel moves</span></span><span class="step-act"></span></button>
+            <div class="step-body">
+              <div class="field"><span>Callback URL</span><div class="copy"><input id="wh_url" readonly /><button class="btn" id="copy-url"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h9"/></svg>Copy</button></div></div>
+              <label class="field"><span>Secret key (same as in Pathao)</span><input id="wh_secret" autocomplete="off" /></label>
+              <ol class="howto"><li>Pathao Merchant Panel → <b>Developers API</b> → <b>Webhook integration</b>.</li><li>Paste the Callback URL, enter the same secret key, save.</li></ol>
+              <p class="hint" id="wh-state"></p>
+              <div class="sec-foot"><button class="btn primary" id="save-webhook">Save secret key</button></div>
+            </div>
+          </div>
 
-              <!-- webhook -->
-              <div class="card section" data-panel="webhook" hidden>
-                <div class="sec-head"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></span>
-                  <div><h2>Webhook Configuration <span class="pill-important">Important</span></h2><p class="meta">Receive real-time delivery status updates from Pathao.</p></div>
-                  <span class="live-pill" id="wh-live" hidden><i></i>Live</span></div>
-                <div class="form">
-                  <div class="field"><span>Callback URL</span><div class="copy"><input id="wh_url" readonly /><button class="btn" id="copy-url"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h9"/></svg>Copy</button></div></div>
-                  <label class="field"><span>Your Secret Key</span><input id="wh_secret" autocomplete="off" /><small class="hint">Use the same secret key you enter in the Pathao dashboard.</small></label>
-                  <p class="hint" id="wh-state"></p>
-                  <div class="howto"><b>How to connect</b><ol><li>Open Pathao Merchant Panel → <b>Developers API</b> → <b>Webhook integration</b>.</li><li>Paste the <b>Callback URL</b> above and choose a secret key.</li><li>Enter the same secret key here and click <b>Save</b>.</li></ol></div>
-                </div>
-                <div class="sec-foot"><button class="btn danger-text" data-reset>Reset</button><button class="btn primary" id="save-webhook">Save</button></div>
-              </div>
-
-              <!-- defaults -->
-              <div class="card section" data-panel="defaults" hidden>
-                <div class="sec-head"><span class="sec-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></span>
-                  <div><h2>Default Settings</h2><p class="meta">How new orders are sent to Pathao. Changes save automatically.</p></div></div>
-                <div class="form">
-                  <label class="switch-row"><span><b>Set Pathao as default courier</b><small>Used for auto-send and "Send to Pathao"</small></span><input type="checkbox" role="switch" id="is_default" checked disabled /><i aria-hidden="true"></i></label>
-                  <label class="switch-row"><span><b>Send new orders automatically</b><small>Every new order is booked with Pathao within seconds</small></span><input type="checkbox" role="switch" id="auto_send" /><i aria-hidden="true"></i></label>
-                  <label class="switch-row"><span><b>Hold high-risk orders</b><small>Fraud-flagged orders wait for you instead of auto-sending</small></span><input type="checkbox" role="switch" id="hold_risky" /><i aria-hidden="true"></i></label>
-                  <div class="grid-w">
-                    <label class="field"><span>Default parcel weight (kg)</span><input id="default_weight" type="number" min="0.5" max="10" step="0.5" /><small class="hint">Used when a product has no weight</small></label>
-                    <label class="field"><span>Default parcel note</span><input id="default_note" maxlength="200" placeholder="e.g. Call before delivery" /><small class="hint">Used when the order has no note. No emoji.</small></label>
-                  </div>
-                  <div class="pref"><b>Default delivery type</b>
-                    <div class="seg" role="radiogroup" aria-label="Delivery type" id="speed-seg"><button role="radio" data-speed="48">Regular delivery</button><button role="radio" data-speed="12">On-demand (express)</button></div></div>
-                  <p class="hint" id="prefs-state">Changes save automatically</p>
-                </div>
-              </div>
-
-              <!-- shopify sync -->
-              <div class="card section" data-panel="shopify" hidden>
-                <div class="sec-head"><span class="sec-icon green"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 0 1 13.7-5.7L20 8.5M20 4v4.5h-4.5M20 12a8 8 0 0 1-13.7 5.7L4 15.5M4 20v-4.5h4.5"/></svg></span>
-                  <div><h2>Shopify Status Sync</h2><p class="meta">Mark orders fulfilled with the Pathao tracking number and update delivery status as Pathao reports it.</p></div></div>
-                <div class="form">
-                  <div id="perm-body"></div>
-                  <label class="switch-row"><span><b>Update fulfillment and delivery status in Shopify</b><small>Fulfilled → Picked up → In transit → Out for delivery → Delivered</small></span><input type="checkbox" role="switch" id="sync_fulfillment" /><i aria-hidden="true"></i></label>
-                  <div class="pref"><b>Mark the Shopify order as fulfilled</b>
-                    <div class="seg" role="radiogroup" aria-label="Mark fulfilled" id="when-seg"><button role="radio" data-when="booked">When booked with Pathao</button><button role="radio" data-when="picked">When the rider picks it up</button></div></div>
-                  <label class="switch-row"><span><b>Email the customer a tracking link</b><small>Shopify sends its shipping confirmation</small></span><input type="checkbox" role="switch" id="notify_customer" /><i aria-hidden="true"></i></label>
-                </div>
-              </div>
+          <div class="step" data-step="shopify">
+            <button class="step-row" data-toggle-step="shopify"><span class="step-dot"></span><span class="step-text"><b>Update orders inside Shopify</b><span class="meta">Fulfilled with tracking link, then Picked up → In transit → Delivered</span></span><span class="step-act"></span></button>
+            <div class="step-body">
+              <div id="perm-body"></div>
+              <label class="switch-row"><span><b>Update fulfillment and delivery status</b><small>Shown on the order timeline and the customer's order page</small></span><input type="checkbox" role="switch" id="sync_fulfillment" /><i aria-hidden="true"></i></label>
+              <div class="pref"><b>Mark the Shopify order fulfilled</b>
+                <div class="seg" role="radiogroup" aria-label="Mark fulfilled" id="when-seg"><button role="radio" data-when="booked">When booked</button><button role="radio" data-when="picked">When picked up</button></div></div>
+              <label class="switch-row"><span><b>Email the customer a tracking link</b><small>Shopify sends its shipping confirmation</small></span><input type="checkbox" role="switch" id="notify_customer" /><i aria-hidden="true"></i></label>
             </div>
           </div>
         </section>
 
-        <section id="sms-tab" hidden>
+        <section class="cx-main" id="sms-tab" hidden>
           <div class="card soon-card">
-            <span class="sec-icon big green"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 4V5z"/></svg></span>
-            <h2>SMS notifications are coming soon</h2>
-            <p class="meta">Customers get an automatic order confirmation by SMS, with your own sender name and message in Bangla or English.</p>
+            <span class="sec-icon big"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 4V5z"/></svg></span>
+            <h2>SMS order confirmations are coming soon</h2>
+            <p class="meta">Customers get an automatic SMS when they order, with your own sender name and message in Bangla or English.</p>
             <ul><li>Choose which orders get an SMS: all, online store, or manual orders</li><li>Message template with customer name, order number, items and total</li><li>Delivery history and test messages</li></ul>
           </div>
         </section>
+
+        <aside class="card cx-rules" aria-label="Sending rules">
+          <div class="rules-head"><h2>Sending rules</h2><span class="hint" id="prefs-state">Saves automatically</span></div>
+          <label class="switch-row"><span><b>Send new orders automatically</b><small>Booked with Pathao within seconds</small></span><input type="checkbox" role="switch" id="auto_send" /><i aria-hidden="true"></i></label>
+          <label class="switch-row"><span><b>Hold high-risk orders</b><small>Fraud-flagged orders wait for you</small></span><input type="checkbox" role="switch" id="hold_risky" /><i aria-hidden="true"></i></label>
+          <div class="pref"><b>Delivery type</b>
+            <div class="seg" role="radiogroup" aria-label="Delivery type" id="speed-seg"><button role="radio" data-speed="48">Regular</button><button role="radio" data-speed="12">Express</button></div></div>
+          <label class="field"><span>Parcel weight (kg)</span><input id="default_weight" type="number" min="0.5" max="10" step="0.5" /><small class="hint">Used when a product has no weight</small></label>
+          <label class="field"><span>Note for rider</span><input id="default_note" maxlength="200" placeholder="e.g. Call before delivery" /><small class="hint">Used when the order has no note</small></label>
+        </aside>
       </div>
     </main>
 
@@ -213,51 +177,6 @@
       </div>
       <section class="plans" id="plans"></section>
       <section class="card history"><h2>Billing history</h2><div id="history"></div></section>
-    </main>
-
-    <!-- ===================== SUPPORT ===================== -->
-    <main class="page" data-page="support" hidden>
-      <header class="top">
-        <div class="brand">
-          <a class="btn icon" href="/" data-link aria-label="Back to dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></a>
-          <div><h1>Support</h1><p class="meta">Check your setup, find answers, or talk to us.</p></div>
-        </div>
-      </header>
-      <a class="card wa-card" href="https://wa.me/60199944971" target="_blank" rel="noopener">
-        <span class="wa-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20l1.3-4A8 8 0 1 1 8 18.7z"/><path d="M9 9.5c.3 1.8 2.6 4.2 4.6 4.6l1-1.1 1.8.8c-.2 1-1 1.7-2 1.7-3.3-.3-6.1-3.1-6.4-6.4 0-1 .7-1.8 1.7-2l.8 1.8z" fill="currentColor" stroke="none"/></svg></span>
-        <span class="wa-text"><b>Chat with us on WhatsApp</b><span>+60 19-994 4971 · fastest way to get help</span></span>
-        <span class="btn wa">Open WhatsApp</span>
-      </a>
-      <div class="support-grid">
-        <section class="card checks" aria-label="Setup check">
-          <div class="row-between"><h2>Setup check</h2><button class="btn ghost sm" id="run-checks">Run again</button></div>
-          <ul id="checks"></ul>
-        </section>
-        <section class="card contact" aria-label="Contact support">
-          <h2>Send us a message</h2>
-          <p class="meta" id="contact-line">We reply by email, usually within one working day.</p>
-          <form id="ticket-form" novalidate>
-            <div class="grid2">
-              <label class="field"><span>Topic</span>
-                <select id="t_topic"><option value="setup">Setup &amp; connection</option><option value="orders">Sending orders</option><option value="delivery">Delivery status</option><option value="billing">Billing</option><option value="other">Something else</option></select></label>
-              <label class="field"><span>Order number (optional)</span><input id="t_order" placeholder="#1001" /></label>
-            </div>
-            <label class="field"><span>Your email</span><input id="t_email" type="email" required placeholder="you@yourshop.com" /></label>
-            <label class="field"><span>What happened?</span><textarea id="t_message" rows="5" required placeholder="Tell us what you expected and what you saw"></textarea></label>
-            <div class="sec-foot"><button class="btn primary" id="send-ticket" type="submit">Send message</button></div>
-          </form>
-          <div id="tickets"></div>
-        </section>
-      </div>
-      <section class="card faq" aria-label="Common questions">
-        <h2>Common questions</h2>
-        <details><summary>Why wasn't an order sent to Pathao automatically?</summary><p>Auto-send skips orders created before it was turned on, cancelled orders, orders with the skip tag, and high-risk orders when “Hold high-risk orders” is on. They show as <b>Held for review</b> or <b>Not sent</b> — press Assign Courier.</p></details>
-        <details><summary>Pathao says the phone number is invalid</summary><p>Pathao accepts Bangladesh mobile numbers like 01XXXXXXXXX. Fix the phone on the Shopify order, then press Retry.</p></details>
-        <details><summary>Delivery status isn't changing</summary><p>Set up the <b>Webhook</b> in Settings → Pathao. Once Pathao sends its first update, orders show a green <b>Live</b> sign.</p></details>
-        <details><summary>Shopify orders aren't marked fulfilled</summary><p>Turn on <b>Shopify Status Sync</b> and allow the fulfillment permission when Shopify asks. Orders booked before that are updated automatically afterwards.</p></details>
-        <details><summary>How does the fraud check work?</summary><p>It combines Shopify's risk analysis with the customer's delivery history in your store, phone and address checks, repeat orders from the same phone, and large cash-on-delivery amounts.</p></details>
-        <details><summary>How am I billed?</summary><p>Plans are charged on your regular Shopify bill. Switch or cancel on the Billing page; paid plans start with a free trial.</p></details>
-      </section>
     </main>
 
     <footer class="footer"><a href="/privacy" target="_blank">Privacy policy</a></footer>

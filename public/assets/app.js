@@ -7,7 +7,7 @@
   const state = {
     boot: null, orders: [], loaded: false, selected: new Set(), focus: null,
     page: 'orders', group: null, stage: null, risk: 'any', search: '',
-    section: 'account', detailOpen: false, settingsTab: 'couriers', billing: null, period: 'monthly', support: null, checks: null, menuFor: null,
+    section: undefined, settingsTab: 'couriers', billing: null, period: 'monthly', support: null, checks: null, menuFor: null,
   };
 
   // ---------------- helpers ----------------
@@ -52,7 +52,7 @@
   function apply(r) { if (r.settings) state.boot.settings = r.settings; if (r.couriers) state.boot.couriers = r.couriers; }
 
   // ---------------- routing ----------------
-  const ROUTES = { '/': 'orders', '/app': 'orders', '/settings': 'couriers', '/couriers': 'couriers', '/sms': 'couriers', '/plans': 'billing', '/billing': 'billing', '/support': 'support' };
+  const ROUTES = { '/': 'orders', '/app': 'orders', '/settings': 'couriers', '/couriers': 'couriers', '/sms': 'couriers', '/plans': 'billing', '/billing': 'billing', '/support': 'orders' };
   const pageFromPath = () => ROUTES[location.pathname.replace(/\/$/, '') || '/'] || 'orders';
   function showPage(page) {
     state.page = page;
@@ -66,7 +66,6 @@
     if (page === 'orders' && !state.loaded) loadOrders();
     if (page === 'couriers') renderCouriers();
     if (page === 'billing') loadBilling();
-    if (page === 'support') loadSupport();
   }
   function navigate(path) {
     if (location.pathname !== path) history.pushState({}, '', path + location.search);
@@ -176,10 +175,13 @@
     show($('live-pill'), webhookLive());
     const steps = setupSteps(), done = steps.filter((x) => x.done).length;
     show($('setup'), done < steps.length);
-    $('setup-count').textContent = `${done} of ${steps.length} tasks complete`;
-    $('setup-bar').style.width = `${Math.round((done / steps.length) * 100)}%`;
-    const others = (state.boot.couriers || []).filter((c) => c.key !== 'pathao');
-    $('steps').innerHTML = steps.map((x) => `<li class="${x.done ? 'done' : ''}"><span class="tick"></span><span class="step-text">${esc(x.html)}</span>${x.done ? '' : `<span class="step-actions"><button class="btn sm" data-goto="${x.btn[0]}">${esc(x.btn[1])}</button>${x.key === 'account' ? others.map((c) => `<button class="btn sm" disabled title="Coming soon">Add ${esc(c.name)}</button>`).join('') : ''}</span>`}</li>`).join('');
+    const next = steps.find((x) => !x.done);
+    $('setup-title').textContent = next ? `Next: ${next.html}` : 'All set';
+    $('setup-count').textContent = `${done} of ${steps.length} setup tasks complete`;
+    const pct = Math.round((done / steps.length) * 100);
+    $('setup-ring').style.background = `conic-gradient(#4f46e5 0 ${pct}%, #e4e5f7 ${pct}% 100%)`;
+    $('setup-ring').innerHTML = `<b>${done}/${steps.length}</b>`;
+    $('steps').innerHTML = steps.map((x) => `<li class="${x.done ? 'done' : ''}"><span class="tick"></span><span class="step-text">${esc(x.html)}</span>${x.done ? '' : `<button class="btn sm" data-goto="${x.btn[0]}">${esc(x.btn[1])}</button>`}</li>`).join('');
     const ready = newReady();
     show($('send-new'), ready.length > 0 && Boolean(S().connected && S().pathao_store_id));
     $('send-new-label').textContent = `Send ${ready.length} new order${ready.length === 1 ? '' : 's'} to Pathao`;
@@ -209,23 +211,20 @@
   ];
   function renderPipeline() {
     const c = {}; state.orders.forEach((o) => { const k = stageOf(o).key; c[k] = (c[k] || 0) + 1; });
-    $('pipeline').innerHTML = STAGES.map(([k, label, tone, hint], i) => `<button class="stage ${tone}${state.stage === k ? ' active' : ''}" data-stage="${k}" aria-pressed="${state.stage === k}">
-      <span class="s-label"><span>${label}</span><span aria-hidden="true">${i < 4 ? '→' : ''}</span></span><span class="s-num">${c[k] || 0}</span><span class="s-hint">${hint}</span></button>`).join('');
+    const tabs = [['', 'All', state.orders.length, '']].concat(STAGES.map(([k, l, tone]) => [k, l, c[k] || 0, tone]));
+    $('pipeline').innerHTML = tabs.map(([k, l, n, tone]) => `<button role="tab" class="${tone}" aria-selected="${(state.stage || '') === k}" data-stage="${k}"><span>${l}</span><b>${n}</b></button>`).join('');
   }
   const GROUPS = [['all', 'All'], ['action', 'Needs action'], ['way', 'On the way'], ['done', 'Done']];
   const RISKS = [['any', 'All risk'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low'], ['safe', 'Safe'], ['pending', 'Checking']];
   const levelOf = (o) => (o.fraud ? o.fraud.level : 'pending');
   function renderGroups() {
-    const c = { all: state.orders.length }; state.orders.forEach((o) => { const g = groupOf(o); c[g] = (c[g] || 0) + 1; });
-    if (!state.group) state.group = 'all';
-    $('groups').innerHTML = GROUPS.map(([k, l]) => `<button role="tab" aria-selected="${!state.stage && state.group === k}" data-group="${k}">${l}<span class="n">${c[k] || 0}</span></button>`).join('');
     const rc = { any: state.orders.length }; state.orders.forEach((o) => { const l = levelOf(o); rc[l] = (rc[l] || 0) + 1; });
     $('risk-chips').innerHTML = '<span class="lbl">Fraud check</span>' + RISKS.filter(([k]) => k === 'any' || rc[k]).map(([k, l]) =>
       `<button data-risk="${k}" class="${state.risk === k ? 'active' : ''} ${k !== 'any' ? 'rk-' + k : ''}">${k !== 'any' ? '<i></i>' : ''}${l} <span>${rc[k] || 0}</span></button>`).join('');
   }
   function visible() {
     const q = state.search.trim().toLowerCase();
-    return state.orders.filter((o) => (state.stage ? stageOf(o).key === state.stage : (state.group === 'all' || groupOf(o) === state.group))
+    return state.orders.filter((o) => (!state.stage || stageOf(o).key === state.stage)
       && (state.risk === 'any' || levelOf(o) === state.risk)
       && (!q || `${o.name} ${o.customer} ${o.phone} ${o.city} ${o.shipment ? o.shipment.consignmentId : ''}`.toLowerCase().includes(q)));
   }
@@ -265,12 +264,41 @@
     if (held(o) || (o.fraud && o.fraud.level === 'high' && !s)) return `<button class="assign warn" data-open="${esc(o.id)}">Review</button>`;
     return `<button class="assign" data-assign="${esc(o.id)}">${TRUCK}${s ? 'Retry' : 'Assign Courier'}</button>`;
   }
+  // Delivery status: a coloured pill with icon, and a 5-dot stepper underneath.
+  const ST_ICON = { ok: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', bad: '<path d="M7 7l10 10M17 7L7 17"/>', go: '<path d="M5 12h12M13 7l5 5-5 5"/>', wait: '<circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/>', hold: '<path d="M9 7v10M15 7v10"/>' };
+  function statusTone(o, st) {
+    if (held(o)) return 'hold';
+    if (st.bad) return 'bad';
+    if (st.key === 'delivered') return 'ok';
+    if (st.step > 0) return 'go';
+    return 'wait';
+  }
+  function statusCell(o, st) {
+    const tone = statusTone(o, st);
+    const dots = [1, 2, 3, 4, 5].map((i) => {
+      const on = st.bad ? i <= Math.max(st.step, 1) : i <= st.step;
+      const cur = !st.bad && i === st.step && st.key !== 'delivered';
+      return `<i class="${on ? 'on' : ''}${cur ? ' cur' : ''}${st.bad && i === Math.max(st.step, 1) ? ' x' : ''}"></i>`;
+    }).join('');
+    return `<span class="st st-${tone}"><svg viewBox="0 0 24 24" aria-hidden="true">${ST_ICON[tone]}</svg>${esc(stageLabel(o))}</span><span class="dots dots-${tone}">${dots}</span>`;
+  }
+  // Fraud check: mini ring gauge with the score, label and delivery history.
+  function fraudCell(o) {
+    const f = o.fraud;
+    if (!f) return '<span class="sub">—</span>';
+    const h = f.history || {}, sc = Number(f.score) || 0;
+    const col = { high: '#ef4444', medium: '#f59e0b', low: '#3b82f6', pending: '#9ca3af', safe: '#22c55e' }[f.level];
+    const sub = h.total ? `${h.successRate != null ? h.successRate + '% success' : 'In progress'} · ${h.total} parcel${h.total > 1 ? 's' : ''}` : 'No history yet';
+    return `<button class="fc fc-${esc(f.level)}" data-fraud="${esc(o.id)}" aria-label="Fraud check: ${esc(f.label)}, score ${sc}">
+      <span class="gauge" style="background:conic-gradient(${col} 0 ${sc}%, #eceef2 ${sc}% 100%)"><b>${sc}</b></span>
+      <span class="fc-t"><b>${esc(f.label)}</b><small>${esc(sub)}</small></span></button>`;
+  }
   function rowHtml(o) {
     const st = stageOf(o), sel = state.selected.has(o.id), f = o.fraud, h = (f && f.history) || {};
     const first = (o.products && o.products[0]) || null;
     const more = (o.products || []).length > 1 ? `+${o.products.length - 1} more · ` : '';
     const err = o.shipment && o.shipment.status !== 'sent' && o.shipment.error ? `<span class="err">${esc(o.shipment.error)}</span>` : '';
-    const synced = o.shipment && o.shipment.status === 'sent' && o.shipment.consignmentId ? `<span class="sub mono">${esc(o.shipment.consignmentId)}</span>` : '';
+    const synced = o.shipment && o.shipment.status === 'sent' && o.shipment.consignmentId ? `<span class="cn mono" title="Pathao consignment">${esc(o.shipment.consignmentId)}</span>` : '';
     return `<div class="row${sel ? ' sel' : ''}" data-row="${esc(o.id)}">
       <span>${canSend(o) ? `<input type="checkbox" data-select="${esc(o.id)}" ${sel ? 'checked' : ''} aria-label="Select ${esc(o.name)}" />` : ''}</span>
       <div><span class="o-name">${esc(o.name)}</span><span class="sub">${esc(when(o.createdAt))}</span></div>
@@ -278,10 +306,8 @@
       <div style="min-width:0"><b class="ellip">${esc(o.customer || '—')}</b><span class="sub">${esc(o.phone || o.city || '')}</span></div>
       <div>${payCell(o)}</div>
       <div>${fulfillBadge(o)}</div>
-      <div><span class="track${st.bad ? ' bad' : ''}">${[1, 2, 3, 4, 5].map((i) => `<i class="${i <= Math.max(st.step, st.bad ? 1 : 0) ? 'on' : ''}"></i>`).join('')}</span>
-        <div class="stage-txt ${st.bad ? 'bad' : st.step ? 'ok' : 'idle'}">${esc(stageLabel(o))}</div>${synced}${err}</div>
-      <div>${f ? `<button class="risk risk-${esc(f.level)}" data-fraud="${esc(o.id)}"><svg viewBox="0 0 24 24" aria-hidden="true">${RISK_ICON[f.level] || ''}</svg>${esc(f.label)}</button>
-        <span class="meter"><i style="width:${Number(f.score) || 0}%" class="m-${esc(f.level)}"></i></span><span class="sub">${h.total ? `${h.successRate != null ? h.successRate + '% success' : 'In progress'} · ${h.total} parcel${h.total > 1 ? 's' : ''}` : 'No history yet'}</span>` : '—'}</div>
+      <div>${statusCell(o, st)}${synced}${err}</div>
+      <div>${fraudCell(o)}</div>
       <div>${courierCell(o)}</div>
     </div>`;
   }
@@ -292,7 +318,7 @@
     if (!rows.length) {
       $('rows').innerHTML = '';
       $('orders-empty').innerHTML = state.orders.length ? '<b>No orders here</b>Try another tab, risk filter or search.' : '<b>No orders yet</b>New orders from your store appear here.';
-    } else if (state.group === 'all' && !state.stage && state.risk === 'any' && !state.search) {
+    } else if (!state.stage && state.risk === 'any' && !state.search) {
       const order = [['action', 'Needs action', '#d97706', '· send, check or fix'], ['way', 'On the way', '#4f46e5', webhookLive() ? '· updates arrive live' : ''], ['done', 'Done', '#9ca3af', '']];
       $('rows').innerHTML = order.map(([g, t, c, sub]) => {
         const list = rows.filter((o) => groupOf(o) === g);
@@ -416,42 +442,50 @@
   function closeMenu() { show($('courier-menu'), false); show($('fraud-pop'), false); state.menuFor = null; }
 
   // ---------------- couriers page ----------------
-  const STATUS_PILL = { connected: ['Configured', 'ok'], needs_store: ['Choose a store', 'warn'], not_connected: ['Not configured', ''], coming_soon: ['Coming soon', ''] };
   function renderCouriers() {
     const s = S();
-    $$('.settings-tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === state.settingsTab));
-    const onCouriers = state.settingsTab === 'couriers';
-    show($('courier-list'), onCouriers && !state.detailOpen);
-    show($('courier-detail'), onCouriers && state.detailOpen);
-    show($('sms-tab'), state.settingsTab === 'sms');
-
-    $('courier-grid').innerHTML = (state.boot.couriers || []).map((c) => {
-      const [label, tone] = STATUS_PILL[c.status] || STATUS_PILL.not_connected;
-      return `<div class="card c-card${c.available ? '' : ' off'}">
-        <div class="c-banner${c.key === 'pathao' || c.key === 'steadfast' ? ' light' : ''}" style="--c:${esc(c.color)}"><span class="word">${esc(c.name)}</span></div>
-        <div class="c-body">
-          <div class="c-title"><b>${esc(c.name)}</b><span class="status-pill ${tone}">${label}</span>${c.isDefault && c.available ? '<span class="default-pill">Default</span>' : ''}${c.key === 'pathao' && webhookLive() ? '<span class="live-pill" style="height:22px"><i></i>Live</span>' : ''}</div>
-          <div class="c-desc">${esc(c.tagline)}</div>
-          ${c.detail ? `<div class="sub">${esc(c.detail)}</div>` : ''}
-          <div class="c-foot">${c.available ? `<button class="btn primary sm" data-goto="account">Configure</button>` : '<button class="btn sm" disabled>Coming soon</button>'}</div>
-        </div></div>`;
-    }).join('');
-
-    const steps = setupSteps();
+    const others = (state.boot.couriers || []).filter((c) => c.key !== 'pathao');
+    const p = courier('pathao');
     const ready = s.connected && s.pathao_store_id;
-    const pill = $('pathao-status');
-    pill.textContent = ready ? 'Configured' : s.connected ? 'Choose a store' : 'Not configured';
-    pill.className = `status-pill ${ready ? 'ok' : s.connected ? 'warn' : ''}`;
-    $('steps-count').textContent = `${steps.filter((x) => x.done).length} of ${steps.length} setup tasks complete`;
-    steps.forEach((x) => { const d = document.querySelector(`[data-dot="${x.key}"]`); if (d) d.classList.toggle('ok', x.done); });
-    $$('.detail-nav [data-section]').forEach((b) => b.classList.toggle('active', b.dataset.section === state.section));
-    $$('[data-panel]').forEach((p) => show(p, p.dataset.panel === state.section));
+    const view = state.settingsTab === 'sms' ? 'sms' : 'pathao';
+    $('courier-nav').innerHTML = `<div class="cx-label">Your couriers</div>
+      <button class="cx-item${view === 'pathao' ? ' active' : ''}" data-cview="pathao">${cmono(p)}<span class="cx-name"><b>Pathao</b><small class="${ready ? 'ok' : 'warn'}">${ready ? (webhookLive() ? 'Connected · Live' : 'Connected') : s.connected ? 'Choose a pickup store' : 'Not connected'}</small></span>${ready ? '<span class="cx-def">Default</span>' : ''}</button>
+      <button class="cx-item${view === 'sms' ? ' active' : ''}" data-cview="sms"><span class="cmono" style="background:#64748b">✉</span><span class="cx-name"><b>SMS to customers</b><small>Coming soon</small></span></button>
+      <div class="cx-label">Coming soon</div>
+      ${others.map((c) => `<div class="cx-item off">${cmono(c)}<span class="cx-name"><b>${esc(c.name)}</b><small>${esc(c.tagline)}</small></span></div>`).join('')}`;
+    show($('pathao-setup'), view === 'pathao');
+    show($('sms-tab'), view === 'sms');
 
+    const steps = setupSteps().filter((x) => ['account', 'store', 'webhook', 'shopify'].includes(x.key));
+    const done = steps.filter((x) => x.done).length;
+    const pct = Math.round((done / steps.length) * 100);
+    $('cx-hero').innerHTML = `<div class="hero-l"><span class="cmono big" style="background:${esc(p.color)}">P</span>
+        <div><div class="hero-title"><h2>Pathao</h2>${ready ? '<span class="badge green">Connected</span>' : '<span class="badge yellow">Setup needed</span>'}${webhookLive() ? '<span class="live-pill"><i></i>Live</span>' : ''}${s.pathao_env === 'sandbox' ? '<span class="badge yellow">Test mode</span>' : ''}</div>
+        <p class="meta">${esc(p.tagline || '')}</p></div></div>
+      <div class="hero-r"><span class="hero-ring" style="background:conic-gradient(#4f46e5 0 ${pct}%, #e4e5f7 ${pct}% 100%)"><b>${done}/${steps.length}</b></span><span class="meta">${done === steps.length ? 'All set' : 'steps done'}</span></div>
+      <div class="hero-facts"><div><span>Pickup store</span><b>${esc(s.pathao_store_name || (s.pathao_store_id ? 'Store #' + s.pathao_store_id : '—'))}</b></div>
+        <div><span>Mode</span><b>${s.pathao_env === 'sandbox' ? 'Test (sandbox)' : 'Live'}</b></div>
+        <div><span>Auto-send</span><b>${s.auto_send ? 'On' : 'Off'}</b></div>
+        <div><span>Delivery type</span><b>${String(s.delivery_type) === '12' ? 'Express' : 'Regular'}</b></div></div>`;
+
+    const firstOpen = (steps.find((x) => !x.done) || {}).key || null;
+    const open = state.section === undefined || state.section === 'auto' ? firstOpen : state.section;
+    steps.forEach((x, i) => {
+      const el = document.querySelector(`.step[data-step="${x.key}"]`);
+      const isOpen = open === x.key;
+      el.classList.toggle('done', x.done); el.classList.toggle('open', isOpen);
+      el.classList.toggle('attention', !x.done && x.key === firstOpen);
+      el.querySelector('.step-dot').textContent = x.done ? '' : String(i + 1);
+      el.querySelector('.step-act').textContent = isOpen ? 'Close' : x.done ? (x.key === 'store' ? 'Change' : x.key === 'account' ? 'Edit' : 'View') : 'Set up';
+      el.querySelector('.step-row').setAttribute('aria-expanded', String(isOpen));
+    });
+    document.querySelector('[data-step="account"] [data-summary]').textContent = s.connected ? `${s.pathao_username} · ${s.pathao_env === 'sandbox' ? 'Test (sandbox)' : 'Live'}` : 'Client ID, secret, merchant email and password';
+    document.querySelector('[data-step="store"] [data-summary]').textContent = s.pathao_store_id ? `${s.pathao_store_name || 'Store #' + s.pathao_store_id} · riders collect parcels here` : 'Where riders pick up your parcels';
+    document.querySelector('[data-step="webhook"] [data-summary]').innerHTML = webhookLive() ? '<span class="live" style="margin:0"><i></i>Live — statuses update instantly</span>' : 'Pathao tells ShipBridge the moment a parcel moves';
     $$('#env-seg button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.env === (state.envDraft || s.pathao_env))));
-    show($('wh-live'), webhookLive());
     const wh = state.boot.pathaoWebhook || {};
     $('wh-state').innerHTML = wh.live ? '<span class="ok-line"><span class="live" style="margin:0"><i></i></span>Connected — delivery status updates the moment Pathao reports it.</span>'
-      : wh.secret ? '<span class="wait-line">Secret saved. Waiting for the first update from Pathao — paste the Callback URL and secret in your Pathao panel.</span>' : '';
+      : wh.secret ? '<span class="wait-line">Secret saved. Waiting for the first update from Pathao.</span>' : '';
 
     const miss = (state.boot.permissions && state.boot.permissions.missing) || [];
     const sync = s.sync_fulfillment !== false;
@@ -471,9 +505,11 @@
     if (document.activeElement !== $('default_note')) setVal('default_note', s.default_note);
   }
   function gotoSection(sec) {
-    state.settingsTab = 'couriers'; state.detailOpen = true; state.section = sec;
+    state.settingsTab = 'couriers';
+    state.section = sec === 'defaults' ? null : sec;
     fillAccount();
     if (state.page !== 'couriers') navigate('/couriers'); else renderCouriers();
+    if (sec === 'defaults') setTimeout(() => { const el = document.querySelector('.cx-rules'); if (el) el.scrollIntoView({ behavior: 'smooth' }); }, 50);
   }
   function fillAccount() {
     const s = S();
@@ -505,7 +541,7 @@
     apply(await api('/settings', { method: 'POST', body }));
     const test = await loadStores(S().pathao_store_id);
     toast(S().pathao_store_id ? 'Pathao connected' : `Connected — now choose your pickup store (${test.stores.length} found)`);
-    state.section = S().pathao_store_id ? 'webhook' : 'store';
+    state.section = undefined;
     state.envDraft = null;
     fillAccount(); renderAll();
   }
@@ -571,55 +607,11 @@
       : `<p class="meta">No paid plans yet. Charges appear on your <a href="${esc(b.shopifyBillingUrl)}" target="_top">Shopify bill</a>.</p>`;
   }
 
-  // ---------------- support page ----------------
-  async function loadSupport() {
-    renderChecks();
-    try {
-      state.support = await api('/support');
-      const c = state.support.contact || {};
-      $('contact-line').innerHTML = `We reply by email, usually within one working day${c.email ? ` Or write to <a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : ''}${c.whatsapp ? ` · WhatsApp <a href="https://wa.me/${esc(String(c.whatsapp).replace(/\D/g, ''))}" target="_blank" rel="noopener">${esc(c.whatsapp)}</a>` : ''}.`;
-      renderTickets();
-    } catch (e) { toast(e.message, true); }
-    if (!state.checks) runChecks();
-  }
-  function renderTickets() {
-    const t = (state.support && state.support.tickets) || [];
-    $('tickets').innerHTML = t.length ? `<div class="d-label" style="margin-top:8px">Your messages</div>${t.map((x) => `<div class="tk"><b>${esc({ setup: 'Setup & connection', orders: 'Sending orders', delivery: 'Delivery status', billing: 'Billing', other: 'Something else' }[x.topic] || x.topic)}</b>${x.orderName ? ` · ${esc(x.orderName)}` : ''}
-      <span class="sub">${esc(dateOnly(x.createdAt))} · ${x.status === 'open' ? 'Waiting for reply' : esc(x.status)}</span><div class="ellip">${esc(x.message)}</div></div>`).join('')}` : '';
-  }
-  const ICON = { ok: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', warn: '<path d="M12 7v6M12 17h.01"/>', bad: '<path d="M7 7l10 10M17 7L7 17"/>', wait: '<path d="M12 7v5l3 2"/>' };
-  function renderChecks() {
-    const s = S(), c = state.checks || {};
-    const items = [
-      ['ok', 'Connected to Shopify', `${esc(state.boot.shop)}`],
-      s.connected ? (c.pathao ? [c.pathao.ok ? 'ok' : 'bad', 'Pathao login', c.pathao.ok ? `${c.pathao.stores} store${c.pathao.stores === 1 ? '' : 's'} found` : `${esc(c.pathao.error)} · <a href="/couriers" data-link>Fix in Couriers</a>`] : ['wait', 'Pathao login', 'Checking…'])
-        : ['bad', 'Pathao account', 'Not connected · <a href="/couriers" data-link>Connect now</a>'],
-      s.pathao_store_id ? ['ok', 'Pickup store', esc(s.pathao_store_name || 'Store #' + s.pathao_store_id)] : ['warn', 'Pickup store', 'Not chosen · <a href="/couriers" data-link>Choose store</a>'],
-      webhookLive() ? ['ok', 'Live delivery updates', 'Pathao is sending updates'] : ['warn', 'Live delivery updates', 'Not receiving updates yet · <a href="/couriers" data-link>Set up</a>'],
-      state.boot.webhooks && state.boot.webhooks.ok === false ? ['bad', 'New order notifications', esc(state.boot.webhooks.error)] : ['ok', 'New order notifications', 'Shopify sends new orders to ShipBridge'],
-      s.sync_fulfillment === false ? ['wait', 'Shopify order updates', 'Turned off'] : permMissing() ? ['warn', 'Shopify order updates', 'Needs your permission · <a href="/couriers" data-link>See how</a>'] : ['ok', 'Shopify order updates', 'Allowed'],
-      s.auto_send ? ['ok', 'Auto-send', `On${s.hold_risky !== false ? ' · high-risk orders are held' : ''}`] : ['wait', 'Auto-send', 'Off — orders are sent by hand'],
-      (() => { const u = state.boot.usage; return u.limit && u.used >= u.limit ? ['bad', 'Plan', `Limit reached (${u.used}/${u.limit}) · <a href="/billing" data-link>Upgrade</a>`] : ['ok', 'Plan', u.limit ? `${u.used} of ${u.limit} orders used` : 'Unlimited orders']; })(),
-    ];
-    $('checks').innerHTML = items.map(([k, t, sub]) => `<li><span class="ck ${k}"><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg></span><div><b>${t}</b><div class="sub">${sub}</div></div></li>`).join('');
-  }
-  async function runChecks() {
-    state.checks = {};
-    renderChecks();
-    if (S().connected) {
-      try { const t = await api('/pathao/test', { method: 'POST' }); state.checks.pathao = t.ok ? { ok: true, stores: t.stores.length } : { ok: false, error: t.error }; }
-      catch (e) { state.checks.pathao = { ok: false, error: e.message }; }
-    }
-    await refreshBoot();
-    renderChecks();
-  }
-
   // ---------------- render all ----------------
   function renderAll() {
     renderBanners();
     if (state.loaded) renderOrders(); else renderHeader();
     renderCouriers();
-    if (state.page === 'support') renderChecks();
   }
   async function refreshBoot() { state.boot = await api('/bootstrap'); renderAll(); }
 
@@ -634,11 +626,9 @@
     // dashboard
     const goto = t.closest('[data-goto]');
     if (goto && !goto.disabled) { gotoSection(goto.dataset.goto); return; }
-    if (t.closest('#setup-toggle')) { const c = $('setup').classList.toggle('collapsed'); $('setup-toggle').setAttribute('aria-expanded', String(!c)); return; }
+    if (t.closest('#setup-toggle')) { const c = $('setup').classList.toggle('collapsed'); $('setup-toggle').setAttribute('aria-expanded', String(!c)); document.querySelector('.setup-cta').textContent = c ? 'Show steps' : 'Hide steps'; return; }
     const stage = t.closest('[data-stage]');
-    if (stage) { state.stage = state.stage === stage.dataset.stage ? null : stage.dataset.stage; renderOrders(); return; }
-    const grp = t.closest('[data-group]');
-    if (grp) { state.group = grp.dataset.group; state.stage = null; renderOrders(); return; }
+    if (stage) { state.stage = stage.dataset.stage || null; renderOrders(); return; }
     const rk = t.closest('[data-risk]');
     if (rk) { state.risk = rk.dataset.risk; renderOrders(); return; }
     if (t.closest('[data-close]') || t.closest('#drawer-bg')) { closeDetail(); return; }
@@ -660,13 +650,11 @@
     if (pick && !pick.disabled) { const ids = state.menuFor || []; closeMenu(); try { await sendOrders(ids, pick.dataset.pick); } catch (e) { toast(e.message, true); } return; }
     if (t.closest('#bulk-clear')) { state.selected.clear(); renderOrders(); return; }
 
-    // settings
-    const stab = t.closest('.settings-tabs button');
-    if (stab) { state.settingsTab = stab.dataset.tab; state.detailOpen = false; renderCouriers(); return; }
-    const sec = t.closest('.detail-nav [data-section]');
-    if (sec) { state.section = sec.dataset.section; fillAccount(); renderCouriers(); return; }
-    if (t.closest('#back-couriers')) { ev.preventDefault(); state.detailOpen = false; renderCouriers(); return; }
-    if (t.closest('[data-reset]')) { fillAccount(); toast('Changes discarded'); return; }
+    // couriers
+    const cv = t.closest('[data-cview]');
+    if (cv) { state.settingsTab = cv.dataset.cview === 'sms' ? 'sms' : 'couriers'; renderCouriers(); return; }
+    const ts = t.closest('[data-toggle-step]');
+    if (ts) { const k = ts.dataset.toggleStep; const isOpen = document.querySelector(`.step[data-step="${k}"]`).classList.contains('open'); state.section = isOpen ? null : k; if (!isOpen) fillAccount(); renderCouriers(); return; }
     const env = t.closest('[data-env]');
     if (env) { state.envDraft = env.dataset.env; renderCouriers(); return; }
     const sp = t.closest('[data-speed]');
@@ -684,7 +672,7 @@
     const per = t.closest('[data-period]');
     if (per) { state.period = per.dataset.period; renderBilling(); return; }
 
-    const b = t.closest('#send-new,#bulk-default,#reload-orders,#save-connection,#save-webhook,#run-checks,[data-plan],[data-downgrade]');
+    const b = t.closest('#send-new,#bulk-default,#reload-orders,#save-connection,#save-webhook,[data-plan],[data-downgrade]');
     if (!b) return;
     try {
       if (b.id === 'send-new') {
@@ -700,7 +688,6 @@
         apply(await api('/settings', { method: 'POST', body: { webhook_secret: secret } }));
         state.boot.pathaoWebhook.secret = secret; toast('Secret key saved'); renderCouriers();
       });
-      if (b.id === 'run-checks') return await busy(b, runChecks);
       if (b.dataset.plan) return await busy(b, async () => { const r = await api('/billing/subscribe', { method: 'POST', body: { plan: b.dataset.plan, interval: state.period } }); window.open(r.confirmationUrl, '_top'); });
       if (b.dataset.downgrade !== undefined) {
         if (!confirm('Cancel your paid plan and switch to Free (50 orders a month)?')) return;
@@ -729,18 +716,6 @@
     }, 700);
   }));
   $('search').addEventListener('input', (e) => { state.search = e.target.value; renderRows(); });
-  $('ticket-form').addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    const btn = $('send-ticket');
-    try {
-      await busy(btn, async () => {
-        await api('/support', { method: 'POST', body: { topic: $('t_topic').value, email: $('t_email').value.trim(), order_name: $('t_order').value.trim(), message: $('t_message').value.trim() } });
-        $('t_message').value = ''; $('t_order').value = '';
-        toast('Message sent — we will reply by email');
-        state.support = await api('/support'); renderTickets();
-      });
-    } catch (e) { toast(e.message, true); }
-  });
   window.addEventListener('resize', closeMenu);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMenu(); closeDetail(); } });
   // Webhook updates land in the database instantly; pull them into the screen every 30s.
@@ -761,7 +736,6 @@
     catch (e) { $('banners').innerHTML = `<div class="banner bad"><b>Could not load ShipBridge.</b>&nbsp;${esc(e.message)}</div>`; return; }
     if (state.page === 'orders') loadOrders();
     if (state.page === 'billing') loadBilling();
-    if (state.page === 'support') loadSupport();
   }
   start();
 })();
