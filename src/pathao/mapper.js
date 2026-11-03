@@ -132,7 +132,7 @@ function buildPathaoOrder(order, settings) {
     recipient_address: clip(address, 220),
     delivery_type: Number(settings.delivery_type) || 48,
     item_type: Number(settings.item_type) || 2,
-    special_instruction: clip(order.note, 255),
+    special_instruction: clip(order.note || settings.default_note || '', 255),
     item_quantity: quantity,
     item_weight: Number(weight.toFixed(2)),
     item_description: clip(description || `Shopify order ${order.name}`, 255),

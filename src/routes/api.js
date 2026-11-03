@@ -58,8 +58,11 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, 
       skip_tag: s.skip_tag,
       only_cod: s.only_cod,
       tag_orders: s.tag_orders,
+      default_note: s.default_note || '',
+      default_courier: s.default_courier || 'pathao',
       connected: pathao.hasCredentials(s),
       sms: {
+        available: Boolean(config.smsFeature),
         enabled: s.sms_enabled,
         configured: Boolean(s.sms_token_enc && s.sms_sid),
         has_token: Boolean(s.sms_token_enc),
@@ -146,6 +149,19 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, 
     if (b.skip_tag !== undefined) f.skip_tag = String(b.skip_tag).trim().slice(0, 40);
     if (b.only_cod !== undefined) f.only_cod = Boolean(b.only_cod);
     if (b.tag_orders !== undefined) f.tag_orders = Boolean(b.tag_orders);
+    // ---- Pathao webhook secret (merchant can set their own) ----
+    if (b.webhook_secret !== undefined) {
+      const w = String(b.webhook_secret).trim();
+      if (w.length < 8 || w.length > 100 || /\s/.test(w)) throw Object.assign(new Error('Secret key must be 8–100 characters, without spaces'), { status: 400 });
+      f.webhook_secret = w;
+    }
+    if (b.default_note !== undefined) {
+      const n = String(b.default_note).trim();
+      if (n.length > 200) throw Object.assign(new Error('Default note is too long (max 200 characters)'), { status: 400 });
+      if (/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(n)) throw Object.assign(new Error('Default note cannot contain emoji'), { status: 400 });
+      f.default_note = n || null;
+    }
+
     // ---- SMS ----
     if (b.sms_token) f.sms_token_enc = cipher.encrypt(String(b.sms_token).trim());
     if (b.sms_sid !== undefined) f.sms_sid = String(b.sms_sid).trim() || null;
@@ -159,6 +175,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, 
       f.sms_template = t || null;
     }
     if (b.sms_enabled !== undefined) {
+      if (b.sms_enabled && !config.smsFeature) throw Object.assign(new Error('SMS notifications are coming soon'), { status: 400 });
       f.sms_enabled = Boolean(b.sms_enabled);
       const hasToken = f.sms_token_enc || current.sms_token_enc;
       const hasSid = f.sms_sid !== undefined ? f.sms_sid : current.sms_sid;
@@ -196,7 +213,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, 
 
   // ---- orders ----
   router.get('/orders', wrap(async (req) => {
-    const orders = await admin.listRecentOrders(req.shop, req.opts, 30);
+    const orders = await admin.listRecentOrders(req.shop, req.opts, 50);
     const ids = orders.map((o) => String(o.legacyResourceId));
     const [shipments, smsRows] = await Promise.all([db.shipmentsForOrders(req.shop, ids), db.smsForOrders(req.shop, ids)]);
     const byId = new Map(shipments.map((s) => [s.shopify_order_id, s]));
@@ -210,14 +227,19 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, 
           name: n.name,
           createdAt: n.createdAt,
           customer: n.shipping.name || n.fallbackName || '',
+          phone: n.shipping.phone || n.fallbackPhones.find(Boolean) || '',
           city: n.shipping.city || '',
           total: n.total,
           currency: o.totalPriceSet?.shopMoney?.currencyCode || '',
           cod: n.outstanding != null ? n.outstanding : n.paid ? 0 : n.total,
+          financial: o.displayFinancialStatus || null,
+          fulfillment: o.displayFulfillmentStatus || null,
+          items: n.items.map((i) => `${i.title} x${i.quantity}`).join(', '),
+          itemCount: n.items.reduce((t, i) => t + i.quantity, 0),
           cancelled: n.cancelled,
           sms: smsById.has(n.id) ? { status: smsById.get(n.id).status, error: smsById.get(n.id).error } : null,
           shipment: s ? {
-            status: s.status, consignmentId: s.consignment_id, pathaoStatus: s.pathao_status,
+            status: s.status, courier: s.courier || 'pathao', consignmentId: s.consignment_id, pathaoStatus: s.pathao_status,
             error: s.error, deliveryFee: s.delivery_fee == null ? null : Number(s.delivery_fee),
           } : null,
         };
@@ -228,6 +250,8 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, 
   router.post('/orders/send', wrap(async (req) => {
     const ids = [...new Set((req.body?.ids || []).map(String))].filter((id) => /^\d+$/.test(id)).slice(0, 50);
     if (!ids.length) throw Object.assign(new Error('No orders selected'), { status: 400 });
+    const courier = req.body?.courier || (await db.getSettings(req.shop)).default_courier || 'pathao';
+    if (!AVAILABLE.includes(courier)) throw Object.assign(new Error(`${courier} is not available yet`), { status: 400 });
     const settings = await db.getSettings(req.shop);
     if (!pathao.hasCredentials(settings)) throw Object.assign(new Error('Connect your Pathao account in Settings first'), { status: 400 });
 

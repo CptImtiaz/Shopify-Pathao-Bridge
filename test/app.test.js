@@ -368,6 +368,41 @@ test('courier registry, monthly stats, SMS history and page routes', async (t) =
   for (const p of ['/couriers', '/sms', '/plans']) {
     const res = await fetch(`${a.base}${p}?shop=${SHOP}&host=x&embedded=1`);
     assert.equal(res.status, 200, p);
-    assert.match(await res.text(), /data-page="sms"/);
+    assert.match(await res.text(), /id="sms-tab"/);
   }
+});
+
+test('SMS coming soon: cannot be enabled and never sends; webhook secret + default note + courier assignment', async (t) => {
+  const a = await startApp({ smsFeature: false });
+  t.after(() => a.close());
+  let boot = (await a.api('/bootstrap')).data;
+  assert.equal(boot.settings.sms.available, false);
+  await a.api('/settings', { method: 'POST', body: { sms_token: 't', sms_sid: 'S' } });
+  const r = await a.api('/settings', { method: 'POST', body: { sms_enabled: true } });
+  assert.equal(r.status, 400);
+  assert.match(r.data.error, /coming soon/);
+  // Even if enabled in the DB, the webhook does not send SMS while the feature is off.
+  await a.db.updateSettings(SHOP, { sms_enabled: true, sms_since: new Date(Date.now() - 60000) });
+  await a.webhook('/webhooks/orders/create', { id: 61, name: '#61', created_at: new Date().toISOString(), source_name: 'web', total_price: '1', tags: '',
+    shipping_address: { name: 'A', phone: '01712345678', address1: 'House 1, Road 2, Banani' }, line_items: [] }, 'orders/create');
+  await a.settle();
+  assert.equal(a.fake.state.sms.length, 0);
+
+  // merchant-chosen webhook secret
+  assert.equal((await a.api('/settings', { method: 'POST', body: { webhook_secret: 'short' } })).status, 400);
+  await a.api('/settings', { method: 'POST', body: { webhook_secret: 'my-pathao-secret-123' } });
+  boot = (await a.api('/bootstrap')).data;
+  assert.equal(boot.pathaoWebhook.secret, 'my-pathao-secret-123');
+
+  // default note used when the order has none; courier assignment validated
+  await a.api('/settings', { method: 'POST', body: { pathao_client_id: 'c', pathao_client_secret: 's', pathao_username: 'u', pathao_password: 'p', pathao_store_id: 77, default_note: 'Handle with care' } });
+  a.fake.state.orders['62'] = gqlOrder(62, { note: '' });
+  assert.equal((await a.api('/orders/send', { method: 'POST', body: { ids: ['62'], courier: 'redx' } })).status, 400);
+  const ok = await a.api('/orders/send', { method: 'POST', body: { ids: ['62'], courier: 'pathao' } });
+  assert.equal(ok.data.results[0].ok, true);
+  const sent = JSON.parse(a.fake.calls.filter((c) => c.url.endsWith('/aladdin/api/v1/orders')).pop().body);
+  assert.equal(sent.special_instruction, 'Handle with care');
+  const list = (await a.api('/orders')).data.orders;
+  assert.equal(list[0].shipment.courier, 'pathao');
+  assert.ok('fulfillment' in list[0] && 'items' in list[0]);
 });

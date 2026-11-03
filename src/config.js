@@ -42,6 +42,8 @@ function load() {
     pathaoProductionUrl: process.env.PATHAO_BASE_URL || 'https://api-hermes.pathao.com',
     pathaoSandboxUrl: process.env.PATHAO_SANDBOX_URL || 'https://courier-api-sandbox.pathao.com',
     // Value Pathao's merchant panel expects back when you register a webhook.
+    // SMS is 'coming soon' in the UI; set SMS_FEATURE=on to enable it.
+    smsFeature: bool('SMS_FEATURE', false),
     smsApiUrl: process.env.SSL_API_URL || 'https://smsplus.sslwireless.com/api/v3/send-sms/dynamic',
     pathaoIntegrationSecret: process.env.PATHAO_WEBHOOK_INTEGRATION_SECRET || 'f3992ecc-59da-4cbe-a049-a13da2018d51',
   };
