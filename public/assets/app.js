@@ -62,7 +62,6 @@
   function renderBanners() {
     const b = state.boot, s = b.settings, out = [];
     if (b.webhooks && b.webhooks.ok === false) out.push(`<s-banner tone="critical" heading="New orders can't reach the app">Shopify refused to set up order notifications: ${esc(b.webhooks.error)}</s-banner>`);
-    if (permMissing() && s.sync_fulfillment !== false) out.push('<s-banner tone="warning" heading="Approve new Shopify permissions">ShipBridge can now mark orders fulfilled and update delivery status in Shopify. Shopify needs your approval first. <a class="link" href="#" data-perm>Review permissions</a></s-banner>');
     if (s.pathao_env === 'sandbox') out.push('<s-banner tone="warning">Pathao is in sandbox mode: bookings go to the test system, not real couriers.</s-banner>');
     if (b.usage.limit && b.usage.used >= b.usage.limit) out.push(`<s-banner tone="critical" heading="Monthly limit reached">You've used all ${b.usage.limit} orders on the Free plan. <a class="link" href="/plans" data-link>Upgrade to keep shipping</a>.</s-banner>`);
     $('banners').innerHTML = out.join('');
@@ -441,8 +440,7 @@
       try { await shopify.scopes.request(missing); } catch (e) { /* fall through to reload */ }
     }
     await refreshBoot();
-    if (permMissing()) toast('Still waiting for approval — reopen the app from Shopify admin and accept the update', true);
-    else toast('Permissions approved');
+    if (!permMissing()) toast('Permissions approved');
   }
 
   // ---------------- plans ----------------
