@@ -271,3 +271,8 @@ a.link { color: var(--accent); text-decoration: none; font-weight: 600; }
 .sync-flow { background: var(--soft); border-radius: 12px; padding: 12px 14px; }
 .sync-flow .label { font-weight: 600; margin-bottom: 4px; }
 .sync-flow ol { margin: 4px 0 6px; padding-left: 18px; color: #374151; display: grid; gap: 4px; }
+
+.perm-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 12px; padding: 12px 14px; font-size: 13px; color: #78350f; }
+.perm-box p { margin: 4px 0 6px; }
+.perm-box ol { margin: 0 0 10px; padding-left: 18px; display: grid; gap: 4px; }
+.perm-box code { background: #fef3c7; border-radius: 5px; padding: 0 5px; font-size: 12px; }

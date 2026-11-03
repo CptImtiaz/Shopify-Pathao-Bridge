@@ -352,8 +352,18 @@
     const pill = $('pathao-status');
     pill.textContent = ready ? 'Configured' : s.connected ? 'Choose a store' : 'Not configured';
     pill.className = `status-pill ${ready ? 'ok' : s.connected ? 'warn' : ''}`;
+    const miss = (state.boot.permissions && state.boot.permissions.missing) || [];
     $('perm-note').innerHTML = permMissing()
-      ? '<span class="wh-wait">Shopify permission needed: <a class="link" href="#" data-perm>approve fulfillment access</a>. Until then bookings still work, but Shopify won\'t be updated.</span>'
+      ? `<div class="perm-box">
+          <b>Shopify access needed</b>
+          <p>Bookings still work, but Shopify won't be marked fulfilled until this store grants fulfillment access.</p>
+          <ol>
+            <li>In the Shopify <b>Dev Dashboard</b>, open ShipBridge → <b>Versions</b> → <b>Create version</b>.</li>
+            <li>Add these scopes to <b>Access → Scopes</b>: <code>${miss.map(esc).join('</code> <code>')}</code> and the matching <code>read_</code> ones, then <b>Release</b>.</li>
+            <li>Reopen ShipBridge from your Shopify admin and click <b>Update</b> when Shopify asks.</li>
+          </ol>
+          <button class="btn sm" data-perm>Check again</button>
+        </div>`
       : '<span class="live big"><i></i>Shopify access approved.</span>';
     const wh = state.boot.pathaoWebhook || {};
     $('wh-state').innerHTML = wh.live
@@ -437,10 +447,10 @@
   async function requestPermissions() {
     const missing = state.boot.permissions.missing;
     if (window.shopify && shopify.scopes && shopify.scopes.request) {
-      try { await shopify.scopes.request(missing); } catch (e) { /* fall through to reload */ }
+      try { await shopify.scopes.request(missing); } catch (e) { /* not offered by this app version yet */ }
     }
     await refreshBoot();
-    if (!permMissing()) toast('Permissions approved');
+    toast(permMissing() ? 'Not approved yet — release the new app version first' : 'Shopify access approved');
   }
 
   // ---------------- plans ----------------
