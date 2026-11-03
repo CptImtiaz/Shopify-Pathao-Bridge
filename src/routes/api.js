@@ -110,7 +110,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, 
       stats,
       couriers: listCouriers(settings, { pathao }),
       plans: Object.values(PLANS),
-      pathaoWebhook: { url: `${config.appUrl}/pathao/webhook/${req.shop}`, secret: settings.webhook_secret },
+      pathaoWebhook: { url: `${config.appUrl}/pathao/webhook/${req.shop}`, secret: settings.webhook_secret, lastAt: settings.pathao_webhook_at || null, live: Boolean(settings.webhook_secret && settings.pathao_webhook_at) },
       webhooks,
     };
   }));
@@ -254,7 +254,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, notifier, 
           sms: smsById.has(n.id) ? { status: smsById.get(n.id).status, error: smsById.get(n.id).error } : null,
           shipment: s ? {
             status: s.status, courier: s.courier || 'pathao', consignmentId: s.consignment_id, pathaoStatus: s.pathao_status,
-            error: s.error, deliveryFee: s.delivery_fee == null ? null : Number(s.delivery_fee),
+            error: s.error, deliveryFee: s.delivery_fee == null ? null : Number(s.delivery_fee), updatedAt: s.updated_at,
           } : null,
         };
       }),

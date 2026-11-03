@@ -81,6 +81,7 @@
       { done: s.connected, html: `Add a courier to start assigning deliveries <span class="step-actions"><button class="btn sm" data-open-courier="pathao">Add Pathao</button>${others.map((c) => `<button class="btn sm" disabled title="Coming soon">Add ${esc(c.name)}</button>`).join('')}</span>` },
       { done: Boolean(s.pathao_store_id), html: 'Choose the Pathao store parcels are picked up from <span class="step-actions"><button class="btn sm" data-open-courier="pathao">Choose store</button></span>' },
       { done: s.auto_send, html: 'Send new orders to Pathao automatically <span class="step-actions"><button class="btn sm" data-open-courier="pathao" data-sec="defaults">Turn on auto-send</button></span>' },
+      { done: webhookLive(), html: 'Connect the Pathao webhook so delivery status updates automatically <span class="step-actions"><button class="btn sm" data-open-courier="pathao" data-sec="webhook">Set up webhook</button></span>' },
     ];
     const done = steps.filter((x) => x.done).length;
     show($('setup'), done < steps.length);
@@ -100,7 +101,8 @@
     if (/deliver/.test(ps) && !/fail/.test(ps)) return 'delivered';
     if (/return/.test(ps)) return 'returned';
     if (/cancel/.test(ps)) return 'cancelled';
-    if (/transit|picked|assigned|on.?the.?way|hub|out.?for/.test(ps)) return 'shipping';
+    if (/pickup|pending|request/.test(ps) && !/picked/.test(ps)) return 'pending';
+    if (/transit|picked|hub|on.?the.?way|out.?for|fail|hold|exchange/.test(ps)) return 'shipping';
     return 'pending';
   }
   const TABS = [['all', 'All'], ['new', 'New'], ['pending', 'Pending'], ['shipping', 'Shipping'], ['delivered', 'Delivered'], ['returned', 'Returned'], ['cancelled', 'Cancelled'], ['failed', 'Failed']];
@@ -108,6 +110,27 @@
     new: ['Not assigned', ''], pending: ['Pending pickup', 'yellow'], shipping: ['In transit', 'blue'], delivered: ['Delivered', 'green'],
     returned: ['Returned', 'red'], cancelled: ['Cancelled', ''], failed: ['Failed', 'red'],
   };
+  // Courier status text (from the Pathao webhook) → friendly label.
+  function courierLabel(raw) {
+    const s = String(raw || '').toLowerCase().replace(/^order\./, '');
+    const map = [
+      [/partial/, 'Partially delivered'], [/paid.?return/, 'Paid return'], [/deliver.*fail|fail.*deliver/, 'Delivery failed'],
+      [/deliver/, 'Delivered'], [/return/, 'Returned'], [/pickup.?fail/, 'Pickup failed'], [/pickup.?cancel|cancel/, 'Cancelled'],
+      [/assigned.?for.?pickup/, 'Rider assigned'], [/pickup.?request|^pending$|^created$/, 'Pending pickup'], [/picked/, 'Picked up'],
+      [/last.?mile|hub/, 'At delivery hub'], [/transit/, 'In transit'], [/out.?for/, 'Out for delivery'], [/hold/, 'On hold'], [/exchange/, 'Exchange'],
+    ];
+    const hit = map.find(([re]) => re.test(s));
+    return hit ? hit[1] : (s ? s.replace(/[-_.]/g, ' ').replace(/^./, (c) => c.toUpperCase()) : 'Pending pickup');
+  }
+  function ago(iso) {
+    if (!iso) return '';
+    const m = Math.round((Date.now() - new Date(iso)) / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m}m ago`;
+    const h = Math.round(m / 60);
+    return h < 24 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
+  }
+  const webhookLive = () => Boolean(state.boot && state.boot.pathaoWebhook && state.boot.pathaoWebhook.live);
   const canAssign = (o) => !o.cancelled && (!o.shipment || ['failed', 'skipped'].includes(o.shipment.status));
 
   function renderTabs() {
@@ -130,8 +153,10 @@
     return '<span class="badge yellow">Unfulfilled</span>';
   }
   function statusCell(o) {
-    const k = bucket(o), [label, tone] = STATUS_BADGE[k];
+    const k = bucket(o);
     const s = o.shipment;
+    const tone = STATUS_BADGE[k][1];
+    const label = s && s.status === 'sent' ? courierLabel(s.pathaoStatus) : STATUS_BADGE[k][0];
     let extra = '';
     if (s && s.status === 'sent' && s.consignmentId) extra = `<span class="sub">${esc(s.consignmentId)}${s.deliveryFee != null ? ` · ৳${esc(s.deliveryFee)}` : ''}</span>`;
     if (s && (s.status === 'failed' || s.status === 'skipped')) extra = `<span class="err">${esc(s.error)}</span>`;
@@ -141,7 +166,9 @@
     if (canAssign(o)) return `<button class="assign" data-assign="${esc(o.id)}"><svg viewBox="0 0 24 24"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="7" cy="17.5" r="1.6" fill="currentColor"/><circle cx="17" cy="17.5" r="1.6" fill="currentColor"/></svg>${o.shipment ? 'Retry' : 'Assign Courier'}</button>`;
     if (o.shipment && o.shipment.status === 'sent') {
       const c = courierInfo(o.shipment.courier || 'pathao');
-      return `<span class="courier-chip">${mono(c)}${esc(c.name)}</span><button class="link-btn" data-track="${esc(o.id)}">Update status</button>`;
+      const when = ago(o.shipment.updatedAt);
+      if (webhookLive()) return `<span class="courier-chip">${mono(c)}${esc(c.name)}</span><span class="live" title="Status updates automatically from the Pathao webhook"><i></i>Auto-updating${when ? ` · ${esc(when)}` : ''}</span>`;
+      return `<span class="courier-chip">${mono(c)}${esc(c.name)}<button class="icon-mini" data-track="${esc(o.id)}" title="Webhook not connected — refresh this status now" aria-label="Refresh status"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></span><span class="sub">${when ? `Updated ${esc(when)}` : ''}</span>`;
     }
     if (o.shipment && o.shipment.status === 'processing') return '<span class="sub">Sending…</span>';
     return '<span class="sub">—</span>';
@@ -321,6 +348,12 @@
     const pill = $('pathao-status');
     pill.textContent = ready ? 'Configured' : s.connected ? 'Choose a store' : 'Not configured';
     pill.className = `status-pill ${ready ? 'ok' : s.connected ? 'warn' : ''}`;
+    const wh = state.boot.pathaoWebhook || {};
+    $('wh-state').innerHTML = wh.live
+      ? `<span class="live big"><i></i>Connected — last update from Pathao ${esc(ago(wh.lastAt))}. Delivery statuses update automatically.</span>`
+      : wh.secret
+        ? '<span class="wh-wait">Secret saved. Waiting for the first update from Pathao — paste the Callback URL and secret in your Pathao merchant panel.</span>'
+        : '<span class="wh-wait">Not connected yet. Until it is, use the refresh icon next to each order to update its status.</span>';
     $$('.detail-nav button').forEach((b) => b.classList.toggle('active', b.dataset.section === state.section));
     $$('[data-section-panel]').forEach((p) => show(p, p.dataset.sectionPanel === state.section));
   }
@@ -475,6 +508,10 @@
   $('pathao_store_id').addEventListener('change', () => { if (state.boot && state.boot.settings.connected) saveStore().catch((e) => toast(e.message, true)); });
   $('search').addEventListener('input', (e) => { state.search = e.target.value; renderOrders(); });
   window.addEventListener('resize', closeMenu);
+  // Pick up webhook status changes without clicking Refresh.
+  setInterval(() => {
+    if (document.visibilityState === 'visible' && state.page === 'dashboard' && state.loaded && !state.selected.size && $('courier-menu').hidden && $('fraud-pop').hidden) loadOrders();
+  }, 60000);
 
   async function start() {
     let embedded = true;

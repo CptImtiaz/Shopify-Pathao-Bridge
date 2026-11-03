@@ -255,3 +255,13 @@ a.link { color: var(--accent); text-decoration: none; font-weight: 600; }
 .grid td .sub, .o-name, .amount { white-space: nowrap; }
 .grid td .prod-t .sub { white-space: normal; }
 .grid td { padding: 12px 10px; }
+
+/* live status */
+.live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #15803d; margin-top: 4px; white-space: nowrap; }
+.live i { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 0 rgba(34,197,94,.5); animation: pulse 2s infinite; }
+.live.big { font-size: 13px; white-space: normal; background: #f0fdf4; border-radius: 10px; padding: 10px 12px; width: 100%; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,.5); } 70% { box-shadow: 0 0 0 6px rgba(34,197,94,0); } 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); } }
+.wh-wait { display: block; font-size: 13px; background: #fffbeb; color: #92400e; border-radius: 10px; padding: 10px 12px; }
+.icon-mini { width: 24px; height: 24px; display: inline-grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; margin-left: 2px; }
+.icon-mini:hover { background: #eef0f3; color: var(--ink); }
+.icon-mini svg { width: 14px; height: 14px; }

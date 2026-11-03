@@ -84,6 +84,7 @@ const SCHEMA = [
   `ALTER TABLE sms_log ADD COLUMN IF NOT EXISTS order_name TEXT`,
   `ALTER TABLE sms_log ADD COLUMN IF NOT EXISTS phone TEXT`,
   `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS phone TEXT`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS pathao_webhook_at TIMESTAMPTZ`,
   `CREATE INDEX IF NOT EXISTS shipments_shop_phone ON shipments (shop, phone)`,
 ];
 

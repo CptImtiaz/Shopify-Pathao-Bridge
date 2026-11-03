@@ -104,6 +104,7 @@ function makeWebhookRouter({ config, db, admin, shipping, notifier, log = consol
 
     const body = req.body || {};
     const event = String(body.event || '');
+    await db.updateSettings(shop, { pathao_webhook_at: new Date() }).catch(() => {});
     if (event === 'webhook_integration' || !body.consignment_id) return res.status(202).send('OK');
 
     const shipment = await db.findShipmentByConsignment(shop, body.consignment_id);

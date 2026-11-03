@@ -242,6 +242,7 @@ test('Pathao status webhook: secret enforced, integration handshake, delivered t
   const post = (body, sig) => fetch(a.base + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-PATHAO-Signature': sig }, body: JSON.stringify(body) });
 
   assert.equal((await post({ event: 'order.delivered', consignment_id: sh.consignment_id }, 'wrong')).status, 401);
+  assert.equal((await a.api('/bootstrap')).data.pathaoWebhook.live, false); // bad signature doesn't count
   const hs = await post({ event: 'webhook_integration' }, secret);
   assert.equal(hs.status, 202);
   assert.equal(hs.headers.get('x-pathao-merchant-webhook-integration-secret'), 'integration-uuid');
@@ -249,6 +250,10 @@ test('Pathao status webhook: secret enforced, integration handshake, delivered t
   assert.equal((await post({ event: 'order.delivered', consignment_id: sh.consignment_id }, secret)).status, 202);
   await a.settle();
   assert.equal((await a.db.getShipment(SHOP, 300)).pathao_status, 'delivered');
+  const wh = (await a.api('/bootstrap')).data.pathaoWebhook;
+  assert.equal(wh.live, true);
+  assert.ok(wh.lastAt);
+  assert.ok((await a.api('/orders')).data.orders.find((o) => o.id === '300').shipment.updatedAt);
   assert.ok(a.fake.calls.some((c) => c.body && c.body.includes('pathao-delivered')));
 });
 
