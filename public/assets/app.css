@@ -549,7 +549,9 @@ input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); c
 .hero-logo { height: 34px; width: auto; flex: none; }
 .hero-l { align-items: center; }
 .hero-l > div { border-left: 1px solid #e6e7ec; padding-left: 14px; }
-.pill-logo { width: 16px; height: 16px; border-radius: 50%; }
+.pill-logo.cmono { width: 18px; height: 18px; border-radius: 50%; font-size: 10px; box-shadow: 0 0 0 2px #e8f8ef; flex: none; }
+.pill-logos { display: inline-flex; align-items: center; }
+.pill-logos .pill-logo + .pill-logo { margin-left: -5px; }
 .hero-mono.cmono { width: 48px; height: 48px; border-radius: 12px; font-size: 20px; flex: none; }
 
 /* ---- Hold tab, notes, dashboard auto-send ---- */

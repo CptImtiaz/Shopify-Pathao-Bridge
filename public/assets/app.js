@@ -84,7 +84,6 @@
     const k = stageOf(o).key;
     return k === 'problems' ? 'returned' : k;
   }
-  const IN_ALL = ['new', 'booked', 'picked', 'onway', 'delivered', 'returned'];
   const courierReady = (key) => (key === 'steadfast' ? sfConnected() : Boolean(S().connected && S().pathao_store_id));
   const permMissing = () => Boolean(state.boot && state.boot.permissions && state.boot.permissions.missing && state.boot.permissions.missing.length);
   const S = () => state.boot.settings;
@@ -235,7 +234,14 @@
     renderAutoBox();
     const u = state.boot.usage;
     $('usage-line').textContent = u.limit ? `Orders: ${u.used} / ${u.limit} this month` : `Orders: ${u.used} this month · Unlimited`;
-    show($('live-pill'), webhookLive());
+    const live = (state.boot.couriers || []).filter((c) => c.available && webhookLive(c.key));
+    const pill = $('live-pill');
+    show(pill, live.length > 0);
+    if (live.length) {
+      const logos = `<span class="pill-logos">${live.map((c) => cmono(c, 'pill-logo')).join('')}</span>`;
+      pill.innerHTML = `${logos}<i></i>${live.length === 1 ? `${esc(live[0].name)} live` : `${live.length} couriers live`}`;
+      pill.title = live.map((c) => `${c.name} live`).join(' · ') + ' — delivery status updates instantly';
+    }
     const steps = setupSteps(), done = steps.filter((x) => x.done).length;
     show($('setup'), done < steps.length);
     const next = steps.find((x) => !x.done);
@@ -288,7 +294,7 @@
   ];
   function renderPipeline() {
     const c = {}; state.orders.forEach((o) => { const k = bucketOf(o); c[k] = (c[k] || 0) + 1; });
-    const tabs = [['', 'All', IN_ALL.reduce((t, k) => t + (c[k] || 0), 0), '']].concat(STAGES.map(([k, l, tone]) => [k, l, c[k] || 0, tone]));
+    const tabs = [['', 'All', state.orders.length, '']].concat(STAGES.map(([k, l, tone]) => [k, l, c[k] || 0, tone]));
     $('pipeline').innerHTML = tabs.map(([k, l, n, tone]) => `<button role="tab" class="${tone}" aria-selected="${(state.stage || '') === k}" data-stage="${k}"><span>${l}</span><b>${n}</b></button>`).join('');
   }
   const RISKS = [['any', 'All risk'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low'], ['safe', 'Safe'], ['pending', 'Checking']];
@@ -300,8 +306,8 @@
   }
   function visible() {
     const q = state.search.trim().toLowerCase();
-    // "All" = active orders; Hold, Errors and Cancelled have their own tabs.
-    return state.orders.filter((o) => (state.stage ? bucketOf(o) === state.stage : IN_ALL.includes(bucketOf(o)))
+    // "All" = every order, newest first (list is sorted by time on load); tabs narrow it down.
+    return state.orders.filter((o) => (!state.stage || bucketOf(o) === state.stage)
       && (state.risk === 'any' || levelOf(o) === state.risk)
       && (!q || `${o.name} ${o.customer} ${o.phone} ${o.city} ${o.shipment ? o.shipment.consignmentId : ''}`.toLowerCase().includes(q)));
   }
