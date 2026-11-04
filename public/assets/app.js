@@ -272,8 +272,8 @@
     const kpi = (cls, icon, label, value, foot) => `<div class="card kpi k-${cls}"><div class="kpi-top"><span class="k-icon"><svg viewBox="0 0 24 24" aria-hidden="true">${icon}</svg></span><span class="k-label">${label}</span></div><b class="k-value">${value}</b>${foot}</div>`;
     const way = st.onTheWay || 0;
     $('ov-kpis').innerHTML = [
-      kpi('total', '<path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7M12 11v10"/>', 'Total booked', st.sent,
-        `<span class="k-foot">${st.notSent ? `${st.notSent} not sent · ` : ''}${st.avgFee != null ? `avg fee ${taka(st.avgFee)}` : 'No fees yet'}</span>`),
+      kpi('total', '<path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7M12 11v10"/>', 'Total orders', st.sent + (st.notSent || 0),
+        `<span class="k-foot">${st.sent} booked${st.notSent ? ` · ${st.notSent} not sent` : ''}${st.avgFee != null ? ` · avg fee ${taka(st.avgFee)}` : ''}</span>`),
       kpi('way', '<path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.6"/><circle cx="17" cy="17.5" r="1.6"/>', 'In transit', way,
         `<span class="k-split"><i style="flex:${st.booked || 0}" class="s1"></i><i style="flex:${st.picked || 0}" class="s2"></i><i style="flex:${st.transit || 0}" class="s3"></i>${way ? '' : '<i style="flex:1" class="s0"></i>'}</span>
          <span class="k-foot">${st.booked} booked · ${st.picked} picked up · ${st.transit} on the road</span>`),
