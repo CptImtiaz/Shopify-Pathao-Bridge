@@ -15,6 +15,7 @@ const { listCouriers, AVAILABLE } = require('../couriers');
 function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillment = null, notifier, cipher, log = console }) {
   const router = express.Router();
   router.use(express.json({ limit: '200kb' }));
+  const webhooksChecked = new Set();
 
   // ---- auth middleware ----
   router.use(async (req, res, next) => {
@@ -121,14 +122,15 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
     if (!settings.webhook_secret) {
       settings = await db.updateSettings(req.shop, { webhook_secret: crypto.randomBytes(16).toString('hex') });
     }
-    const [{ plan, subscription }, webhooks] = await Promise.all([
-      syncPlan(req.shop, req.opts),
-      admin.ensureWebhooks(req.shop, req.opts).then(
-        (created) => { if (created.length) log.info(`[${req.shop}] registered webhooks: ${created.join(', ')}`); return { ok: true }; },
+    // Webhooks only need checking once per shop per server start, not on every page load.
+    const webhookCheck = webhooksChecked.has(req.shop)
+      ? Promise.resolve({ ok: true })
+      : admin.ensureWebhooks(req.shop, req.opts).then(
+        (created) => { webhooksChecked.add(req.shop); if (created.length) log.info(`[${req.shop}] registered webhooks: ${created.join(', ')}`); return { ok: true }; },
         (e) => { log.error(`[${req.shop}] webhook registration failed: ${e.message}`); return { ok: false, error: e.message }; }
-      ),
-    ]);
-    const [used, stats] = await Promise.all([db.countSentThisMonth(req.shop), db.monthStats(req.shop)]);
+      );
+    const [{ plan, subscription }, webhooks] = await Promise.all([syncPlan(req.shop, req.opts), webhookCheck]);
+    const [used, stats, permissions] = await Promise.all([db.countSentThisMonth(req.shop), db.monthStats(req.shop), currentPermissions(req)]);
     return {
       shop: req.shop,
       settings: publicSettings(settings),
@@ -140,7 +142,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
       plans: Object.values(PLANS),
       pathaoWebhook: { url: `${config.appUrl}/pathao/webhook/${req.shop}`, secret: settings.webhook_secret, lastAt: settings.pathao_webhook_at || null, live: Boolean(settings.webhook_secret && settings.pathao_webhook_at) },
       webhooks,
-      permissions: await currentPermissions(req),
+      permissions,
     };
   }));
 

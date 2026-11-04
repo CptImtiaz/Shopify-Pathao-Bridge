@@ -8,7 +8,8 @@
   <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <!-- Font loads without blocking the first paint -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
   <link rel="stylesheet" href="/assets/app.css" />
 </head>
 <body>
@@ -205,6 +206,6 @@
   <div class="menu" id="courier-menu" hidden></div>
   <div class="menu fraud-pop" id="fraud-pop" hidden></div>
   <div class="toast" id="toast" role="status" hidden></div>
-  <script src="/assets/app.js"></script>
+  <script src="/assets/app.js" defer></script>
 </body>
 </html>

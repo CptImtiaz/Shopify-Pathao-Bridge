@@ -5,6 +5,8 @@ const fs = require('fs');
 const path = require('path');
 const { makeOwnerRouter } = require('./routes/owner');
 const express = require('express');
+const compression = require('compression');
+const crypto = require('crypto');
 const { makeCipher } = require('./crypto');
 const { makeDb } = require('./db');
 const { makeTokenManager, isValidShop } = require('./shopify/auth');
@@ -33,6 +35,8 @@ function createApp({ config, pool, fetchImpl = fetch, log = console, defer = (p)
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', true);
+  // Gzip JSON, HTML, JS and CSS. The order list and app.js shrink ~5-8x.
+  app.use(compression());
 
   app.get('/health', (req, res) => res.json({ ok: true }));
   app.use('/admin', makeOwnerRouter({ config, db }));
@@ -42,7 +46,14 @@ function createApp({ config, pool, fetchImpl = fetch, log = console, defer = (p)
   app.use('/api', makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillment, notifier, cipher, log }));
 
   // Static assets (JS/CSS) and public pages (privacy policy).
-  app.use('/assets', express.static(path.join(PUBLIC_DIR, 'assets'), { maxAge: '1h' }));
+  // app.js / app.css are referenced as ?v=<content hash>, so browsers can keep
+  // them for a year and re-download only when the file actually changes.
+  app.use('/assets', express.static(path.join(PUBLIC_DIR, 'assets'), {
+    maxAge: '1h',
+    setHeaders: (res, file) => {
+      if (/app\.(js|css)$/.test(file)) res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    },
+  }));
   app.get('/privacy', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'privacy.html')));
   // Install is managed by Shopify (shopify.app.toml), so the OAuth callback just
   // sends the merchant into the embedded app.
@@ -53,7 +64,11 @@ function createApp({ config, pool, fetchImpl = fetch, log = console, defer = (p)
   });
 
   // Embedded app shell. Shopify loads this inside the admin iframe.
-  const shell = fs.readFileSync(path.join(VIEWS_DIR, 'index.html'), 'utf8').replace(/%SHOPIFY_API_KEY%/g, config.shopifyApiKey);
+  const assetVersion = (name) => crypto.createHash('sha1').update(fs.readFileSync(path.join(PUBLIC_DIR, 'assets', name))).digest('hex').slice(0, 10);
+  const shell = fs.readFileSync(path.join(VIEWS_DIR, 'index.html'), 'utf8')
+    .replace(/%SHOPIFY_API_KEY%/g, config.shopifyApiKey)
+    .replace('/assets/app.css"', `/assets/app.css?v=${assetVersion('app.css')}"`)
+    .replace('/assets/app.js"', `/assets/app.js?v=${assetVersion('app.js')}"`);
   app.get(['/', '/app', '/settings', '/couriers', '/sms', '/plans', '/billing', '/support'], (req, res) => {
     const shop = String(req.query.shop || '');
     // Required for embedded apps: only Shopify admin may frame this page.

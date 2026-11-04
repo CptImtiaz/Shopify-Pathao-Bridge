@@ -399,3 +399,16 @@ test('owner admin page needs ADMIN_PASSWORD and shows shops without customer dat
     assert.doesNotMatch(html, /Rahim/);
   } finally { t.close(); }
 });
+
+test('speed: gzip responses, versioned assets cached for a year', async (t) => {
+  const a = await startApp();
+  t.after(() => a.close());
+  const html = await (await fetch(`${a.base}/?embedded=1&host=x`, { headers: { 'Accept-Encoding': 'gzip' } })).text();
+  const js = html.match(/\/assets\/app\.js\?v=[0-9a-f]{10}/);
+  const css = html.match(/\/assets\/app\.css\?v=[0-9a-f]{10}/);
+  assert.ok(js && css, 'app.js and app.css carry a content hash');
+  const r = await fetch(`${a.base}${js[0]}`, { headers: { 'Accept-Encoding': 'gzip' } });
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('cache-control'), /max-age=31536000/);
+  assert.equal(r.headers.get('content-encoding'), 'gzip');
+});

@@ -430,12 +430,13 @@
   }
   function renderOrders() { renderHeader(); renderPipeline(); renderGroups(); renderRows(); if (state.focus) renderDetail(); }
 
-  async function loadOrders() {
+  async function loadOrders(pending) {
     show($('orders-loading'), !state.orders.length);
+    const statsP = loadStats();
     try {
-      state.orders = (await api('/orders')).orders;
+      state.orders = (await (pending || api('/orders'))).orders;
       state.loaded = true;
-      loadStats();
+      await statsP;
       const ok = new Set(state.orders.filter(canSend).map((o) => o.id));
       [...state.selected].forEach((id) => { if (!ok.has(id)) state.selected.delete(id); });
       renderOrders();
@@ -761,9 +762,12 @@
       return;
     }
     showPage(pageFromPath());
+    // Start the order list request alongside bootstrap instead of after it.
+    const ordersP = state.page === 'orders' ? api('/orders') : null;
+    if (ordersP) ordersP.catch(() => {});
     try { await refreshBoot(); fillAccount(); }
     catch (e) { $('banners').innerHTML = `<div class="banner bad"><b>Could not load ShipBridge.</b>&nbsp;${esc(e.message)}</div>`; return; }
-    if (state.page === 'orders') loadOrders();
+    if (state.page === 'orders') loadOrders(ordersP);
     if (state.page === 'billing') loadBilling();
   }
   start();
