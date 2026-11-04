@@ -461,3 +461,15 @@ test('hold: orders made from drafts are not auto-sent; merchant notes are saved 
   r = await a.api('/orders/send', { method: 'POST', body: { ids: ['950'], courier: 'pathao' } });
   assert.equal(r.data.results[0].ok, true, r.data.results[0].error);
 });
+
+test('courier logos: page carries a logo version, logos are re-checked on every visit', async (t) => {
+  const a = await startApp();
+  t.after(() => a.close());
+  const html = await (await fetch(`${a.base}/?embedded=1&host=x`)).text();
+  assert.match(html, /<meta name="logo-version" content="[0-9a-f]{10}"/);
+  for (const f of ['steadfast-mark.png', 'pathao-mark.png']) {
+    const r = await fetch(`${a.base}/assets/couriers/${f}?v=x`);
+    assert.equal(r.status, 200, f);
+    assert.equal(r.headers.get('cache-control'), 'no-cache', f);
+  }
+});

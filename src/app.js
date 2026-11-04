@@ -54,6 +54,8 @@ function createApp({ config, pool, fetchImpl = fetch, log = console, defer = (p)
     maxAge: '1h',
     setHeaders: (res, file) => {
       if (/app\.(js|css)$/.test(file)) res.set('Cache-Control', 'public, max-age=31536000, immutable');
+      // Courier logos can be replaced under the same name: browsers re-check (a quick 304) every visit.
+      else if (/[\\/]couriers[\\/]/.test(file)) res.set('Cache-Control', 'no-cache');
     },
   }));
   app.get('/privacy', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'privacy.html')));
@@ -66,11 +68,19 @@ function createApp({ config, pool, fetchImpl = fetch, log = console, defer = (p)
   });
 
   // Embedded app shell. Shopify loads this inside the admin iframe.
+  // One fingerprint for all courier logos, so a new logo gets a new URL.
+  const logoVersion = () => {
+    const dir = path.join(PUBLIC_DIR, 'assets', 'couriers');
+    const h = crypto.createHash('sha1');
+    for (const f of fs.readdirSync(dir).sort()) h.update(f).update(fs.readFileSync(path.join(dir, f)));
+    return h.digest('hex').slice(0, 10);
+  };
   const assetVersion = (name) => crypto.createHash('sha1').update(fs.readFileSync(path.join(PUBLIC_DIR, 'assets', name))).digest('hex').slice(0, 10);
   const shell = fs.readFileSync(path.join(VIEWS_DIR, 'index.html'), 'utf8')
     .replace(/%SHOPIFY_API_KEY%/g, config.shopifyApiKey)
     .replace('/assets/app.css"', `/assets/app.css?v=${assetVersion('app.css')}"`)
-    .replace('/assets/app.js"', `/assets/app.js?v=${assetVersion('app.js')}"`);
+    .replace('/assets/app.js"', `/assets/app.js?v=${assetVersion('app.js')}"`)
+    .replace(/%LOGO_VERSION%/g, logoVersion());
   app.get(['/', '/app', '/settings', '/couriers', '/sms', '/plans', '/billing', '/support'], (req, res) => {
     const shop = String(req.query.shop || '');
     // Required for embedded apps: only Shopify admin may frame this page.

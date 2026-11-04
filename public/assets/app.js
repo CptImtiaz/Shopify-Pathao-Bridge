@@ -45,7 +45,8 @@
   }
   const setVal = (id, v) => { const el = $(id); if (el) el.value = v == null ? '' : String(v); };
   const courier = (key) => (state.boot.couriers || []).find((c) => c.key === key) || { key, name: key, color: '#6B7875' };
-  const LOGOS = { pathao: '/assets/couriers/pathao-mark.png', steadfast: '/assets/couriers/steadfast-mark.png' };
+  const LOGO_V = (document.querySelector('meta[name="logo-version"]') || {}).content || '1';
+  const LOGOS = { pathao: `/assets/couriers/pathao-mark.png?v=${LOGO_V}`, steadfast: `/assets/couriers/steadfast-mark.png?v=${LOGO_V}` };
   const cmono = (c, cls = '') => (LOGOS[c.key] ? `<img class="cmono logo-img ${cls}" src="${LOGOS[c.key]}" alt="${esc(c.name)}" />` : `<span class="cmono ${cls}" style="background:${esc(c.color)}">${esc(c.name.charAt(0))}</span>`);
   const webhookLive = (key = 'pathao') => Boolean(state.boot && (key === 'steadfast' ? state.boot.steadfastWebhook : state.boot.pathaoWebhook)?.live);
   const defKey = () => (state.boot && state.boot.settings && state.boot.settings.default_courier) || 'pathao';
@@ -570,7 +571,7 @@
     const steps = pathaoSteps().filter((x) => ['account', 'store', 'webhook', 'shopify'].includes(x.key));
     const done = steps.filter((x) => x.done).length;
     const pct = Math.round((done / steps.length) * 100);
-    $('cx-hero').innerHTML = `<div class="hero-l"><img class="hero-logo" src="/assets/couriers/pathao-logo.svg" alt="Pathao" />
+    $('cx-hero').innerHTML = `<div class="hero-l"><img class="hero-logo" src="/assets/couriers/pathao-logo.svg?v=${LOGO_V}" alt="Pathao" />
         <div><div class="hero-title">${ready ? '<span class="badge green">Connected</span>' : '<span class="badge yellow">Setup needed</span>'}${webhookLive() ? '<span class="live-pill"><i></i>Live</span>' : ''}${s.pathao_env === 'sandbox' ? '<span class="badge yellow">Test mode</span>' : ''}</div>
         <p class="meta">${esc(p.tagline || '')}</p></div></div>
       <div class="hero-r"><span class="hero-ring" style="background:conic-gradient(#4f46e5 0 ${pct}%, #e4e5f7 ${pct}% 100%)"><b>${done}/${steps.length}</b></span><span class="meta">${done === steps.length ? 'All set' : 'steps done'}</span></div>
