@@ -147,11 +147,11 @@
     if (s.status === 'skipped') return 'Not sent';
     if (s.status === 'processing') return 'Sending…';
     const p = ps(o).replace(/^order\./, '');
-    const map = [[/approval.?pending/, 'Awaiting confirmation'], [/in.?review/, 'In review'], [/exceptional/, 'Needs attention'], [/partial/, 'Partially delivered'], [/paid.?return/, 'Paid return'], [/deliver.*fail|fail/, 'Delivery failed'], [/assigned.?for.?delivery|out.?for/, 'Out for delivery'],
+    const map = [[/approval.?pending/, 'Awaiting confirmation'], [/exceptional/, 'Needs attention'], [/partial/, 'Partially delivered'], [/paid.?return/, 'Paid return'], [/deliver.*fail|fail/, 'Delivery failed'], [/assigned.?for.?delivery|out.?for/, 'Out for delivery'],
       [/deliver/, 'Delivered'], [/return/, 'Returned'], [/pickup.?cancel|cancel/, 'Cancelled'], [/assigned.?for.?pickup/, 'Rider assigned'], [/picked/, 'Picked up'],
       [/sorting/, 'At sorting hub'], [/hub/, 'At delivery hub'], [/transit/, 'In transit'], [/hold/, 'On hold']];
     const hit = map.find(([re]) => re.test(p));
-    return hit ? hit[1] : 'Booked';
+    return hit ? hit[1] : `Sent to ${cname(s.courier)}`;
   }
   const canSend = (o) => !o.cancelled && (!o.shipment || ['failed', 'skipped'].includes(o.shipment.status));
   const riskKey = (o) => (o.fraud ? ({ high: 'high', medium: 'check', low: 'new', pending: 'new', safe: 'safe' }[o.fraud.level] || 'new') : 'new');
@@ -268,15 +268,15 @@
     if (!st) { $('ov-kpis').innerHTML = '<div class="card kpi skeleton"></div>'.repeat(6); return; }
     const sr = st.successRate;
     const srCol = sr == null ? '#9ca3af' : sr >= 85 ? '#22c55e' : sr >= 65 ? '#f59e0b' : '#ef4444';
-    $('ov-sub').textContent = `Parcels booked through ShipBridge ${RANGE_TXT[st.range]}`;
+    $('ov-sub').textContent = `Parcels sent through ShipBridge ${RANGE_TXT[st.range]}`;
     const kpi = (cls, icon, label, value, foot) => `<div class="card kpi k-${cls}"><div class="kpi-top"><span class="k-icon"><svg viewBox="0 0 24 24" aria-hidden="true">${icon}</svg></span><span class="k-label">${label}</span></div><b class="k-value">${value}</b>${foot}</div>`;
     const way = st.onTheWay || 0;
     $('ov-kpis').innerHTML = [
       kpi('total', '<path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7M12 11v10"/>', 'Total orders', st.sent + (st.notSent || 0),
-        `<span class="k-foot">${st.sent} booked${st.notSent ? ` · ${st.notSent} not sent` : ''}${st.avgFee != null ? ` · avg fee ${taka(st.avgFee)}` : ''}</span>`),
+        `<span class="k-foot">${st.sent} sent${st.notSent ? ` · ${st.notSent} not sent` : ''}${st.avgFee != null ? ` · avg fee ${taka(st.avgFee)}` : ''}</span>`),
       kpi('way', '<path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.6"/><circle cx="17" cy="17.5" r="1.6"/>', 'In transit', way,
         `<span class="k-split"><i style="flex:${st.booked || 0}" class="s1"></i><i style="flex:${st.picked || 0}" class="s2"></i><i style="flex:${st.transit || 0}" class="s3"></i>${way ? '' : '<i style="flex:1" class="s0"></i>'}</span>
-         <span class="k-foot">${st.booked} booked · ${st.picked} picked up · ${st.transit} on the road</span>`),
+         <span class="k-foot">${st.booked} sent · ${st.picked} picked up · ${st.transit} on the road</span>`),
       kpi('done', '<path d="M5 12.5l4.5 4.5L19 7.5"/>', 'Delivered', st.delivered,
         `<span class="k-foot"><b>${taka(st.codCollected)}</b> cash collected</span>`),
       kpi('bad', '<path d="M9 14l-5-5 5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>', 'Returned & failed', st.problems,
@@ -290,7 +290,7 @@
   }
 
   const STAGES = [
-    ['new', 'New', 't-new'], ['hold', 'Hold', 't-hold'], ['errors', 'Errors', 't-bad'], ['booked', 'Booked', 't-go'], ['picked', 'Picked up', 't-go'],
+    ['new', 'New', 't-new'], ['hold', 'Hold', 't-hold'], ['errors', 'Errors', 't-bad'], ['booked', 'Sent', 't-go'], ['picked', 'Picked up', 't-go'],
     ['onway', 'On the way', 't-go'], ['delivered', 'Delivered', 't-done'], ['returned', 'Returned', 't-bad'], ['cancelled', 'Cancelled', ''],
   ];
   function renderPipeline() {
@@ -462,7 +462,7 @@
     const st = stageOf(o);
     const colors = { high: ['#ef4444', '#fde2e2'], medium: ['#f59e0b', '#fdeccb'], low: ['#3b82f6', '#dbe7fb'], pending: ['#9ca3af', '#e5e7eb'], safe: ['#22c55e', '#d3f3df'] }[f.level];
     const title = { high: 'High risk — review first', medium: 'Check before sending', low: 'Looks fine', pending: 'Shopify is still checking', safe: 'Trusted customer' }[f.level];
-    const steps = [`Booked with ${cname((o.shipment && o.shipment.courier) || defKey())}`, 'Picked up by rider', 'In transit', 'Out for delivery', 'Delivered'];
+    const steps = [`Sent to ${cname((o.shipment && o.shipment.courier) || defKey())}`, 'Picked up by rider', 'In transit', 'Out for delivery', 'Delivered'];
     const sent = o.shipment && o.shipment.status === 'sent';
     const tl = steps.map((label, i) => {
       const n = i + 1; let cls = '';
@@ -522,7 +522,7 @@
   async function sendOrders(ids, key) {
     if (!ids.length) return;
     const drafts = ids.filter((id) => String(id).startsWith('d')).length;
-    if (drafts && !confirm(`${drafts} draft order${drafts > 1 ? 's' : ''} will be completed in Shopify (becomes a real order, payment pending) and then booked. The rider collects the full draft total. Continue?`)) return;
+    if (drafts && !confirm(`${drafts} draft order${drafts > 1 ? 's' : ''} will be completed in Shopify (becomes a real order, payment pending) and then sent to the courier. The rider collects the full draft total. Continue?`)) return;
     const c = courier(key);
     const r = await api('/orders/send', { method: 'POST', body: { ids, courier: key } });
     const ok = r.results.filter((x) => x.ok).length;
@@ -619,7 +619,7 @@
       const ok = c.key === 'pathao' || courierReady(c.key);
       return `<button role="radio" data-defc="${esc(c.key)}" aria-checked="${c.key === def}" ${ok ? '' : 'disabled title="Connect it first"'}>${esc(c.name)}</button>`;
     }).join('');
-    $('auto-hint').textContent = `Booked with ${cname(def)} within seconds`;
+    $('auto-hint').textContent = `Sent to ${cname(def)} within seconds`;
     $('auto_send').checked = Boolean(s.auto_send); $('auto_send').disabled = !courierReady(def);
     $('hold_risky').checked = s.hold_risky !== false;
     $$('#speed-seg button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.speed === String(s.delivery_type))));
@@ -902,7 +902,7 @@
       if (b.id === 'sf-save') return await busy(b, saveSteadfast);
       if (b.id === 'sf-make-default') return await busy(b, () => savePrefs({ default_courier: 'steadfast' }));
       if (b.id === 'sf-disconnect') {
-        if (!confirm('Disconnect Steadfast? Orders already booked keep their tracking. If Steadfast is your default, Pathao becomes the default and auto-send turns off.')) return;
+        if (!confirm('Disconnect Steadfast? Orders already sent keep their tracking. If Steadfast is your default, Pathao becomes the default and auto-send turns off.')) return;
         return await busy(b, async () => { apply(await api('/settings', { method: 'POST', body: { steadfast_disconnect: true } })); state.sfBalance = null; toast('Steadfast disconnected'); renderAll(); });
       }
       if (b.id === 'save-webhook') return await busy(b, async () => {

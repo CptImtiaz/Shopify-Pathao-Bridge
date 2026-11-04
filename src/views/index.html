@@ -44,7 +44,7 @@
 
       <section class="overview" aria-label="Delivery overview">
         <div class="ov-head">
-          <div><h2>Delivery overview</h2><p class="meta" id="ov-sub">All parcels booked through ShipBridge</p></div>
+          <div><h2>Delivery overview</h2><p class="meta" id="ov-sub">All parcels sent through ShipBridge</p></div>
           <div class="seg" role="radiogroup" aria-label="Period" id="range-seg">
             <button role="radio" data-range="today">Today</button><button role="radio" data-range="7d">7 days</button><button role="radio" data-range="month">This month</button><button role="radio" data-range="all">All time</button>
           </div>
@@ -148,7 +148,7 @@
               <div id="perm-body"></div>
               <label class="switch-row"><span><b>Update fulfillment and delivery status</b><small>Shown on the order timeline and the customer's order page</small></span><input type="checkbox" role="switch" id="sync_fulfillment" /><i aria-hidden="true"></i></label>
               <div class="pref"><b>Mark the Shopify order fulfilled</b>
-                <div class="seg" role="radiogroup" aria-label="Mark fulfilled" id="when-seg"><button role="radio" data-when="booked">When booked</button><button role="radio" data-when="picked">When picked up</button></div></div>
+                <div class="seg" role="radiogroup" aria-label="Mark fulfilled" id="when-seg"><button role="radio" data-when="booked">When sent</button><button role="radio" data-when="picked">When picked up</button></div></div>
               <label class="switch-row"><span><b>Email the customer a tracking link</b><small>Shopify sends its shipping confirmation</small></span><input type="checkbox" role="switch" id="notify_customer" /><i aria-hidden="true"></i></label>
             </div>
           </div>
@@ -202,7 +202,7 @@
           <div class="rules-head"><h2>Sending rules</h2><span class="hint" id="prefs-state">Saves automatically</span></div>
           <div class="pref"><b>Default courier</b>
             <div class="seg" role="radiogroup" aria-label="Default courier" id="def-seg"></div></div>
-          <label class="switch-row"><span><b>Send new orders automatically</b><small id="auto-hint">Booked with your default courier within seconds</small></span><input type="checkbox" role="switch" id="auto_send" /><i aria-hidden="true"></i></label>
+          <label class="switch-row"><span><b>Send new orders automatically</b><small id="auto-hint">Sent to your default courier within seconds</small></span><input type="checkbox" role="switch" id="auto_send" /><i aria-hidden="true"></i></label>
           <label class="switch-row"><span><b>Hold high-risk orders</b><small>Fraud-flagged orders wait for you</small></span><input type="checkbox" role="switch" id="hold_risky" /><i aria-hidden="true"></i></label>
           <div class="pref"><b>Pathao delivery type</b>
             <div class="seg" role="radiogroup" aria-label="Delivery type" id="speed-seg"><button role="radio" data-speed="48">Regular</button><button role="radio" data-speed="12">Express</button></div></div>
