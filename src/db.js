@@ -103,6 +103,12 @@ const SCHEMA = [
   `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS shopify_event TEXT`,
   `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS sync_error TEXT`,
   `CREATE INDEX IF NOT EXISTS shipments_shop_phone ON shipments (shop, phone)`,
+  // Steadfast courier
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS steadfast_api_key TEXT`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS steadfast_secret_enc TEXT`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS steadfast_webhook_token TEXT`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS steadfast_webhook_at TIMESTAMPTZ`,
+  `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS tracking_code TEXT`,
 ];
 
 function makeDb(pool) {

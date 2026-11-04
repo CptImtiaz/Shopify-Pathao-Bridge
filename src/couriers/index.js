@@ -1,10 +1,11 @@
 // Courier registry. Each courier plugs in here; the dashboard lists them all.
 //
-// To add a courier later, create src/couriers/<key>.js exposing
-//   { key, name, hasCredentials(settings), createOrder(settings, payload), orderInfo(settings, id), listStores(settings) }
-// and add it to AVAILABLE below. Until then it shows as "Coming soon".
+// To add a courier: create src/couriers/<key>.js (see steadfast.js), wire it into
+// shipping.js (booking), routes/api.js (settings + status refresh) and
+// routes/webhooks.js (status webhook), then add it to AVAILABLE below.
+// Until then it shows as "Coming soon".
 
-const AVAILABLE = ['pathao'];
+const AVAILABLE = ['pathao', 'steadfast'];
 
 const CATALOG = [
   { key: 'pathao', name: 'Pathao', color: '#E8202A', tagline: 'On-demand logistics and delivery across Bangladesh', region: 'Bangladesh' },
@@ -27,8 +28,14 @@ function listCouriers(settings, { pathao }) {
         ? `${settings.pathao_store_name || 'Store #' + settings.pathao_store_id || ''}${settings.pathao_env === 'sandbox' ? ' · Sandbox' : ''}`
         : null;
     }
+    if (available && c.key === 'steadfast') {
+      status = settings.steadfast_api_key && settings.steadfast_secret_enc ? 'connected' : 'not_connected';
+      detail = status === 'connected' ? 'API connected' : null;
+    }
     return { ...c, available, status, detail, isDefault: c.key === (settings.default_courier || 'pathao') };
   });
 }
 
-module.exports = { CATALOG, AVAILABLE, listCouriers };
+const COURIER_NAMES = Object.fromEntries(CATALOG.map((c) => [c.key, c.name]));
+
+module.exports = { CATALOG, AVAILABLE, COURIER_NAMES, listCouriers };

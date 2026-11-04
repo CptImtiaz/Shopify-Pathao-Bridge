@@ -55,6 +55,7 @@ function fakeFetch() {
     smsFail: null,
     fo: {}, // orderId -> [{ id, status, fulfillmentHolds, fulfillments }]
     fulfillments: [], events: [], trackingUpdates: [], released: [], fulfillDenied: false,
+    steadfastOrders: [], nextSteadfast: 5000, steadfastStatus: {}, steadfastFail: null,
   };
 
   const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -144,6 +145,23 @@ function fakeFetch() {
       state.nextConsignment += 1;
       return json(200, { message: 'Order Created', data: { consignment_id: `DL${state.nextConsignment}`, merchant_order_id: b.merchant_order_id, order_status: 'Pending', delivery_fee: 60 } });
     }
+    // ---- Steadfast (Packzy) ----
+    if (url.startsWith('https://portal.packzy.com/api/v1/')) {
+      const h = init.headers || {};
+      if (h['Api-Key'] !== 'sf_key' || h['Secret-Key'] !== 'sf_secret') return json(401, { message: 'Unauthenticated.' });
+      const path = url.slice('https://portal.packzy.com/api/v1'.length);
+      if (path === '/get_balance') return json(200, { status: 200, current_balance: 1520.5 });
+      if (path === '/create_order') {
+        const b = JSON.parse(body);
+        state.steadfastOrders.push(b);
+        if (state.steadfastFail) return json(422, { status: 422, errors: state.steadfastFail });
+        state.nextSteadfast += 1;
+        return json(200, { status: 200, message: 'Consignment has been created successfully.', consignment: {
+          consignment_id: state.nextSteadfast, invoice: b.invoice, tracking_code: `SF${state.nextSteadfast}`, cod_amount: b.cod_amount, status: 'in_review' } });
+      }
+      const m = path.match(/^\/status_by_cid\/(\d+)$/);
+      if (m) return json(200, { status: 200, delivery_status: state.steadfastStatus[m[1]] || 'pending' });
+    }
     return json(404, { message: `fake: no route for ${url}` });
   }
 
@@ -174,6 +192,7 @@ async function startApp({ smsFeature = true, adminPassword = '' } = {}) {
     encryptionKey: crypto.randomBytes(32).toString('hex'), billingTest: true,
     pathaoProductionUrl: 'https://api-hermes.pathao.com', pathaoSandboxUrl: 'https://courier-api-sandbox.pathao.com',
     pathaoIntegrationSecret: 'integration-uuid',
+    steadfastBaseUrl: 'https://portal.packzy.com/api/v1',
     smsFeature, adminPassword,
   };
   const { app, db } = createApp({ config, pool: memPool(), fetchImpl: fake.impl, log });

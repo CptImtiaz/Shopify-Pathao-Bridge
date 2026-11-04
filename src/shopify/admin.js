@@ -84,7 +84,7 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
 
   // Tag the order and store the consignment ID in a metafield so merchants
   // can see/search it in the Shopify admin.
-  async function annotateOrder(shop, legacyId, { tags = [], consignmentId }) {
+  async function annotateOrder(shop, legacyId, { tags = [], consignmentId, courier = 'pathao' }) {
     const id = `gid://shopify/Order/${legacyId}`;
     if (tags.length) {
       const d = await graphql(
@@ -99,7 +99,7 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
       const d = await graphql(
         shop,
         `mutation Meta($m: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $m) { userErrors { message } } }`,
-        { m: [{ ownerId: id, namespace: 'pathao', key: 'consignment_id', type: 'single_line_text_field', value: String(consignmentId) }] }
+        { m: [{ ownerId: id, namespace: courier, key: 'consignment_id', type: 'single_line_text_field', value: String(consignmentId) }] }
       );
       const errs = d.metafieldsSet.userErrors;
       if (errs.length) throw new Error(errs.map((e) => e.message).join('; '));

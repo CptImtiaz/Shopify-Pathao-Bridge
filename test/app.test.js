@@ -306,7 +306,8 @@ test('courier registry, monthly stats, SMS history and page routes', async (t) =
   const keys = boot.couriers.map((c) => c.key);
   assert.ok(keys.includes('pathao') && keys.includes('steadfast'));
   assert.equal(boot.couriers.find((c) => c.key === 'pathao').status, 'not_connected');
-  assert.equal(boot.couriers.find((c) => c.key === 'steadfast').status, 'coming_soon');
+  assert.equal(boot.couriers.find((c) => c.key === 'steadfast').status, 'not_connected');
+  assert.equal(boot.couriers.find((c) => c.key === 'redx').status, 'coming_soon');
   assert.equal(boot.couriers.find((c) => c.key === 'pathao').isDefault, true);
   assert.equal((await a.api('/settings', { method: 'POST', body: { default_courier: 'steadfast' } })).status, 400);
 

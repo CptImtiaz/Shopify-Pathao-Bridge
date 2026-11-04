@@ -10,14 +10,38 @@
 //
 // Needs scopes: read/write_merchant_managed_fulfillment_orders + write_fulfillments.
 
+const { steadfastTrackingUrl } = require('../couriers/steadfast');
+const { COURIER_NAMES } = require('../couriers');
+
 const TRACKING_COMPANY = 'Pathao';
 
 function trackingUrl(consignmentId, phone) {
   return `https://merchant.pathao.com/tracking?consignment_id=${encodeURIComponent(consignmentId)}${phone ? `&phone=${encodeURIComponent(phone)}` : ''}`;
 }
 
-// Pathao event / status text -> Shopify FulfillmentEventStatus (null = no event).
-function shopifyEventFor(raw) {
+// Tracking info shown on the Shopify order and the customer's order status page.
+function trackingFor(shipment) {
+  if (shipment.courier === 'steadfast') {
+    return { company: 'Steadfast', number: String(shipment.tracking_code || shipment.consignment_id), url: steadfastTrackingUrl(shipment.tracking_code) };
+  }
+  return { company: TRACKING_COMPANY, number: String(shipment.consignment_id), url: trackingUrl(shipment.consignment_id, shipment.phone) };
+}
+
+// Steadfast delivery status -> Shopify FulfillmentEventStatus (null = no event).
+// "*_approval_pending" is only the rider's word, so it doesn't move the order yet.
+function steadfastEventFor(raw) {
+  const s = String(raw || '').toLowerCase();
+  if (/approval_pending/.test(s)) return null;
+  if (/^partial_delivered$|^delivered$/.test(s)) return 'DELIVERED';
+  if (/cancel|return/.test(s)) return 'FAILURE';
+  if (/hold|exceptional/.test(s)) return 'DELAYED';
+  if (/in_review|pending/.test(s)) return 'CONFIRMED';
+  return null;
+}
+
+// Courier event / status text -> Shopify FulfillmentEventStatus (null = no event).
+function shopifyEventFor(raw, courier = 'pathao') {
+  if (courier === 'steadfast') return steadfastEventFor(raw);
   const s = String(raw || '').toLowerCase().replace(/^order\./, '').replace(/[_\s]+/g, '-');
   if (/partial/.test(s)) return 'DELIVERED';
   if (/paid-return|return/.test(s)) return 'FAILURE';
@@ -34,9 +58,11 @@ function shopifyEventFor(raw) {
 // When should the Shopify order be marked fulfilled?
 //   booked: as soon as the parcel is booked with Pathao (like the original script)
 //   picked: only once the rider has picked it up
-function readyToFulfil(when, raw) {
+function readyToFulfil(when, raw, courier = 'pathao') {
   if (when !== 'picked') return true;
-  const ev = shopifyEventFor(raw);
+  // Steadfast has no "picked up" status: once it leaves review ("pending") the parcel is with them.
+  if (courier === 'steadfast') return !/in_review/.test(String(raw || '').toLowerCase());
+  const ev = shopifyEventFor(raw, courier);
   return ['CARRIER_PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'ATTEMPTED_DELIVERY', 'DELIVERED', 'DELAYED'].includes(ev);
 }
 
@@ -87,7 +113,7 @@ function makeFulfillmentSync({ admin, db, log = console }) {
   // script's handling of OPEN / IN_PROGRESS / SCHEDULED / ON_HOLD / CLOSED / CANCELLED.
   async function ensureFulfilled(shop, shipment, settings) {
     if (shipment.shopify_fulfillment_id) return shipment.shopify_fulfillment_id;
-    const tracking = { company: TRACKING_COMPANY, number: String(shipment.consignment_id), url: trackingUrl(shipment.consignment_id, shipment.phone) };
+    const tracking = trackingFor(shipment);
     let fos = await fulfillmentOrders(shop, shipment.shopify_order_id);
     for (let i = 0; i < fos.length; i++) if (fos[i].status === 'ON_HOLD') fos[i] = await releaseHolds(shop, fos[i]);
 
@@ -103,7 +129,7 @@ function makeFulfillmentSync({ admin, db, log = console }) {
       fulfillmentId = existing[0].id;
     }
     await db.finishShipment(shop, shipment.shopify_order_id, { shopify_fulfillment_id: fulfillmentId, sync_error: null });
-    log.info(`[${shop}] ${shipment.order_name} fulfilled in Shopify with Pathao ${shipment.consignment_id}`);
+    log.info(`[${shop}] ${shipment.order_name} fulfilled in Shopify with ${tracking.company} ${shipment.consignment_id}`);
     return fulfillmentId;
   }
 
@@ -116,16 +142,17 @@ function makeFulfillmentSync({ admin, db, log = console }) {
       let shipment = await db.getShipment(shop, orderId);
       if (!shipment || shipment.status !== 'sent' || !shipment.consignment_id) return { skipped: 'not sent' };
       const raw = status || shipment.pathao_status;
-      const ev = shopifyEventFor(raw);
+      const courier = shipment.courier || 'pathao';
+      const ev = shopifyEventFor(raw, courier);
 
       if (!shipment.shopify_fulfillment_id) {
         if (/cancel/.test(String(raw).toLowerCase())) return { skipped: 'cancelled before fulfilment' };
-        if (!readyToFulfil(settings.fulfill_when, raw)) return { skipped: 'waiting for pickup' };
+        if (!readyToFulfil(settings.fulfill_when, raw, courier)) return { skipped: 'waiting for pickup' };
         await ensureFulfilled(shop, shipment, settings);
         shipment = await db.getShipment(shop, orderId);
       }
       if (ev && ev !== shipment.shopify_event) {
-        await addEvent(shop, shipment.shopify_fulfillment_id, ev, `Pathao: ${String(raw).replace(/^order\./, '').replace(/[-_]/g, ' ')}`);
+        await addEvent(shop, shipment.shopify_fulfillment_id, ev, `${COURIER_NAMES[courier] || 'Courier'}: ${String(raw).replace(/^order\./, '').replace(/[-_]/g, ' ')}`);
         await db.finishShipment(shop, orderId, { shopify_event: ev, sync_error: null });
       }
       return { ok: true, event: ev };
@@ -142,4 +169,4 @@ function makeFulfillmentSync({ admin, db, log = console }) {
   return { sync, ensureFulfilled };
 }
 
-module.exports = { makeFulfillmentSync, shopifyEventFor, readyToFulfil, trackingUrl, TRACKING_COMPANY };
+module.exports = { makeFulfillmentSync, shopifyEventFor, readyToFulfil, trackingUrl, trackingFor, TRACKING_COMPANY };

@@ -12,7 +12,7 @@ const { PLANS, intervalFromSubscriptionName } = require('../plans');
 const { DEFAULT_TEMPLATE, SOURCES } = require('../sms/sms');
 const { listCouriers, AVAILABLE } = require('../couriers');
 
-function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillment = null, notifier, cipher, log = console }) {
+function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, shipping, fulfillment = null, notifier, cipher, log = console }) {
   const router = express.Router();
   router.use(express.json({ limit: '200kb' }));
   const webhooksChecked = new Set();
@@ -91,6 +91,11 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
       default_note: s.default_note || '',
       default_courier: s.default_courier || 'pathao',
       connected: pathao.hasCredentials(s),
+      steadfast: {
+        api_key: s.steadfast_api_key || '',
+        has_secret: Boolean(s.steadfast_secret_enc),
+        connected: Boolean(s.steadfast_api_key && s.steadfast_secret_enc),
+      },
       sms: {
         available: Boolean(config.smsFeature),
         enabled: s.sms_enabled,
@@ -119,8 +124,11 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
   // ---- bootstrap: everything the UI needs on load ----
   router.get('/bootstrap', wrap(async (req) => {
     let settings = await db.getSettings(req.shop);
-    if (!settings.webhook_secret) {
-      settings = await db.updateSettings(req.shop, { webhook_secret: crypto.randomBytes(16).toString('hex') });
+    if (!settings.webhook_secret || !settings.steadfast_webhook_token) {
+      settings = await db.updateSettings(req.shop, {
+        webhook_secret: settings.webhook_secret || crypto.randomBytes(16).toString('hex'),
+        steadfast_webhook_token: settings.steadfast_webhook_token || crypto.randomBytes(24).toString('hex'),
+      });
     }
     // Webhooks only need checking once per shop per server start, not on every page load.
     const webhookCheck = webhooksChecked.has(req.shop)
@@ -141,6 +149,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
       couriers: listCouriers(settings, { pathao }),
       plans: Object.values(PLANS),
       pathaoWebhook: { url: `${config.appUrl}/pathao/webhook/${req.shop}`, secret: settings.webhook_secret, lastAt: settings.pathao_webhook_at || null, live: Boolean(settings.webhook_secret && settings.pathao_webhook_at) },
+      steadfastWebhook: { url: `${config.appUrl}/steadfast/webhook/${req.shop}`, token: settings.steadfast_webhook_token, lastAt: settings.steadfast_webhook_at || null, live: Boolean(settings.steadfast_webhook_at) },
       webhooks,
       permissions,
     };
@@ -160,6 +169,20 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
     const credsChanged = ['pathao_env', 'pathao_client_id', 'pathao_username', 'pathao_client_secret_enc', 'pathao_password_enc']
       .some((k) => k in f && f[k] !== current[k]);
     if (credsChanged) Object.assign(f, { pathao_token_enc: null, pathao_refresh_enc: null, pathao_token_expires_at: null });
+
+    // ---- Steadfast ----
+    if (b.steadfast_api_key !== undefined) f.steadfast_api_key = String(b.steadfast_api_key).trim() || null;
+    if (b.steadfast_secret_key) f.steadfast_secret_enc = cipher.encrypt(String(b.steadfast_secret_key).trim());
+    if (b.steadfast_disconnect) {
+      Object.assign(f, { steadfast_api_key: null, steadfast_secret_enc: null });
+      // Don't leave auto-send pointing at a courier that can no longer book.
+      if ((current.default_courier || 'pathao') === 'steadfast') Object.assign(f, { default_courier: 'pathao', auto_send: false });
+    }
+    if (b.steadfast_webhook_token !== undefined) {
+      const w = String(b.steadfast_webhook_token).trim();
+      if (w.length < 16 || w.length > 200 || /\s/.test(w)) throw Object.assign(new Error('Auth token must be 16–200 characters, without spaces'), { status: 400 });
+      f.steadfast_webhook_token = w;
+    }
 
     if (b.default_courier !== undefined) {
       if (!AVAILABLE.includes(b.default_courier)) throw Object.assign(new Error('That courier is not available yet'), { status: 400 });
@@ -226,7 +249,16 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
       // Only orders created after auto-send is switched on get sent automatically
       // (replaces the old "server start" cutoff, so redeploys never resend old orders).
       if (f.auto_send && !current.auto_send) f.auto_send_since = new Date();
-      if (f.auto_send && !(f.pathao_store_id || current.pathao_store_id)) {
+    }
+    // Auto-send books with the default courier, so that courier has to be ready.
+    {
+      const next = { ...current, ...f };
+      const def = next.default_courier || 'pathao';
+      if (def === 'steadfast' && !(next.steadfast_api_key && next.steadfast_secret_enc)) {
+        if (b.default_courier !== undefined) throw Object.assign(new Error('Connect Steadfast before making it your default courier'), { status: 400 });
+        if (f.auto_send) throw Object.assign(new Error('Connect Steadfast before turning on auto-send'), { status: 400 });
+      }
+      if (def === 'pathao' && f.auto_send && !next.pathao_store_id) {
         throw Object.assign(new Error('Choose a Pathao store before turning on auto-send'), { status: 400 });
       }
     }
@@ -242,6 +274,17 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
       await pathao.token(settings, { force: true });
       const stores = await pathao.listStores(await db.getSettings(req.shop));
       return { ok: true, stores };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  }));
+
+  // ---- Steadfast connection test (also returns the current balance) ----
+  router.post('/steadfast/test', wrap(async (req) => {
+    try {
+      if (!steadfast) throw new Error('Steadfast is not available');
+      const { balance } = await steadfast.balance(await db.getSettings(req.shop));
+      return { ok: true, balance };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -295,7 +338,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
           cancelled: n.cancelled,
           sms: smsById.has(n.id) ? { status: smsById.get(n.id).status, error: smsById.get(n.id).error } : null,
           shipment: s ? {
-            status: s.status, courier: s.courier || 'pathao', consignmentId: s.consignment_id, pathaoStatus: s.pathao_status,
+            status: s.status, courier: s.courier || 'pathao', consignmentId: s.consignment_id, trackingCode: s.tracking_code || null, pathaoStatus: s.pathao_status,
             error: s.error, deliveryFee: s.delivery_fee == null ? null : Number(s.delivery_fee), updatedAt: s.updated_at,
             shopifySynced: Boolean(s.shopify_fulfillment_id), shopifyEvent: s.shopify_event || null, syncError: s.sync_error || null,
           } : null,
@@ -310,14 +353,15 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
     const courier = req.body?.courier || (await db.getSettings(req.shop)).default_courier || 'pathao';
     if (!AVAILABLE.includes(courier)) throw Object.assign(new Error(`${courier} is not available yet`), { status: 400 });
     const settings = await db.getSettings(req.shop);
-    if (!pathao.hasCredentials(settings)) throw Object.assign(new Error('Connect your Pathao account in Settings first'), { status: 400 });
+    if (courier === 'pathao' && !pathao.hasCredentials(settings)) throw Object.assign(new Error('Connect your Pathao account in Couriers first'), { status: 400 });
+    if (courier === 'steadfast' && !(steadfast && steadfast.hasCredentials(settings))) throw Object.assign(new Error('Connect your Steadfast account in Couriers first'), { status: 400 });
 
     const results = [];
     for (const id of ids) {
       try {
         const o = await admin.getOrder(req.shop, id, req.opts);
         if (!o) { results.push({ id, ok: false, error: 'Order not found' }); continue; }
-        const r = await shipping.sendOrder(req.shop, fromGraphql(o));
+        const r = await shipping.sendOrder(req.shop, fromGraphql(o), { courier });
         results.push({ id, ok: r.ok, duplicate: Boolean(r.duplicate), error: r.shipment?.error || null, consignmentId: r.shipment?.consignment_id || null });
       } catch (e) {
         results.push({ id, ok: false, error: e.message });
@@ -329,9 +373,15 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
 
   router.post('/orders/:id/refresh', wrap(async (req) => {
     const s = await db.getShipment(req.shop, req.params.id);
-    if (!s || !s.consignment_id) throw Object.assign(new Error('Order has not been sent to Pathao'), { status: 404 });
-    const info = await pathao.orderInfo(await db.getSettings(req.shop), s.consignment_id);
-    const status = info.order_status_slug || info.order_status || s.pathao_status;
+    if (!s || !s.consignment_id) throw Object.assign(new Error('Order has not been sent to a courier'), { status: 404 });
+    const settings = await db.getSettings(req.shop);
+    let status;
+    if (s.courier === 'steadfast') {
+      status = (await steadfast.statusByCid(settings, s.consignment_id)).status || s.pathao_status;
+    } else {
+      const info = await pathao.orderInfo(settings, s.consignment_id);
+      status = info.order_status_slug || info.order_status || s.pathao_status;
+    }
     await db.finishShipment(req.shop, req.params.id, { pathao_status: status });
     if (fulfillment) await fulfillment.sync(req.shop, req.params.id, { status });
     admin.forgetOrders(req.shop);

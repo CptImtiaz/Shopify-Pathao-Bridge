@@ -1,6 +1,7 @@
 // Shopify webhooks (orders, uninstall, billing, mandatory privacy webhooks)
-// and the Pathao delivery-status webhook.
+// and the Pathao and Steadfast delivery-status webhooks.
 
+const crypto = require('crypto');
 const express = require('express');
 const { verifyWebhookHmac, isValidShop } = require('../shopify/auth');
 const { safeEqual } = require('../crypto');
@@ -14,7 +15,7 @@ const PATHAO_INTEGRATION_HEADER = 'X-Pathao-Merchant-Webhook-Integration-Secret'
 
 // `defer` lets background work run after the response is sent. On an
 // always-on server it just lets the promise run.
-function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, notifier, log = console, defer = (p) => p }) {
+function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, steadfast = null, notifier, log = console, defer = (p) => p }) {
   const router = express.Router();
   const raw = express.raw({ type: '*/*', limit: '2mb' });
 
@@ -139,6 +140,50 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, no
       return undefined;
     }
     return res.status(202).send('OK');
+  });
+
+  // Steadfast -> us: delivery status updates. The merchant pastes this URL and
+  // the auth token shown in the app into Steadfast's webhook settings. Steadfast
+  // sends `Authorization: Bearer <token>` and `X-Signature` = HMAC-SHA256(raw body, token).
+  router.post('/steadfast/webhook/:shop', express.raw({ type: '*/*', limit: '1mb' }), async (req, res) => {
+    const shop = req.params.shop;
+    if (!isValidShop(shop)) return res.status(404).json({ status: 'error', message: 'Unknown shop' });
+    const settings = await db.getSettings(shop);
+    const token = settings.steadfast_webhook_token;
+    const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from('');
+    const sig = String(req.get('X-Signature') || '');
+    const bearer = String(req.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+    const expected = token ? crypto.createHmac('sha256', token).update(raw).digest('hex') : '';
+    const sigOk = Boolean(token && sig && safeEqual(sig.toLowerCase(), expected));
+    const bearerOk = Boolean(token && bearer && safeEqual(bearer, token));
+    // A signature, when sent, must match; otherwise the bearer token must.
+    if (!token || (sig ? !sigOk : !bearerOk)) return res.status(401).json({ status: 'error', message: 'Bad signature' });
+
+    let body;
+    try { body = JSON.parse(raw.toString('utf8') || '{}'); } catch { return res.status(400).json({ status: 'error', message: 'Invalid JSON' }); }
+    await db.updateSettings(shop, { steadfast_webhook_at: new Date() }).catch(() => {});
+
+    const type = String(body.notification_type || '');
+    if (type !== 'delivery_status' || !body.consignment_id) return res.json({ status: 'success' });
+
+    const shipment = await db.findShipmentByConsignment(shop, body.consignment_id);
+    if (!shipment) return res.json({ status: 'success' });
+    const status = String(body.status || 'unknown').toLowerCase();
+    const fields = { pathao_status: status };
+    if (body.delivery_charge != null && Number.isFinite(Number(body.delivery_charge))) fields.delivery_fee = Number(body.delivery_charge);
+    await db.finishShipment(shop, shipment.shopify_order_id, fields);
+    res.json({ status: 'success' });
+
+    // Update Shopify after acknowledging Steadfast.
+    defer((async () => {
+      if (fulfillment) await fulfillment.sync(shop, shipment.shopify_order_id, { status });
+      if (admin.forgetOrders) admin.forgetOrders(shop);
+      if (settings.tag_orders && ['delivered', 'partial_delivered', 'cancelled'].includes(status)) {
+        await admin.annotateOrder(shop, shipment.shopify_order_id, { tags: [`steadfast-${status.replace(/_/g, '-')}`] })
+          .catch((e) => log.warn(`[${shop}] tag failed: ${e.message}`));
+      }
+    })().catch((e) => log.error(`[${shop}] steadfast webhook follow-up failed: ${e.message}`)));
+    return undefined;
   });
 
   return router;

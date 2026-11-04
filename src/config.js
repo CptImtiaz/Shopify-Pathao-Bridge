@@ -43,6 +43,7 @@ function load() {
     supportWhatsapp: process.env.SUPPORT_WHATSAPP || '+60199944971',
 
     pathaoProductionUrl: process.env.PATHAO_BASE_URL || 'https://api-hermes.pathao.com',
+    steadfastBaseUrl: process.env.STEADFAST_BASE_URL || 'https://portal.packzy.com/api/v1',
     pathaoSandboxUrl: process.env.PATHAO_SANDBOX_URL || 'https://courier-api-sandbox.pathao.com',
     // Value Pathao's merchant panel expects back when you register a webhook.
     // SMS is 'coming soon' in the UI; set SMS_FEATURE=on to enable it.

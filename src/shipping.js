@@ -1,9 +1,31 @@
-// The core job: take one Shopify order and book it with Pathao, exactly once.
+// The core job: take one Shopify order and book it with a courier
+// (Pathao or Steadfast), exactly once.
 
 const { PLANS } = require('./plans');
 const { buildPathaoOrder } = require('./pathao/mapper');
+const { buildSteadfastOrder } = require('./couriers/steadfast');
+const { COURIER_NAMES } = require('./couriers');
 
-function makeShipping({ db, pathao, admin, fulfillment = null, log = console }) {
+function makeShipping({ db, pathao, steadfast = null, admin, fulfillment = null, log = console }) {
+  // Each courier: build its payload from the order, then book it.
+  const COURIERS = {
+    pathao: {
+      build: (order, settings) => buildPathaoOrder(order, settings),
+      book: async (settings, payload) => {
+        const r = await pathao.createOrder(settings, payload);
+        return { ...r, amountToCollect: payload.amount_to_collect, trackingCode: null };
+      },
+    },
+    steadfast: {
+      build: (order, settings) => buildSteadfastOrder(order, settings),
+      book: async (settings, payload) => {
+        if (!steadfast) throw new Error('Steadfast is not available');
+        const r = await steadfast.createOrder(settings, payload);
+        return { ...r, amountToCollect: payload.cod_amount };
+      },
+    },
+  };
+
   async function limitReached(shop) {
     const row = await db.getShop(shop);
     const plan = PLANS[(row && row.plan) || 'free'] || PLANS.free;
@@ -15,8 +37,12 @@ function makeShipping({ db, pathao, admin, fulfillment = null, log = console }) 
   }
 
   // `order` is a normalised order from mapper.fromWebhook / fromGraphql.
-  async function sendOrder(shop, order) {
+  // `courier` defaults to the shop's default courier.
+  async function sendOrder(shop, order, { courier } = {}) {
     const settings = await db.getSettings(shop);
+    const key = COURIERS[courier] ? courier : COURIERS[settings.default_courier] ? settings.default_courier : 'pathao';
+    const c = COURIERS[key];
+    const label = COURIER_NAMES[key] || key;
 
     const claimed = await db.claimShipment(shop, order.id, order.name);
     if (!claimed) {
@@ -35,29 +61,32 @@ function makeShipping({ db, pathao, admin, fulfillment = null, log = console }) 
       const limitMsg = await limitReached(shop);
       if (limitMsg) return await fail('skipped', limitMsg);
 
-      const { payload, errors } = buildPathaoOrder(order, settings);
+      await db.finishShipment(shop, order.id, { courier: key });
+      const { payload, errors } = c.build(order, settings);
       if (payload && payload.recipient_phone) await db.finishShipment(shop, order.id, { phone: payload.recipient_phone });
       if (errors.length) return await fail('failed', errors.join('. '));
 
-      const result = await pathao.createOrder(settings, payload);
+      const result = await c.book(settings, payload);
       const shipment = await db.finishShipment(shop, order.id, {
         status: 'sent',
+        courier: key,
         consignment_id: result.consignmentId ? String(result.consignmentId) : null,
-        pathao_status: result.status,
+        tracking_code: result.trackingCode || null,
+        pathao_status: result.status, // courier's own status text (column predates multi-courier)
         delivery_fee: result.deliveryFee,
-        amount_to_collect: payload.amount_to_collect,
+        amount_to_collect: result.amountToCollect,
         error: null,
         counted: true,
       });
 
       if (settings.tag_orders) {
         await admin
-          .annotateOrder(shop, order.id, { tags: ['pathao-sent'], consignmentId: result.consignmentId })
+          .annotateOrder(shop, order.id, { tags: [`${key}-sent`], consignmentId: result.consignmentId, courier: key })
           .catch((e) => log.warn(`[${shop}] could not tag order ${order.name}: ${e.message}`));
       }
 
-      log.info(`[${shop}] ${order.name} -> Pathao consignment ${result.consignmentId}`);
-      // Mark fulfilled in Shopify with the Pathao tracking (if the shop wants it now).
+      log.info(`[${shop}] ${order.name} -> ${label} consignment ${result.consignmentId}`);
+      // Mark fulfilled in Shopify with the courier's tracking (if the shop wants it now).
       if (fulfillment) await fulfillment.sync(shop, order.id);
       return { ok: true, shipment: (await db.getShipment(shop, order.id)) || shipment };
     } catch (e) {
