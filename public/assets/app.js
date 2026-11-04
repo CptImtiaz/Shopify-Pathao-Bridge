@@ -45,7 +45,7 @@
   }
   const setVal = (id, v) => { const el = $(id); if (el) el.value = v == null ? '' : String(v); };
   const courier = (key) => (state.boot.couriers || []).find((c) => c.key === key) || { key, name: key, color: '#6B7875' };
-  const LOGOS = { pathao: '/assets/couriers/pathao-mark.png' };
+  const LOGOS = { pathao: '/assets/couriers/pathao-mark.png', steadfast: '/assets/couriers/steadfast-mark.png' };
   const cmono = (c, cls = '') => (LOGOS[c.key] ? `<img class="cmono logo-img ${cls}" src="${LOGOS[c.key]}" alt="${esc(c.name)}" />` : `<span class="cmono ${cls}" style="background:${esc(c.color)}">${esc(c.name.charAt(0))}</span>`);
   const webhookLive = (key = 'pathao') => Boolean(state.boot && (key === 'steadfast' ? state.boot.steadfastWebhook : state.boot.pathaoWebhook)?.live);
   const defKey = () => (state.boot && state.boot.settings && state.boot.settings.default_courier) || 'pathao';
