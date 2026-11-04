@@ -24,8 +24,13 @@ publish it on the **Shopify App Store as a paid app** and make money from it
   merchants reinstall and re-enter Pathao credentials.
 
 ## Migration status / open items
-1. `SHOPIFY_API_SECRET` must be added in Railway by the owner (app crashes without it).
-2. Run `shopify app deploy` so Shopify uses the Railway URLs.
-3. Reinstall on the dev store and re-enter Pathao credentials; verify order sending + webhook.
-4. Only after Railway is confirmed working: delete the old Vercel project and Neon database
-   (ask the owner first — irreversible).
+- Done: `SHOPIFY_API_SECRET` set on Railway; app version with Railway URLs released;
+  app opened on `pathao-test.myshopify.com`, Pathao connected, Pathao webhook handshake OK.
+- Open: confirm a real test order arrives via `orders/create` and books with Pathao.
+- Open: only after that, delete the old Vercel project and Neon database
+  (ask the owner first — irreversible).
+- Rotate the Shopify client secret before launch (it was pasted in chat).
+
+## Architecture decision
+One app service + one Postgres on Railway. New couriers (Steadfast, RedX, ...) are modules
+in `src/couriers/`, not separate services — cheaper and faster for HTTP-only courier APIs.
