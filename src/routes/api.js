@@ -104,9 +104,9 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
     };
   }
 
-  async function syncPlan(shop, opts) {
+  async function syncPlan(shop, opts, { fresh = true } = {}) {
     try {
-      const { plan, subscription } = await admin.activePlan(shop, opts);
+      const { plan, subscription } = await admin.activePlanCached(shop, opts, { fresh });
       await db.setPlan(shop, plan, subscription ? subscription.id : null);
       return { plan, subscription };
     } catch (e) {
@@ -129,7 +129,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
         (created) => { webhooksChecked.add(req.shop); if (created.length) log.info(`[${req.shop}] registered webhooks: ${created.join(', ')}`); return { ok: true }; },
         (e) => { log.error(`[${req.shop}] webhook registration failed: ${e.message}`); return { ok: false, error: e.message }; }
       );
-    const [{ plan, subscription }, webhooks] = await Promise.all([syncPlan(req.shop, req.opts), webhookCheck]);
+    const [{ plan, subscription }, webhooks] = await Promise.all([syncPlan(req.shop, req.opts, { fresh: req.query.fresh === '1' }), webhookCheck]);
     const [used, stats, permissions] = await Promise.all([db.countSentThisMonth(req.shop), db.monthStats(req.shop), currentPermissions(req)]);
     return {
       shop: req.shop,
@@ -373,6 +373,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
     const plan = req.body?.plan;
     const interval = req.body?.interval === 'yearly' ? 'yearly' : 'monthly';
     if (!PLANS[plan] || PLANS[plan].price <= 0) throw Object.assign(new Error('Unknown plan'), { status: 400 });
+    admin.forgetPlan(req.shop); // merchant comes back from Shopify's approve page: re-check the plan
     return { confirmationUrl: await admin.createSubscription(req.shop, plan, req.opts, interval) };
   }));
 
@@ -398,6 +399,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
     const { subscription } = await syncPlan(req.shop, req.opts);
     if (subscription) await admin.cancelSubscription(req.shop, subscription.id, req.opts);
     await db.setPlan(req.shop, 'free', null);
+    admin.forgetPlan(req.shop);
     return { plan: 'free' };
   }));
 

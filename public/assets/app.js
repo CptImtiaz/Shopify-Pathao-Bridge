@@ -451,7 +451,7 @@
     if (ok) toast(`${ok} order${ok > 1 ? 's' : ''} sent to ${c.name}`);
     if (failed.length) toast(`${failed.length} not sent: ${failed[0].error}`, true);
     ids.forEach((id) => state.selected.delete(id));
-    await refreshBoot(); await loadOrders();
+    await Promise.all([refreshBoot(), loadOrders()]);
   }
   function openMenu(anchor, ids) {
     const m = $('courier-menu');
@@ -641,7 +641,9 @@
     if (state.loaded) renderOrders(); else renderHeader();
     renderCouriers();
   }
-  async function refreshBoot() { state.boot = await api('/bootstrap'); renderAll(); }
+  // Coming back from Shopify's plan approval page (?charge_id=...): re-check the plan now.
+  const returningFromBilling = new URLSearchParams(location.search).has('charge_id');
+  async function refreshBoot(fresh = returningFromBilling) { state.boot = await api(fresh ? '/bootstrap?fresh=1' : '/bootstrap'); renderAll(); }
 
   // ---------------- events ----------------
   document.addEventListener('click', async (ev) => {
@@ -711,7 +713,7 @@
         return await busy(b, () => sendOrders(ids, S().default_courier || 'pathao'));
       }
       if (b.id === 'bulk-default') return await busy(b, () => sendOrders([...state.selected], S().default_courier || 'pathao'));
-      if (b.id === 'reload-orders') return await busy(b, async () => { await Promise.all([refreshBoot(), loadOrders(null, { fresh: true })]); });
+      if (b.id === 'reload-orders') return await busy(b, async () => { await Promise.all([refreshBoot(true), loadOrders(null, { fresh: true })]); });
       if (b.id === 'save-connection') return await busy(b, saveConnection);
       if (b.id === 'save-webhook') return await busy(b, async () => {
         const secret = $('wh_secret').value.trim();

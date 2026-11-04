@@ -80,6 +80,7 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, no
   }));
 
   router.post('/webhooks/app_subscriptions/update', ...shopifyWebhook(async ({ shop, payload }) => {
+    if (admin.forgetPlan) admin.forgetPlan(shop);
     const sub = payload.app_subscription || {};
     const id = sub.admin_graphql_api_id;
     const status = String(sub.status || '').toUpperCase();

@@ -33,7 +33,8 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
   // Extra fields for the dashboard: product thumbnails and Shopify's fraud analysis.
   // Both need only read_orders; if a store/API version refuses them we fall back.
   const RICH_FIELDS = ORDER_FIELDS.replace('lineItems(first: 100) { nodes { title quantity } }',
-    'lineItems(first: 100) { nodes { title quantity image { url(transform: { maxWidth: 120, maxHeight: 120 }) } } }') +
+    // 20 lines is plenty for the dashboard and keeps Shopify's query cost (and reply time) low.
+    'lineItems(first: 20) { nodes { title quantity image { url(transform: { maxWidth: 120, maxHeight: 120 }) } } }') +
     ' risk { recommendation assessments { riskLevel facts { description sentiment } } }';
   // Only order + shipping-address fields: needs read_orders and the Name/Phone/Address
   // protected fields, nothing else. (Weights come from the orders/create webhook,
@@ -150,6 +151,20 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
 
   // ---------------- billing (Shopify Billing API) ----------------
 
+  // The plan only changes through billing (which clears this) or the
+  // app_subscriptions/update webhook (which also clears it), so the dashboard
+  // doesn't need to ask Shopify on every load.
+  const PLAN_TTL_MS = 10 * 60 * 1000;
+  const planCache = new Map();
+  function forgetPlan(shop) { planCache.delete(shop); }
+  async function activePlanCached(shop, opts, { fresh = false } = {}) {
+    const hit = planCache.get(shop);
+    if (!fresh && hit && Date.now() - hit.at < PLAN_TTL_MS) return hit.value;
+    const value = await activePlan(shop, opts);
+    planCache.set(shop, { at: Date.now(), value });
+    return value;
+  }
+
   async function activePlan(shop, opts) {
     const data = await graphql(
       shop,
@@ -218,7 +233,7 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
     if (errs.length) throw new Error(errs.map((e) => e.message).join('; '));
   }
 
-  return { graphql, listRecentOrders, listRecentOrdersCached, forgetOrders, getOrder, annotateOrder, removeTags, activePlan, createSubscription, cancelSubscription, billingHistory, ensureWebhooks };
+  return { graphql, listRecentOrders, listRecentOrdersCached, forgetOrders, activePlanCached, forgetPlan, getOrder, annotateOrder, removeTags, activePlan, createSubscription, cancelSubscription, billingHistory, ensureWebhooks };
 }
 
 module.exports = { makeAdmin };

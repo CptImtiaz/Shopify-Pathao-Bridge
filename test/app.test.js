@@ -179,7 +179,8 @@ test('free plan limit blocks sends after 50, Pro is unlimited', async (t) => {
   assert.match(r.data.results[0].error, /Monthly limit reached/);
 
   a.fake.state.activeSubscriptions = [{ id: 'gid://shopify/AppSubscription/1', name: 'ShipBridge Pro', status: 'ACTIVE', test: true, trialDays: 7, currentPeriodEnd: null }];
-  const boot = await a.api('/bootstrap');
+  // Plan is cached between page loads; returning from Shopify's approve page asks again.
+  const boot = await a.api('/bootstrap?fresh=1');
   assert.equal(boot.data.plan, 'pro');
   r = await a.api('/orders/send', { method: 'POST', body: { ids: ['900'] } });
   assert.equal(r.data.results[0].ok, true);
