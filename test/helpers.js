@@ -56,6 +56,7 @@ function fakeFetch() {
     fo: {}, // orderId -> [{ id, status, fulfillmentHolds, fulfillments }]
     fulfillments: [], events: [], trackingUpdates: [], released: [], fulfillDenied: false,
     steadfastOrders: [], nextSteadfast: 5000, steadfastStatus: {}, steadfastFail: null,
+    drafts: {}, draftsDenied: false, nextOrderFromDraft: 7000, paymentPendingRemoved: false,
   };
 
   const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -81,6 +82,24 @@ function fakeFetch() {
       const { query, variables } = JSON.parse(body);
       if (query.includes('currentAppInstallation')) {
         return json(200, { data: { currentAppInstallation: { activeSubscriptions: state.activeSubscriptions, allSubscriptions: { nodes: state.allSubscriptions || [] } } } });
+      }
+      // ---- draft orders ----
+      if (query.includes('draftOrder') && state.draftsDenied) return json(200, { errors: [{ message: 'Access denied for draftOrders field. Required access: `read_draft_orders` access scope.', extensions: { code: 'ACCESS_DENIED' } }] });
+      if (query.includes('draftOrders(')) return json(200, { data: { draftOrders: { nodes: Object.values(state.drafts).filter((d) => d.status === 'OPEN') } } });
+      if (query.includes('draftOrderComplete(')) {
+        if (state.paymentPendingRemoved && query.includes('paymentPending')) return json(200, { errors: [{ message: "Field 'draftOrderComplete' doesn't accept argument 'paymentPending'" }] });
+        const id = variables.id.split('/').pop();
+        const d = state.drafts[id];
+        d.status = 'COMPLETED';
+        state.nextOrderFromDraft += 1;
+        const oid = state.nextOrderFromDraft;
+        // Worst case: Shopify marks the new order as paid.
+        state.orders[oid] = gqlOrder(oid, { name: `#${oid}`, sourceName: 'shopify_draft_order', displayFinancialStatus: 'PAID', totalOutstandingSet: { shopMoney: { amount: '0.00' } } });
+        return json(200, { data: { draftOrderComplete: { draftOrder: { status: 'COMPLETED', order: { legacyResourceId: String(oid), name: `#${oid}` } }, userErrors: [] } } });
+      }
+      if (query.includes('draftOrder(')) {
+        const id = variables.id.split('/').pop();
+        return json(200, { data: { draftOrder: state.drafts[id] || null } });
       }
       if (query.includes('RecentOrders')) return json(200, { data: { orders: { nodes: Object.values(state.orders) } } });
       if (query.includes('OneOrder')) {
@@ -219,4 +238,16 @@ async function startApp({ smsFeature = true, adminPassword = '' } = {}) {
   return { base, api, webhook, settle, fake, db, logs, close: () => server.close() };
 }
 
-module.exports = { startApp, sessionToken, gqlOrder, memPool, fakeFetch, SHOP, SECRET };
+function gqlDraft(id, extra = {}) {
+  return {
+    id: `gid://shopify/DraftOrder/${id}`, legacyResourceId: String(id), name: `#D${id}`, createdAt: new Date().toISOString(),
+    note2: '', tags: [], phone: null, status: 'OPEN',
+    totalPriceSet: { shopMoney: { amount: '693.45', currencyCode: 'BDT' } },
+    shippingAddress: { name: 'Karine Ruby', phone: '01712345678', address1: 'House 9, Road 3, Gulshan 1', city: 'Dhaka' },
+    billingAddress: null,
+    lineItems: { nodes: [{ title: 'Snowboard', quantity: 1, image: null }] },
+    ...extra,
+  };
+}
+
+module.exports = { gqlDraft, startApp, sessionToken, gqlOrder, memPool, fakeFetch, SHOP, SECRET };

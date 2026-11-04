@@ -407,7 +407,7 @@ input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); c
 .setup .steps li .btn { margin-left: auto; }
 
 /* pipeline as tabs */
-.pipe-tabs { display: flex; gap: 6px; padding: 4px 14px 12px; overflow-x: auto; border-bottom: 1px solid var(--line); }
+.pipe-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 14px 12px; border-bottom: 1px solid var(--line); }
 .pipe-tabs button { display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid #e6e7ec; background: #fff; font: inherit; font-size: 13px; font-weight: 550; color: #4b5563; cursor: pointer; white-space: nowrap; }
 .pipe-tabs button b { font-size: 12px; font-weight: 650; min-width: 22px; height: 20px; padding: 0 6px; border-radius: 99px; display: inline-grid; place-items: center; background: #f1f2f4; color: #4b5563; }
 .pipe-tabs button:hover { background: #fafafb; }
@@ -578,3 +578,5 @@ input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); c
 .seg.sm button { height: 28px; padding: 0 10px; font-size: 12.5px; }
 .seg button:disabled { opacity: .45; cursor: not-allowed; }
 @media (max-width: 760px) { .auto-box { width: 100%; } }
+.list-note { margin: 10px 14px; padding: 10px 12px; border-radius: 10px; background: #faf5ff; border: 1px solid #e9d5ff; color: #4c1d95; font-size: 13px; line-height: 1.45; }
+.list-note code { background: #fff; border: 1px solid #e9d5ff; border-radius: 5px; padding: 0 4px; font-size: 12px; }

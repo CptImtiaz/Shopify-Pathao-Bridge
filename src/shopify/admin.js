@@ -45,7 +45,7 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
   // (new-order webhook, sending, Pathao status) calls forgetOrders(shop).
   const ORDERS_TTL_MS = 30000;
   const orderCache = new Map();
-  function forgetOrders(shop) { orderCache.delete(shop); }
+  function forgetOrders(shop) { orderCache.delete(shop); orderCache.delete(`drafts:${shop}`); }
   async function listRecentOrdersCached(shop, opts, first = 30, { rich = false, fresh = false } = {}) {
     const key = `${first}:${rich}`;
     const hit = orderCache.get(shop);
@@ -54,6 +54,52 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
     orderCache.set(shop, entry);
     entry.promise.catch(() => { if (orderCache.get(shop) === entry) orderCache.delete(shop); });
     return entry.promise;
+  }
+
+  // ---------------- draft orders (need read/write_draft_orders) ----------------
+  const DRAFT_FIELDS = `id legacyResourceId name createdAt note2 tags phone status
+    totalPriceSet { shopMoney { amount currencyCode } }
+    shippingAddress { name phone address1 address2 city province zip country }
+    billingAddress { name phone }
+    lineItems(first: 20) { nodes { title quantity image { url(transform: { maxWidth: 120, maxHeight: 120 }) } } }`;
+  async function listOpenDrafts(shop, opts) {
+    const d = await graphql(shop, `{ draftOrders(first: 50, reverse: true, query: "status:open") { nodes { ${DRAFT_FIELDS} } } }`, {}, opts);
+    return d.draftOrders.nodes;
+  }
+  // Same short cache as orders; returns { drafts, error } so a missing permission never breaks the order list.
+  async function listOpenDraftsCached(shop, opts, { fresh = false } = {}) {
+    const key = `drafts:${shop}`;
+    const hit = orderCache.get(key);
+    if (!fresh && hit && Date.now() - hit.at < ORDERS_TTL_MS) return hit.promise;
+    const entry = {
+      at: Date.now(),
+      promise: listOpenDrafts(shop, opts).then((drafts) => ({ drafts, error: null }), (e) => ({
+        drafts: [],
+        error: /access denied|ACCESS_DENIED|draft_orders|required access/i.test(e.message) ? 'permission' : e.message,
+      })),
+    };
+    orderCache.set(key, entry);
+    return entry.promise;
+  }
+  async function getDraft(shop, legacyId, opts) {
+    const d = await graphql(shop, `query D($id: ID!) { draftOrder(id: $id) { ${DRAFT_FIELDS} } }`, { id: `gid://shopify/DraftOrder/${legacyId}` }, opts);
+    return d.draftOrder;
+  }
+  // Turns a draft into a real order (payment left pending) and returns { id, name }.
+  async function completeDraft(shop, legacyId, opts) {
+    const run = (args) => graphql(shop, `mutation C($id: ID!) { draftOrderComplete(id: $id${args}) { draftOrder { status order { legacyResourceId name } } userErrors { field message } } }`,
+      { id: `gid://shopify/DraftOrder/${legacyId}` }, opts);
+    let d;
+    try { d = await run(', paymentPending: true'); } catch (e) {
+      // Newer API versions dropped paymentPending; the courier amount is fixed from the draft anyway.
+      if (!/paymentPending/.test(e.message)) throw e;
+      d = await run('');
+    }
+    const r = d.draftOrderComplete;
+    if (r.userErrors && r.userErrors.length) throw new Error(`Shopify could not complete the draft: ${r.userErrors.map((x) => x.message).join('; ')}`);
+    const order = r.draftOrder && r.draftOrder.order;
+    if (!order) throw new Error('Shopify completed the draft but returned no order');
+    return { id: String(order.legacyResourceId), name: order.name };
   }
 
   async function listRecentOrders(shop, opts, first = 30, { rich = false } = {}) {
@@ -233,7 +279,7 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
     if (errs.length) throw new Error(errs.map((e) => e.message).join('; '));
   }
 
-  return { graphql, listRecentOrders, listRecentOrdersCached, forgetOrders, activePlanCached, forgetPlan, getOrder, annotateOrder, removeTags, activePlan, createSubscription, cancelSubscription, billingHistory, ensureWebhooks };
+  return { graphql, listRecentOrders, listRecentOrdersCached, forgetOrders, listOpenDraftsCached, getDraft, completeDraft, activePlanCached, forgetPlan, getOrder, annotateOrder, removeTags, activePlan, createSubscription, cancelSubscription, billingHistory, ensureWebhooks };
 }
 
 module.exports = { makeAdmin };

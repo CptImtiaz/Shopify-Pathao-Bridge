@@ -80,6 +80,33 @@ function fromGraphql(o) {
   };
 }
 
+// Open draft order (not an order yet). Treated as unpaid: the whole total is
+// collected on delivery, whatever Shopify later marks when the draft is completed.
+function fromDraft(d) {
+  const ship = d.shippingAddress || {};
+  return {
+    id: `d${d.legacyResourceId}`,
+    draftId: String(d.legacyResourceId),
+    name: d.name,
+    createdAt: d.createdAt,
+    cancelled: false,
+    source: 'draft',
+    note: d.note2 || '',
+    tags: d.tags || [],
+    paid: false,
+    total: num(d.totalPriceSet?.shopMoney?.amount),
+    outstanding: num(d.totalPriceSet?.shopMoney?.amount),
+    shipping: {
+      name: ship.name, phone: ship.phone, address1: ship.address1, address2: ship.address2,
+      city: ship.city, province: ship.province, zip: ship.zip, country: ship.country,
+    },
+    fallbackName: d.billingAddress?.name || '',
+    fallbackPhones: [d.billingAddress?.phone, d.phone],
+    risk: null,
+    items: (d.lineItems?.nodes || []).map((li) => ({ title: li.title, image: li.image?.url || null, quantity: Number(li.quantity) || 0, grams: 0 })),
+  };
+}
+
 function num(v) {
   const n = parseFloat(v);
   return Number.isFinite(n) ? n : 0;
@@ -164,4 +191,4 @@ function autoSendSkipReason(order, settings) {
   return null;
 }
 
-module.exports = { normalizePhone, fromWebhook, fromGraphql, buildPathaoOrder, autoSendSkipReason };
+module.exports = { normalizePhone, fromWebhook, fromGraphql, fromDraft, buildPathaoOrder, autoSendSkipReason };

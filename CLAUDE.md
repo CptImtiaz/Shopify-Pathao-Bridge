@@ -47,9 +47,15 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 - `settings.default_courier` drives Send buttons and auto-send.
 
 ## Dashboard tabs
-- All = every order except Hold (cancelled included). Hold = unsent orders that wait for the
-  merchant: made from a draft (`sourceName: shopify_draft_order`, never auto-sent), high
-  fraud risk, bad phone, or skipped with a "Held: ..." reason. Problems = courier refused /
-  failed / returned. Merchant notes per order live in `order_notes` (never sent to couriers).
+- All = active orders (new, booked, picked up, on the way, delivered, returned).
+- Hold = waits for the merchant on purpose: open Shopify draft orders (id `d<draftId>`, need
+  `read/write_draft_orders`), orders made from a draft (`sourceName: shopify_draft_order`,
+  never auto-sent), high fraud risk, or skipped with a "Held: ..." reason.
+- Errors = must be fixed first: bad phone, missing name/address, courier refused, plan limit.
+- Returned = failed delivery / returned. Cancelled = cancelled in Shopify (not sent).
+- Sending a draft completes it (`draftOrderComplete`, payment pending) and books it with the
+  draft's total as COD, so the amount is right even if Shopify marks the order paid.
+- Merchant notes per order live in `order_notes` (never sent to couriers); a draft's note
+  moves to the order it becomes.
 - Before changing the order table, re-run the overlap check (widths 1060–1600): the app
   area inside Shopify admin on a 1366px laptop is ~1060px wide.

@@ -54,15 +54,37 @@
   const sfRejected = () => Boolean(S().steadfast && S().steadfast.auth_error);
   // Why an unsent order is waiting for the merchant (null = not on hold).
   const badPhoneOf = (o) => Boolean(o.fraud && o.fraud.reasons.some((r) => /not a valid|No phone/.test(r.text)));
-  function holdReason(o) {
-    if (o.cancelled || !canSend(o) || (o.shipment && o.shipment.status === 'failed')) return null;
-    if (held(o)) return (o.shipment.error || '').replace(/^Held( for review)?:\s*/i, '') || 'Held';
-    if (o.source === 'shopify_draft_order') return 'Draft order · created in Shopify admin';
+  // Something must be fixed before this order can be booked (null = nothing).
+  function errorReason(o) {
+    if (o.cancelled || !canSend(o)) return null;
+    const s = o.shipment;
+    if (s && s.status === 'failed') {
+      const c = cname(s.courier);
+      return s.error ? (s.error.startsWith(c) ? s.error : `${c}: ${s.error}`) : `${c} refused the booking`;
+    }
+    if (s && s.status === 'skipped' && /limit reached/i.test(s.error || '')) return s.error;
     if (badPhoneOf(o)) return 'Phone number needs fixing';
+    if (!o.customer || String(o.address || '').length < 10) return 'Customer name or address missing';
+    return null;
+  }
+  // Waiting for the merchant on purpose (null = not on hold). Open drafts are always on hold.
+  function holdReason(o) {
+    if (o.draft) return 'Draft order · not completed in Shopify';
+    if (o.cancelled || !canSend(o) || errorReason(o)) return null;
+    if (held(o)) return (o.shipment.error || '').replace(/^Held( for review)?:\s*/i, '') || 'Held';
+    if (o.source === 'shopify_draft_order') return 'Made from a draft in Shopify admin';
     if (o.fraud && o.fraud.level === 'high') return 'High fraud risk';
     return null;
   }
-  const bucketOf = (o) => (holdReason(o) ? 'hold' : stageOf(o).key);
+  function bucketOf(o) {
+    if (o.draft) return 'hold';
+    if (o.cancelled && !(o.shipment && o.shipment.status === 'sent')) return 'cancelled';
+    if (errorReason(o)) return 'errors';
+    if (holdReason(o)) return 'hold';
+    const k = stageOf(o).key;
+    return k === 'problems' ? 'returned' : k;
+  }
+  const IN_ALL = ['new', 'booked', 'picked', 'onway', 'delivered', 'returned'];
   const courierReady = (key) => (key === 'steadfast' ? sfConnected() : Boolean(S().connected && S().pathao_store_id));
   const permMissing = () => Boolean(state.boot && state.boot.permissions && state.boot.permissions.missing && state.boot.permissions.missing.length);
   const S = () => state.boot.settings;
@@ -116,6 +138,8 @@
   }
   function stageLabel(o) {
     const s = o.shipment;
+    if (o.draft) return 'Draft';
+    if (errorReason(o)) return 'Needs fixing';
     if (holdReason(o)) return 'On hold';
     if (!s) return o.cancelled ? 'Cancelled' : 'Not sent';
     if (held(o)) return 'Held for review';
@@ -159,7 +183,7 @@
     if (o.shipment && o.shipment.status === 'failed') return { label: 'Retry', cls: 'btn sm', act: 'send' };
     return { label: `Send to ${cname(defKey())}`, cls: 'btn sm primary', act: 'send' };
   }
-  const shopifyOrderUrl = (o) => `https://admin.shopify.com/store/${state.boot.shop.replace('.myshopify.com', '')}/orders/${o.id}`;
+  const shopifyOrderUrl = (o) => `https://admin.shopify.com/store/${state.boot.shop.replace('.myshopify.com', '')}/${o.draft ? `draft_orders/${o.id.slice(1)}` : `orders/${o.id}`}`;
   const trackUrl = (o) => (o.shipment.courier === 'steadfast'
     ? `https://steadfast.com.bd/t/${encodeURIComponent(o.shipment.trackingCode || '')}`
     : `https://merchant.pathao.com/tracking?consignment_id=${encodeURIComponent(o.shipment.consignmentId)}${o.phoneNormalized ? `&phone=${encodeURIComponent(o.phoneNormalized)}` : ''}`);
@@ -259,12 +283,12 @@
   }
 
   const STAGES = [
-    ['hold', 'Hold', 't-hold', 'Draft, risky or held'], ['new', 'New', 't-new', 'Not sent yet'], ['booked', 'Booked', 't-go', 'Waiting for rider'], ['picked', 'Picked up', 't-go', 'With Pathao'],
-    ['onway', 'On the way', 't-go', 'Transit & delivery'], ['delivered', 'Delivered', 't-done', 'Recent orders'], ['problems', 'Problems', 't-bad', 'Returned or failed'],
+    ['new', 'New', 't-new'], ['hold', 'Hold', 't-hold'], ['errors', 'Errors', 't-bad'], ['booked', 'Booked', 't-go'], ['picked', 'Picked up', 't-go'],
+    ['onway', 'On the way', 't-go'], ['delivered', 'Delivered', 't-done'], ['returned', 'Returned', 't-bad'], ['cancelled', 'Cancelled', ''],
   ];
   function renderPipeline() {
     const c = {}; state.orders.forEach((o) => { const k = bucketOf(o); c[k] = (c[k] || 0) + 1; });
-    const tabs = [['', 'All', state.orders.length - (c.hold || 0), '']].concat(STAGES.map(([k, l, tone]) => [k, l, c[k] || 0, tone]));
+    const tabs = [['', 'All', IN_ALL.reduce((t, k) => t + (c[k] || 0), 0), '']].concat(STAGES.map(([k, l, tone]) => [k, l, c[k] || 0, tone]));
     $('pipeline').innerHTML = tabs.map(([k, l, n, tone]) => `<button role="tab" class="${tone}" aria-selected="${(state.stage || '') === k}" data-stage="${k}"><span>${l}</span><b>${n}</b></button>`).join('');
   }
   const RISKS = [['any', 'All risk'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low'], ['safe', 'Safe'], ['pending', 'Checking']];
@@ -276,8 +300,8 @@
   }
   function visible() {
     const q = state.search.trim().toLowerCase();
-    // "All" is everything except Hold; Hold has its own tab.
-    return state.orders.filter((o) => (state.stage ? bucketOf(o) === state.stage : bucketOf(o) !== 'hold')
+    // "All" = active orders; Hold, Errors and Cancelled have their own tabs.
+    return state.orders.filter((o) => (state.stage ? bucketOf(o) === state.stage : IN_ALL.includes(bucketOf(o)))
       && (state.risk === 'any' || levelOf(o) === state.risk)
       && (!q || `${o.name} ${o.customer} ${o.phone} ${o.city} ${o.shipment ? o.shipment.consignmentId : ''}`.toLowerCase().includes(q)));
   }
@@ -294,6 +318,7 @@
   const TRUCK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.6" fill="currentColor"/><circle cx="17" cy="17.5" r="1.6" fill="currentColor"/></svg>';
   function fulfillBadge(o) {
     const f = String(o.fulfillment || '').toUpperCase();
+    if (o.draft) return '<span class="badge purple">Draft</span>';
     if (o.cancelled) return '<span class="badge">Cancelled</span>';
     if (f === 'FULFILLED') return '<span class="badge green">Fulfilled</span>';
     if (f === 'PARTIALLY_FULFILLED') return '<span class="badge yellow">Partial</span>';
@@ -301,6 +326,7 @@
   }
   function payCell(o) {
     const f = String(o.financial || '').toUpperCase();
+    if (o.draft) return `<span class="amount">${esc(taka(o.total))}</span><span class="sub"><span class="badge">Not paid yet</span></span><span class="sub">COD ${esc(taka(o.cod))}</span>`;
     const badge = f === 'PAID' ? '<span class="badge green">Paid</span>' : f === 'PARTIALLY_PAID' ? '<span class="badge yellow">Partially paid</span>' : /REFUND/.test(f) ? '<span class="badge">Refunded</span>' : '<span class="badge yellow">Pending</span>';
     return `<span class="amount">${esc(taka(o.total))}</span><span class="sub">${badge}</span>${o.cod > 0 && f !== 'PAID' ? `<span class="sub">COD ${esc(taka(o.cod))}</span>` : ''}`;
   }
@@ -318,6 +344,7 @@
   // Delivery status: a coloured pill with icon, and a 5-dot stepper underneath.
   const ST_ICON = { ok: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', bad: '<path d="M7 7l10 10M17 7L7 17"/>', go: '<path d="M5 12h12M13 7l5 5-5 5"/>', wait: '<circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/>', hold: '<path d="M9 7v10M15 7v10"/>' };
   function statusTone(o, st) {
+    if (errorReason(o)) return 'bad';
     if (holdReason(o) || held(o)) return 'hold';
     if (st.bad) return 'bad';
     if (st.key === 'delivered') return 'ok';
@@ -349,15 +376,12 @@
     const st = stageOf(o), sel = state.selected.has(o.id), f = o.fraud, h = (f && f.history) || {};
     const first = (o.products && o.products[0]) || null;
     const more = (o.products || []).length > 1 ? `+${o.products.length - 1} more · ` : '';
-    const hr = holdReason(o);
-    const err = hr ? `<span class="hold-why">${esc(hr)}</span>`
-      : o.shipment && o.shipment.status !== 'sent' && o.shipment.error ? (() => {
-        const c = o.shipment.status === 'failed' ? cname(o.shipment.courier) : '';
-        const msg = c && !o.shipment.error.startsWith(c) ? `${c}: ${o.shipment.error}` : o.shipment.error;
-        return `<span class="err" title="${esc(msg)}">${esc(msg)}</span>`;
-      })() : '';
+    const er = errorReason(o), hr = holdReason(o);
+    const err = er ? `<span class="err" title="${esc(er)}">${esc(er)}</span>`
+      : hr ? `<span class="hold-why" title="${esc(hr)}">${esc(hr)}</span>`
+      : o.shipment && o.shipment.status !== 'sent' && o.shipment.error ? `<span class="err" title="${esc(o.shipment.error)}">${esc(o.shipment.error)}</span>` : '';
     const note = o.note ? `<button class="note-line" data-open="${esc(o.id)}" title="${esc(o.note)}"><span>Note:</span> ${esc(o.note)}</button>`
-      : hr ? `<button class="link-btn note-add" data-open="${esc(o.id)}">+ Add note</button>` : '';
+      : hr || er ? `<button class="link-btn note-add" data-open="${esc(o.id)}">+ Add note</button>` : '';
     const synced = o.shipment && o.shipment.status === 'sent' && o.shipment.consignmentId ? `<span class="cn mono" title="Pathao consignment">${esc(o.shipment.consignmentId)}</span>` : '';
     return `<div class="row${sel ? ' sel' : ''}" data-row="${esc(o.id)}">
       <span>${canSend(o) ? `<input type="checkbox" data-select="${esc(o.id)}" ${sel ? 'checked' : ''} aria-label="Select ${esc(o.name)}" />` : ''}</span>
@@ -371,16 +395,22 @@
       <div>${courierCell(o)}</div>
     </div>`;
   }
+  function draftNote() {
+    if (state.draftsError === 'permission') {
+      return `<div class="list-note"><b>Open draft orders aren't shown yet.</b> ShipBridge needs Shopify's draft-order permission: release the new app version (<code>shopify app deploy</code>), then reopen ShipBridge and click <b>Update</b> when Shopify asks.</div>`;
+    }
+    return state.draftsError ? `<div class="list-note">Couldn't load draft orders: ${esc(state.draftsError)}</div>` : '';
+  }
   function renderRows() {
     const rows = visible();
     show($('orders-loading'), false);
     show($('orders-empty'), !rows.length);
     if (!rows.length) {
-      $('rows').innerHTML = '';
+      $('rows').innerHTML = state.stage === 'hold' ? draftNote() : '';
       $('orders-empty').innerHTML = state.stage === 'hold' && !state.search ? '<b>Nothing on hold</b>Draft, high-risk and held orders wait here for you to assign a courier.'
         : state.orders.length ? '<b>No orders here</b>Try another tab, risk filter or search.' : '<b>No orders yet</b>New orders from your store appear here.';
     } else {
-      $('rows').innerHTML = rows.map(rowHtml).join('');
+      $('rows').innerHTML = (state.stage === 'hold' ? draftNote() : '') + rows.map(rowHtml).join('');
     }
     const sendable = rows.filter(canSend);
     $('check-all').checked = sendable.length > 0 && sendable.every((o) => state.selected.has(o.id));
@@ -466,7 +496,9 @@
     show($('orders-loading'), !state.orders.length);
     const statsP = loadStats();
     try {
-      state.orders = (await (pending || api(fresh ? '/orders?fresh=1' : '/orders'))).orders;
+      const r = await (pending || api(fresh ? '/orders?fresh=1' : '/orders'));
+      state.draftsError = r.draftsError || null;
+      state.orders = r.orders.concat(r.drafts || []).sort((x, y) => new Date(y.createdAt) - new Date(x.createdAt));
       state.loaded = true;
       await statsP;
       const ok = new Set(state.orders.filter(canSend).map((o) => o.id));
@@ -476,6 +508,8 @@
   }
   async function sendOrders(ids, key) {
     if (!ids.length) return;
+    const drafts = ids.filter((id) => String(id).startsWith('d')).length;
+    if (drafts && !confirm(`${drafts} draft order${drafts > 1 ? 's' : ''} will be completed in Shopify (becomes a real order, payment pending) and then booked. The rider collects the full draft total. Continue?`)) return;
     const c = courier(key);
     const r = await api('/orders/send', { method: 'POST', body: { ids, courier: key } });
     const ok = r.results.filter((x) => x.ok).length;
