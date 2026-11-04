@@ -34,3 +34,14 @@ publish it on the **Shopify App Store as a paid app** and make money from it
 ## Architecture decision
 One app service + one Postgres on Railway. New couriers (Steadfast, RedX, ...) are modules
 in `src/couriers/`, not separate services — cheaper and faster for HTTP-only courier APIs.
+
+## Couriers
+- Pathao: `src/pathao/` (OAuth password grant, stores, webhook `/pathao/webhook/:shop`).
+- Steadfast (Packzy API `https://portal.packzy.com/api/v1`): `src/couriers/steadfast.js`.
+  Api-Key + Secret-Key headers, no token. 10 failed logins in 5 min = 60 min lockout, so
+  never retry 401s. Webhook `/steadfast/webhook/:shop`: `X-Signature` = HMAC-SHA256(raw body,
+  per-shop auth token shown in the app), or `Authorization: Bearer <token>`.
+  `*_approval_pending` statuses are rider-only and don't move the Shopify order.
+- `shipments.courier` says which courier booked an order; `shipments.pathao_status` holds the
+  courier's status text for every courier (name predates multi-courier).
+- `settings.default_courier` drives Send buttons and auto-send.

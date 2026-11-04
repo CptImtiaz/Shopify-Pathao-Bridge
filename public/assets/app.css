@@ -550,3 +550,4 @@ input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); c
 .hero-l { align-items: center; }
 .hero-l > div { border-left: 1px solid #e6e7ec; padding-left: 14px; }
 .pill-logo { width: 16px; height: 16px; border-radius: 50%; }
+.hero-mono.cmono { width: 48px; height: 48px; border-radius: 12px; font-size: 20px; flex: none; }

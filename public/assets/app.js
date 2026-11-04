@@ -47,7 +47,11 @@
   const courier = (key) => (state.boot.couriers || []).find((c) => c.key === key) || { key, name: key, color: '#6B7875' };
   const LOGOS = { pathao: '/assets/couriers/pathao-mark.png' };
   const cmono = (c, cls = '') => (LOGOS[c.key] ? `<img class="cmono logo-img ${cls}" src="${LOGOS[c.key]}" alt="${esc(c.name)}" />` : `<span class="cmono ${cls}" style="background:${esc(c.color)}">${esc(c.name.charAt(0))}</span>`);
-  const webhookLive = () => Boolean(state.boot && state.boot.pathaoWebhook && state.boot.pathaoWebhook.live);
+  const webhookLive = (key = 'pathao') => Boolean(state.boot && (key === 'steadfast' ? state.boot.steadfastWebhook : state.boot.pathaoWebhook)?.live);
+  const defKey = () => (state.boot && state.boot.settings && state.boot.settings.default_courier) || 'pathao';
+  const cname = (key) => courier(key || 'pathao').name;
+  const sfConnected = () => Boolean(S().steadfast && S().steadfast.connected);
+  const courierReady = (key) => (key === 'steadfast' ? sfConnected() : Boolean(S().connected && S().pathao_store_id));
   const permMissing = () => Boolean(state.boot && state.boot.permissions && state.boot.permissions.missing && state.boot.permissions.missing.length);
   const S = () => state.boot.settings;
   function apply(r) { if (r.settings) state.boot.settings = r.settings; if (r.couriers) state.boot.couriers = r.couriers; }
@@ -88,6 +92,8 @@
     if (s.status === 'failed' || s.status === 'skipped') return { key: held(o) ? 'new' : 'problems', step: 0, bad: !held(o) };
     if (s.status === 'processing') return { key: 'booked', step: 1 };
     const p = ps(o);
+    if (/approval.?pending/.test(p)) return { key: 'onway', step: 4 }; // Steadfast: rider's word, not confirmed yet
+    if (/exceptional/.test(p)) return { key: 'problems', step: 3, bad: true };
     if (/partial/.test(p) || (/deliver/.test(p) && !/fail/.test(p) && !/assigned/.test(p))) return { key: 'delivered', step: 5 };
     if (/return|cancel/.test(p)) return { key: 'problems', step: 2, bad: true };
     if (/fail/.test(p)) return { key: 'problems', step: 4, bad: true };
@@ -100,11 +106,11 @@
     const s = o.shipment;
     if (!s) return o.cancelled ? 'Cancelled' : 'Not sent';
     if (held(o)) return 'Held for review';
-    if (s.status === 'failed') return 'Pathao refused';
+    if (s.status === 'failed') return `${cname(s.courier)} refused`;
     if (s.status === 'skipped') return 'Not sent';
     if (s.status === 'processing') return 'Sending…';
     const p = ps(o).replace(/^order\./, '');
-    const map = [[/partial/, 'Partially delivered'], [/paid.?return/, 'Paid return'], [/deliver.*fail|fail/, 'Delivery failed'], [/assigned.?for.?delivery|out.?for/, 'Out for delivery'],
+    const map = [[/approval.?pending/, 'Awaiting confirmation'], [/in.?review/, 'In review'], [/exceptional/, 'Needs attention'], [/partial/, 'Partially delivered'], [/paid.?return/, 'Paid return'], [/deliver.*fail|fail/, 'Delivery failed'], [/assigned.?for.?delivery|out.?for/, 'Out for delivery'],
       [/deliver/, 'Delivered'], [/return/, 'Returned'], [/pickup.?cancel|cancel/, 'Cancelled'], [/assigned.?for.?pickup/, 'Rider assigned'], [/picked/, 'Picked up'],
       [/sorting/, 'At sorting hub'], [/hub/, 'At delivery hub'], [/transit/, 'In transit'], [/hold/, 'On hold']];
     const hit = map.find(([re]) => re.test(p));
@@ -144,10 +150,12 @@
     if (badPhone) return { label: 'Fix phone', cls: 'btn sm warn', act: 'shopify' };
     if (held(o) || (o.fraud && o.fraud.level === 'high')) return { label: 'Review', cls: 'btn sm warn', act: 'open' };
     if (o.shipment && o.shipment.status === 'failed') return { label: 'Retry', cls: 'btn sm', act: 'send' };
-    return { label: 'Send to Pathao', cls: 'btn sm primary', act: 'send' };
+    return { label: `Send to ${cname(defKey())}`, cls: 'btn sm primary', act: 'send' };
   }
   const shopifyOrderUrl = (o) => `https://admin.shopify.com/store/${state.boot.shop.replace('.myshopify.com', '')}/orders/${o.id}`;
-  const trackUrl = (o) => `https://merchant.pathao.com/tracking?consignment_id=${encodeURIComponent(o.shipment.consignmentId)}${o.phoneNormalized ? `&phone=${encodeURIComponent(o.phoneNormalized)}` : ''}`;
+  const trackUrl = (o) => (o.shipment.courier === 'steadfast'
+    ? `https://steadfast.com.bd/t/${encodeURIComponent(o.shipment.trackingCode || '')}`
+    : `https://merchant.pathao.com/tracking?consignment_id=${encodeURIComponent(o.shipment.consignmentId)}${o.phoneNormalized ? `&phone=${encodeURIComponent(o.phoneNormalized)}` : ''}`);
 
   // ---------------- banners ----------------
   function renderBanners() {
@@ -160,6 +168,18 @@
 
   // ---------------- orders page ----------------
   function setupSteps() {
+    const s = S();
+    if (defKey() === 'steadfast') {
+      return [
+        { key: 'sf-account', done: sfConnected(), html: 'Connect your Steadfast account', btn: ['sf-account', 'Add Steadfast'] },
+        { key: 'sf-webhook', done: webhookLive('steadfast'), html: 'Connect the Steadfast webhook so delivery status updates live', btn: ['sf-webhook', 'Set up webhook'] },
+        { key: 'shopify', done: s.sync_fulfillment === false || !permMissing(), html: 'Allow ShipBridge to update orders inside Shopify', btn: ['shopify', 'Allow access'] },
+        { key: 'auto', done: Boolean(s.auto_send), html: 'Send new orders to Steadfast automatically', btn: ['defaults', 'Turn on auto-send'] },
+      ];
+    }
+    return pathaoSteps();
+  }
+  function pathaoSteps() {
     const s = S();
     return [
       { key: 'account', done: Boolean(s.connected), html: 'Connect your Pathao account', btn: ['account', 'Add Pathao'] },
@@ -184,8 +204,8 @@
     $('setup-ring').innerHTML = `<b>${done}/${steps.length}</b>`;
     $('steps').innerHTML = steps.map((x) => `<li class="${x.done ? 'done' : ''}"><span class="tick"></span><span class="step-text">${esc(x.html)}</span>${x.done ? '' : `<button class="btn sm" data-goto="${x.btn[0]}">${esc(x.btn[1])}</button>`}</li>`).join('');
     const ready = newReady();
-    show($('send-new'), ready.length > 0 && Boolean(S().connected && S().pathao_store_id));
-    $('send-new-label').textContent = `Send ${ready.length} new order${ready.length === 1 ? '' : 's'} to Pathao`;
+    show($('send-new'), ready.length > 0 && courierReady(defKey()));
+    $('send-new-label').textContent = `Send ${ready.length} new order${ready.length === 1 ? '' : 's'} to ${cname(defKey())}`;
     renderStats();
   }
   function renderStats() { renderOverview(); }
@@ -281,7 +301,7 @@
     const s = o.shipment;
     if (s && s.status === 'sent') {
       const c = courier(s.courier || 'pathao');
-      return `<span class="courier-chip">${cmono(c)}${esc(c.name)}</span>${webhookLive() ? '<span class="live" title="Webhook connected — status updates instantly"><i></i>Live</span>' : `<button class="link-btn" data-track="${esc(o.id)}">Refresh status</button>`}`;
+      return `<span class="courier-chip">${cmono(c)}${esc(c.name)}</span>${webhookLive(c.key) ? '<span class="live" title="Webhook connected — status updates instantly"><i></i>Live</span>' : `<button class="link-btn" data-track="${esc(o.id)}">Refresh status</button>`}`;
     }
     if (s && s.status === 'processing') return '<span class="sub">Sending…</span>';
     if (o.cancelled && !s) return '<span class="sub">—</span>';
@@ -391,7 +411,7 @@
     const st = stageOf(o);
     const colors = { high: ['#ef4444', '#fde2e2'], medium: ['#f59e0b', '#fdeccb'], low: ['#3b82f6', '#dbe7fb'], pending: ['#9ca3af', '#e5e7eb'], safe: ['#22c55e', '#d3f3df'] }[f.level];
     const title = { high: 'High risk — review first', medium: 'Check before sending', low: 'Looks fine', pending: 'Shopify is still checking', safe: 'Trusted customer' }[f.level];
-    const steps = ['Booked with Pathao', 'Picked up by rider', 'In transit', 'Out for delivery', 'Delivered'];
+    const steps = [`Booked with ${cname((o.shipment && o.shipment.courier) || defKey())}`, 'Picked up by rider', 'In transit', 'Out for delivery', 'Delivered'];
     const sent = o.shipment && o.shipment.status === 'sent';
     const tl = steps.map((label, i) => {
       const n = i + 1; let cls = '';
@@ -426,7 +446,7 @@
         <div><span class="meta">Order total</span><b>${esc(taka(o.total))}</b></div>
         ${o.shipment && o.shipment.deliveryFee != null ? `<div><span class="meta">Pathao delivery fee</span><span>${esc(taka(o.shipment.deliveryFee))}</span></div>` : ''}
         <div class="tot"><span>${paid ? 'Paid online' : 'Rider collects (COD)'}</span><span>${esc(taka(paid ? 0 : o.cod))}</span></div>
-        ${sendable ? `<button class="btn primary" data-send="${esc(o.id)}" style="height:42px">${f.level === 'high' ? 'Send to Pathao anyway' : o.shipment ? 'Retry with Pathao' : 'Send to Pathao'}</button>` : ''}
+        ${sendable ? `<button class="btn primary" data-send="${esc(o.id)}" style="height:42px">${f.level === 'high' ? `Send to ${esc(cname(defKey()))} anyway` : o.shipment ? `Retry with ${esc(cname(defKey()))}` : `Send to ${esc(cname(defKey()))}`}</button>` : ''}
       </div>`;
   }
   function renderOrders() { renderHeader(); renderPipeline(); renderGroups(); renderRows(); if (state.focus) renderDetail(); }
@@ -473,19 +493,24 @@
   // ---------------- couriers page ----------------
   function renderCouriers() {
     const s = S();
-    const others = (state.boot.couriers || []).filter((c) => c.key !== 'pathao');
-    const p = courier('pathao');
+    const soon = (state.boot.couriers || []).filter((c) => !c.available);
+    const p = courier('pathao'), sf = courier('steadfast');
     const ready = s.connected && s.pathao_store_id;
-    const view = state.settingsTab === 'sms' ? 'sms' : 'pathao';
+    const view = state.settingsTab === 'sms' ? 'sms' : (state.courierView || defKey());
+    const def = defKey();
     $('courier-nav').innerHTML = `<div class="cx-label">Your couriers</div>
-      <button class="cx-item${view === 'pathao' ? ' active' : ''}" data-cview="pathao">${cmono(p)}<span class="cx-name"><b>Pathao</b><small class="${ready ? 'ok' : 'warn'}">${ready ? (webhookLive() ? 'Connected · Live' : 'Connected') : s.connected ? 'Choose a pickup store' : 'Not connected'}</small></span>${ready ? '<span class="cx-def">Default</span>' : ''}</button>
+      <button class="cx-item${view === 'pathao' ? ' active' : ''}" data-cview="pathao">${cmono(p)}<span class="cx-name"><b>Pathao</b><small class="${ready ? 'ok' : 'warn'}">${ready ? (webhookLive('pathao') ? 'Connected · Live' : 'Connected') : s.connected ? 'Choose a pickup store' : 'Not connected'}</small></span>${def === 'pathao' ? '<span class="cx-def">Default</span>' : ''}</button>
+      <button class="cx-item${view === 'steadfast' ? ' active' : ''}" data-cview="steadfast">${cmono(sf)}<span class="cx-name"><b>Steadfast</b><small class="${sfConnected() ? 'ok' : 'warn'}">${sfConnected() ? (webhookLive('steadfast') ? 'Connected · Live' : 'Connected') : 'Not connected'}</small></span>${def === 'steadfast' ? '<span class="cx-def">Default</span>' : ''}</button>
       <button class="cx-item${view === 'sms' ? ' active' : ''}" data-cview="sms"><span class="cmono" style="background:#64748b">✉</span><span class="cx-name"><b>SMS to customers</b><small>Coming soon</small></span></button>
-      <div class="cx-label">Coming soon</div>
-      ${others.map((c) => `<div class="cx-item off">${cmono(c)}<span class="cx-name"><b>${esc(c.name)}</b><small>${esc(c.tagline)}</small></span></div>`).join('')}`;
+      ${soon.length ? '<div class="cx-label">Coming soon</div>' : ''}
+      ${soon.map((c) => `<div class="cx-item off">${cmono(c)}<span class="cx-name"><b>${esc(c.name)}</b><small>${esc(c.tagline)}</small></span></div>`).join('')}`;
     show($('pathao-setup'), view === 'pathao');
+    show($('steadfast-setup'), view === 'steadfast');
     show($('sms-tab'), view === 'sms');
+    renderRules();
+    if (view === 'steadfast') { renderSteadfast(); return; }
 
-    const steps = setupSteps().filter((x) => ['account', 'store', 'webhook', 'shopify'].includes(x.key));
+    const steps = pathaoSteps().filter((x) => ['account', 'store', 'webhook', 'shopify'].includes(x.key));
     const done = steps.filter((x) => x.done).length;
     const pct = Math.round((done / steps.length) * 100);
     $('cx-hero').innerHTML = `<div class="hero-l"><img class="hero-logo" src="/assets/couriers/pathao-logo.svg" alt="Pathao" />
@@ -524,17 +549,92 @@
           <li>Reopen ShipBridge, click <b>Update</b> when Shopify asks, then press Check again.</li></ol><button class="btn sm" data-perm>Check again</button></div>`
       : '<span class="ok-line"><span class="live" style="margin:0"><i></i></span>Allowed — orders are fulfilled and updated in Shopify automatically.</span>';
 
-    $('auto_send').checked = Boolean(s.auto_send); $('auto_send').disabled = !ready;
-    $('hold_risky').checked = s.hold_risky !== false;
     $('sync_fulfillment').checked = sync;
     $('notify_customer').checked = Boolean(s.notify_customer); $('notify_customer').disabled = !sync;
-    $$('#speed-seg button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.speed === String(s.delivery_type))));
     $$('#when-seg button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.when === (s.fulfill_when || 'booked'))));
+  }
+  // Sending rules (right column): same for every courier view.
+  function renderRules() {
+    const s = S();
+    const def = defKey();
+    $('def-seg').innerHTML = (state.boot.couriers || []).filter((c) => c.available).map((c) => {
+      const ok = c.key === 'pathao' || courierReady(c.key);
+      return `<button role="radio" data-defc="${esc(c.key)}" aria-checked="${c.key === def}" ${ok ? '' : 'disabled title="Connect it first"'}>${esc(c.name)}</button>`;
+    }).join('');
+    $('auto-hint').textContent = `Booked with ${cname(def)} within seconds`;
+    $('auto_send').checked = Boolean(s.auto_send); $('auto_send').disabled = !courierReady(def);
+    $('hold_risky').checked = s.hold_risky !== false;
+    $$('#speed-seg button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.speed === String(s.delivery_type))));
     if (document.activeElement !== $('default_weight')) setVal('default_weight', s.default_weight);
     if (document.activeElement !== $('default_note')) setVal('default_note', s.default_note);
   }
+  // Steadfast setup page.
+  function renderSteadfast() {
+    const s = S(), sf = s.steadfast || {};
+    const wh = state.boot.steadfastWebhook || {};
+    const steps = [
+      { key: 'sf-account', done: sfConnected() },
+      { key: 'sf-webhook', done: webhookLive('steadfast') },
+      { key: 'sf-default', done: defKey() === 'steadfast' },
+    ];
+    const done = steps.filter((x) => x.done).length, pct = Math.round((done / steps.length) * 100);
+    // Fetch the balance once per visit (Steadfast rate-limits failed logins, so not on every render).
+    if (sfConnected() && state.sfBalance === undefined) {
+      state.sfBalance = null;
+      api('/steadfast/test', { method: 'POST' }).then((r) => { if (r.ok) { state.sfBalance = r.balance; if (state.courierView === 'steadfast') renderSteadfast(); } }).catch(() => {});
+    }
+    $('sf-hero').innerHTML = `<div class="hero-l">${cmono(courier('steadfast'), 'hero-mono')}
+        <div><div class="hero-title"><h2>Steadfast</h2>${sfConnected() ? '<span class="badge green">Connected</span>' : '<span class="badge yellow">Setup needed</span>'}${webhookLive('steadfast') ? '<span class="live-pill"><i></i>Live</span>' : ''}</div>
+        <p class="meta">${esc(courier('steadfast').tagline || '')}</p></div></div>
+      <div class="hero-r"><span class="hero-ring" style="background:conic-gradient(#4f46e5 0 ${pct}%, #e4e5f7 ${pct}% 100%)"><b>${done}/${steps.length}</b></span><span class="meta">${done === steps.length ? 'All set' : 'steps done'}</span></div>
+      <div class="hero-facts"><div><span>Balance</span><b>${state.sfBalance != null ? esc(taka(state.sfBalance)) : '—'}</b></div>
+        <div><span>Default</span><b>${defKey() === 'steadfast' ? 'Yes' : 'No'}</b></div>
+        <div><span>Auto-send</span><b>${s.auto_send && defKey() === 'steadfast' ? 'On' : 'Off'}</b></div>
+        <div><span>Updates</span><b>${webhookLive('steadfast') ? 'Live' : 'Manual'}</b></div></div>`;
+
+    const firstOpen = (steps.find((x) => !x.done) || {}).key || null;
+    const open = state.section === undefined || state.section === 'auto' ? firstOpen : state.section;
+    steps.forEach((x, i) => {
+      const el = document.querySelector(`.step[data-step="${x.key}"]`);
+      const isOpen = open === x.key;
+      el.classList.toggle('done', x.done); el.classList.toggle('open', isOpen);
+      el.classList.toggle('attention', !x.done && x.key === firstOpen);
+      el.querySelector('.step-dot').textContent = x.done ? '' : String(i + 1);
+      el.querySelector('.step-act').textContent = isOpen ? 'Close' : x.done ? (x.key === 'sf-account' ? 'Edit' : 'View') : 'Set up';
+      el.querySelector('.step-row').setAttribute('aria-expanded', String(isOpen));
+    });
+    document.querySelector('[data-step="sf-account"] [data-summary]').textContent = sfConnected() ? `API key ${String(sf.api_key).slice(0, 6)}… · connected` : 'API key and secret key';
+    document.querySelector('[data-step="sf-webhook"] [data-summary]').innerHTML = webhookLive('steadfast') ? '<span class="live" style="margin:0"><i></i>Live — statuses update instantly</span>' : 'Steadfast tells ShipBridge the moment a parcel moves';
+    document.querySelector('[data-step="sf-default"] [data-summary]').textContent = defKey() === 'steadfast' ? 'New orders go to Steadfast' : `New orders go to ${cname(defKey())}`;
+    if (document.activeElement !== $('sf_api_key')) setVal('sf_api_key', sf.api_key);
+    $('sf_secret_key').placeholder = sf.has_secret ? '•••••••• saved' : '';
+    setVal('sf_wh_url', wh.url); setVal('sf_wh_token', wh.token);
+    show($('sf-disconnect'), sfConnected());
+    $('sf-wh-state').innerHTML = wh.live ? '<span class="ok-line"><span class="live" style="margin:0"><i></i></span>Connected — delivery status updates the moment Steadfast reports it.</span>'
+      : sfConnected() ? '<span class="wait-line">Waiting for the first update from Steadfast.</span>' : '';
+    $('sf-default-text').textContent = defKey() === 'steadfast'
+      ? 'Steadfast is your default: the Send buttons and auto-send use it. You can still pick Pathao for any order from the courier menu.'
+      : 'Make Steadfast the courier used by the Send buttons and auto-send. You can still pick another courier for any order.';
+    $('sf-make-default').disabled = !sfConnected() || defKey() === 'steadfast';
+  }
+  async function saveSteadfast() {
+    const key = $('sf_api_key').value.trim(), secret = $('sf_secret_key').value.trim();
+    if (!key) throw new Error('Enter your Steadfast API key');
+    if (!secret && !(S().steadfast && S().steadfast.has_secret)) throw new Error('Enter your Steadfast secret key');
+    const body = { steadfast_api_key: key };
+    if (secret) body.steadfast_secret_key = secret;
+    apply(await api('/settings', { method: 'POST', body }));
+    const test = await api('/steadfast/test', { method: 'POST' });
+    if (!test.ok) throw new Error(`Steadfast: ${test.error}`);
+    state.sfBalance = test.balance;
+    setVal('sf_secret_key', '');
+    state.section = undefined;
+    toast(`Steadfast connected${test.balance != null ? ` · balance ${taka(test.balance)}` : ''}`);
+    renderAll();
+  }
   function gotoSection(sec) {
     state.settingsTab = 'couriers';
+    state.courierView = /^sf-/.test(sec) ? 'steadfast' : ['account', 'store', 'webhook'].includes(sec) ? 'pathao' : state.courierView;
     state.section = sec === 'defaults' ? null : sec;
     fillAccount();
     if (state.page !== 'couriers') navigate('/couriers'); else renderCouriers();
@@ -683,7 +783,20 @@
 
     // couriers
     const cv = t.closest('[data-cview]');
-    if (cv) { state.settingsTab = cv.dataset.cview === 'sms' ? 'sms' : 'couriers'; renderCouriers(); return; }
+    if (cv) {
+      state.settingsTab = cv.dataset.cview === 'sms' ? 'sms' : 'couriers';
+      if (cv.dataset.cview !== 'sms') state.courierView = cv.dataset.cview;
+      state.section = undefined;
+      renderCouriers(); return;
+    }
+    const dc = t.closest('[data-defc]');
+    if (dc && !dc.disabled) { savePrefs({ default_courier: dc.dataset.defc }); return; }
+    const cp = t.closest('[data-copy]');
+    if (cp) {
+      const el = $(cp.dataset.copy);
+      try { await navigator.clipboard.writeText(el.value); toast('Copied'); } catch (e) { el.select(); toast('Press Ctrl+C to copy'); }
+      return;
+    }
     const ts = t.closest('[data-toggle-step]');
     if (ts) { const k = ts.dataset.toggleStep; const isOpen = document.querySelector(`.step[data-step="${k}"]`).classList.contains('open'); state.section = isOpen ? null : k; if (!isOpen) fillAccount(); renderCouriers(); return; }
     const env = t.closest('[data-env]');
@@ -705,17 +818,23 @@
     const per = t.closest('[data-period]');
     if (per) { state.period = per.dataset.period; renderBilling(); return; }
 
-    const b = t.closest('#send-new,#bulk-default,#reload-orders,#save-connection,#save-webhook,[data-plan],[data-downgrade]');
+    const b = t.closest('#send-new,#bulk-default,#reload-orders,#save-connection,#save-webhook,#sf-save,#sf-disconnect,#sf-make-default,[data-plan],[data-downgrade]');
     if (!b) return;
     try {
       if (b.id === 'send-new') {
         const ids = newReady().map((o) => o.id);
-        if (!confirm(`Send ${ids.length} new order${ids.length === 1 ? '' : 's'} to Pathao? High-risk orders are left for you to review.`)) return;
+        if (!confirm(`Send ${ids.length} new order${ids.length === 1 ? '' : 's'} to ${cname(defKey())}? High-risk orders are left for you to review.`)) return;
         return await busy(b, () => sendOrders(ids, S().default_courier || 'pathao'));
       }
       if (b.id === 'bulk-default') return await busy(b, () => sendOrders([...state.selected], S().default_courier || 'pathao'));
       if (b.id === 'reload-orders') return await busy(b, async () => { await Promise.all([refreshBoot(true), loadOrders(null, { fresh: true })]); });
       if (b.id === 'save-connection') return await busy(b, saveConnection);
+      if (b.id === 'sf-save') return await busy(b, saveSteadfast);
+      if (b.id === 'sf-make-default') return await busy(b, () => savePrefs({ default_courier: 'steadfast' }));
+      if (b.id === 'sf-disconnect') {
+        if (!confirm('Disconnect Steadfast? Orders already booked keep their tracking. If Steadfast is your default, Pathao becomes the default and auto-send turns off.')) return;
+        return await busy(b, async () => { apply(await api('/settings', { method: 'POST', body: { steadfast_disconnect: true } })); state.sfBalance = null; toast('Steadfast disconnected'); renderAll(); });
+      }
       if (b.id === 'save-webhook') return await busy(b, async () => {
         const secret = $('wh_secret').value.trim();
         apply(await api('/settings', { method: 'POST', body: { webhook_secret: secret } }));

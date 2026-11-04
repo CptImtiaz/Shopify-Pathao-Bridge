@@ -147,6 +147,40 @@
           </div>
         </section>
 
+        <section class="cx-main" id="steadfast-setup" aria-label="Steadfast setup" hidden>
+          <div class="card cx-hero" id="sf-hero"></div>
+
+          <div class="step" data-step="sf-account">
+            <button class="step-row" data-toggle-step="sf-account"><span class="step-dot"></span><span class="step-text"><b>Steadfast account</b><span class="meta" data-summary></span></span><span class="step-act"></span></button>
+            <div class="step-body">
+              <div class="grid2">
+                <label class="field"><span>API key</span><input id="sf_api_key" autocomplete="off" spellcheck="false" /></label>
+                <label class="field"><span>Secret key</span><input id="sf_secret_key" type="password" autocomplete="new-password" spellcheck="false" /></label>
+              </div>
+              <p class="hint">Steadfast portal → <b>API</b> → <b>Your API keys</b>. Make a key just for ShipBridge, so you can revoke it without affecting anything else. The secret key is stored encrypted.</p>
+              <div class="sec-foot"><button class="btn ghost" id="sf-disconnect" hidden>Disconnect</button><button class="btn primary" id="sf-save">Save &amp; connect</button></div>
+            </div>
+          </div>
+
+          <div class="step" data-step="sf-webhook">
+            <button class="step-row" data-toggle-step="sf-webhook"><span class="step-dot"></span><span class="step-text"><b>Live delivery updates</b><span class="meta" data-summary>Steadfast tells ShipBridge the moment a parcel moves</span></span><span class="step-act"></span></button>
+            <div class="step-body">
+              <div class="field"><span>Callback URL</span><div class="copy"><input id="sf_wh_url" readonly /><button class="btn" data-copy="sf_wh_url">Copy</button></div></div>
+              <div class="field"><span>Auth token</span><div class="copy"><input id="sf_wh_token" readonly /><button class="btn" data-copy="sf_wh_token">Copy</button></div></div>
+              <ol class="howto"><li>Steadfast portal → <b>API</b> → <b>Webhook</b>.</li><li>Paste the Callback URL and the Auth token, then save.</li></ol>
+              <p class="hint" id="sf-wh-state"></p>
+            </div>
+          </div>
+
+          <div class="step" data-step="sf-default">
+            <button class="step-row" data-toggle-step="sf-default"><span class="step-dot"></span><span class="step-text"><b>Default courier</b><span class="meta" data-summary></span></span><span class="step-act"></span></button>
+            <div class="step-body">
+              <p class="meta" id="sf-default-text"></p>
+              <div class="sec-foot"><button class="btn primary" id="sf-make-default">Make Steadfast the default</button></div>
+            </div>
+          </div>
+        </section>
+
         <section class="cx-main" id="sms-tab" hidden>
           <div class="card soon-card">
             <span class="sec-icon big"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 4V5z"/></svg></span>
@@ -158,9 +192,11 @@
 
         <aside class="card cx-rules" aria-label="Sending rules">
           <div class="rules-head"><h2>Sending rules</h2><span class="hint" id="prefs-state">Saves automatically</span></div>
-          <label class="switch-row"><span><b>Send new orders automatically</b><small>Booked with Pathao within seconds</small></span><input type="checkbox" role="switch" id="auto_send" /><i aria-hidden="true"></i></label>
+          <div class="pref"><b>Default courier</b>
+            <div class="seg" role="radiogroup" aria-label="Default courier" id="def-seg"></div></div>
+          <label class="switch-row"><span><b>Send new orders automatically</b><small id="auto-hint">Booked with your default courier within seconds</small></span><input type="checkbox" role="switch" id="auto_send" /><i aria-hidden="true"></i></label>
           <label class="switch-row"><span><b>Hold high-risk orders</b><small>Fraud-flagged orders wait for you</small></span><input type="checkbox" role="switch" id="hold_risky" /><i aria-hidden="true"></i></label>
-          <div class="pref"><b>Delivery type</b>
+          <div class="pref"><b>Pathao delivery type</b>
             <div class="seg" role="radiogroup" aria-label="Delivery type" id="speed-seg"><button role="radio" data-speed="48">Regular</button><button role="radio" data-speed="12">Express</button></div></div>
           <label class="field"><span>Parcel weight (kg)</span><input id="default_weight" type="number" min="0.5" max="10" step="0.5" /><small class="hint">Used when a product has no weight</small></label>
           <label class="field"><span>Note for rider</span><input id="default_note" maxlength="200" placeholder="e.g. Call before delivery" /><small class="hint">Used when the order has no note</small></label>
