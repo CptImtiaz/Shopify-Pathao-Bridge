@@ -424,8 +424,14 @@
     renderBulk();
   }
   function renderBulk() {
-    show($('bulkbar'), state.page === 'orders' && state.selected.size > 0);
+    const on = state.page === 'orders' && state.selected.size > 0;
+    show($('bulkbar'), on);
+    document.querySelector('.list').classList.toggle('selecting', on);
     $('bulk-count').textContent = `${state.selected.size} selected`;
+    const sendable = visible().filter(canSend);
+    const all = sendable.length > 0 && sendable.every((o) => state.selected.has(o.id));
+    $('bulk-all').checked = all;
+    $('bulk-all').indeterminate = on && !all;
     $('bulk-default').textContent = `Assign ${courier(S().default_courier || 'pathao').name}`;
   }
 
@@ -535,8 +541,8 @@
     }).join('');
     show(m, true);
     const r = anchor.getBoundingClientRect();
-    const below = r.bottom + window.scrollY + 6, above = r.top + window.scrollY - m.offsetHeight - 6;
-    m.style.top = `${anchor.closest('#bulkbar') && above > window.scrollY ? above : below}px`;
+    const below = r.bottom + window.scrollY + 6;
+    m.style.top = `${below}px`;
     m.style.left = `${Math.max(8, Math.min(r.left + window.scrollX, window.innerWidth - m.offsetWidth - 8))}px`;
   }
   function closeMenu() { show($('courier-menu'), false); show($('fraud-pop'), false); state.menuFor = null; }
@@ -915,6 +921,13 @@
     const el = ev.target;
     const box = el.closest('[data-select]');
     if (box) { if (box.checked) state.selected.add(box.dataset.select); else state.selected.delete(box.dataset.select); renderRows(); return; }
+    if (el.id === 'bulk-all') {
+      // Partly selected -> select every sendable order in this tab; all selected -> clear.
+      const sendable = visible().filter(canSend);
+      const all = sendable.every((o) => state.selected.has(o.id));
+      if (all) state.selected.clear(); else sendable.forEach((o) => state.selected.add(o.id));
+      renderRows(); return;
+    }
     if (el.id === 'check-all') { visible().filter(canSend).forEach((o) => { if (el.checked) state.selected.add(o.id); else state.selected.delete(o.id); }); renderRows(); return; }
     if (['auto_send', 'hold_risky', 'sync_fulfillment', 'notify_customer'].includes(el.id)) { savePrefs({ [el.id]: el.checked }); return; }
     if (el.id === 'dash-auto') { savePrefs({ auto_send: el.checked }); return; }

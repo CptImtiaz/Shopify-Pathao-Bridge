@@ -70,6 +70,14 @@
         </div>
         <div class="pipe-tabs" role="tablist" id="pipeline" aria-label="Delivery status"></div>
         <div class="risk-filter" id="risk-chips"></div>
+        <!-- Shown instead of the column headings while orders are ticked; sticks to the top. -->
+        <div class="bulk-head" id="bulkbar" role="toolbar" aria-label="Selected orders" hidden>
+          <input type="checkbox" id="bulk-all" aria-label="Select or clear all orders in this tab" />
+          <span id="bulk-count">0 selected</span>
+          <button class="btn primary sm" id="bulk-default">Assign Pathao</button>
+          <button class="btn sm" id="bulk-menu-btn">Assign courier ▾</button>
+          <button class="btn ghost sm" id="bulk-clear">Clear</button>
+        </div>
         <div class="table-wrap">
           <div class="list-head">
             <span><input type="checkbox" id="check-all" aria-label="Select all orders" /></span>
@@ -232,12 +240,6 @@
   <div class="drawer-bg" id="drawer-bg" hidden></div>
   <aside class="drawer" id="detail" aria-label="Order detail" hidden></aside>
 
-  <div class="bulkbar" id="bulkbar" hidden>
-    <span id="bulk-count">0 selected</span>
-    <button class="btn primary sm" id="bulk-default">Assign Pathao</button>
-    <button class="btn sm" id="bulk-menu-btn">Assign courier ▾</button>
-    <button class="btn ghost sm" id="bulk-clear">Clear</button>
-  </div>
   <div class="menu" id="courier-menu" hidden></div>
   <div class="menu fraud-pop" id="fraud-pop" hidden></div>
   <div class="toast" id="toast" role="status" hidden></div>
