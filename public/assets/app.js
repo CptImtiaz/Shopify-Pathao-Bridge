@@ -98,7 +98,7 @@
   }
   function stageLabel(o) {
     const s = o.shipment;
-    if (!s) return o.cancelled ? 'Cancelled in Shopify' : 'Not sent';
+    if (!s) return o.cancelled ? 'Cancelled' : 'Not sent';
     if (held(o)) return 'Held for review';
     if (s.status === 'failed') return 'Pathao refused';
     if (s.status === 'skipped') return 'Not sent';
@@ -306,7 +306,8 @@
       const cur = !st.bad && i === st.step && st.key !== 'delivered';
       return `<i class="${on ? 'on' : ''}${cur ? ' cur' : ''}${st.bad && i === Math.max(st.step, 1) ? ' x' : ''}"></i>`;
     }).join('');
-    return `<span class="st st-${tone}"><svg viewBox="0 0 24 24" aria-hidden="true">${ST_ICON[tone]}</svg>${esc(stageLabel(o))}</span><span class="dots dots-${tone}">${dots}</span>`;
+    const label = stageLabel(o);
+    return `<span class="st st-${tone}" title="${esc(label)}"><svg viewBox="0 0 24 24" aria-hidden="true">${ST_ICON[tone]}</svg><span class="st-t">${esc(label)}</span></span><span class="dots dots-${tone}">${dots}</span>`;
   }
   // Fraud check: mini ring gauge with the score, label and delivery history.
   function fraudCell(o) {
