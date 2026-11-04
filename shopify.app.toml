@@ -1,8 +1,8 @@
 # Shopify app configuration. Push it with:  shopify app deploy
-# Replace the two placeholders below before deploying.
+# Hosted on Railway (Singapore).
 
 client_id = "3b858aa1ec536fea2e3c1086e4470115"
-name = "ShipBridge for Pathao"
+name = "ShipBridge for Pathao Courier"
 application_url = "https://shipbridge-production-7b96.up.railway.app"
 embedded = true
 
