@@ -47,7 +47,7 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 - `settings.default_courier` drives Send buttons and auto-send.
 
 ## Dashboard tabs
-- All = every order (hold, errors and cancelled included), newest first; other tabs filter.
+- All = every order except Hold (errors and cancelled included), newest first; other tabs filter.
 - Header live pill: one live courier = "<Courier> live"; several = stacked logos + "N couriers live".
 - Hold = waits for the merchant on purpose: open Shopify draft orders (id `d<draftId>`, need
   `read/write_draft_orders`), orders made from a draft (`sourceName: shopify_draft_order`,

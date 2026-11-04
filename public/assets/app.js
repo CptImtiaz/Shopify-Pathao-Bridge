@@ -294,7 +294,7 @@
   ];
   function renderPipeline() {
     const c = {}; state.orders.forEach((o) => { const k = bucketOf(o); c[k] = (c[k] || 0) + 1; });
-    const tabs = [['', 'All', state.orders.length, '']].concat(STAGES.map(([k, l, tone]) => [k, l, c[k] || 0, tone]));
+    const tabs = [['', 'All', state.orders.length - (c.hold || 0), '']].concat(STAGES.map(([k, l, tone]) => [k, l, c[k] || 0, tone]));
     $('pipeline').innerHTML = tabs.map(([k, l, n, tone]) => `<button role="tab" class="${tone}" aria-selected="${(state.stage || '') === k}" data-stage="${k}"><span>${l}</span><b>${n}</b></button>`).join('');
   }
   const RISKS = [['any', 'All risk'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low'], ['safe', 'Safe'], ['pending', 'Checking']];
@@ -306,8 +306,8 @@
   }
   function visible() {
     const q = state.search.trim().toLowerCase();
-    // "All" = every order, newest first (list is sorted by time on load); tabs narrow it down.
-    return state.orders.filter((o) => (!state.stage || bucketOf(o) === state.stage)
+    // "All" = every order except Hold, newest first (sorted on load); Hold has its own tab.
+    return state.orders.filter((o) => (state.stage ? bucketOf(o) === state.stage : bucketOf(o) !== 'hold')
       && (state.risk === 'any' || levelOf(o) === state.risk)
       && (!q || `${o.name} ${o.customer} ${o.phone} ${o.city} ${o.shipment ? o.shipment.consignmentId : ''}`.toLowerCase().includes(q)));
   }
