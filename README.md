@@ -39,8 +39,7 @@ src/
   pathao/mapper.js     Shopify order -> Pathao payload (phone, COD, weight, validation)
   routes/api.js        JSON API for the dashboard
   routes/webhooks.js   orders/create, app/uninstalled, billing, GDPR, Pathao status webhook
-api/index.js           Vercel entry point
-vercel.json            Vercel routing + Singapore region
+railway.json           Railway build/start + /health check
 public/                dashboard JS/CSS, privacy policy
 shopify.app.toml       app config: scopes, webhooks (push with Shopify CLI)
 test/                  30 automated tests with fake Shopify + Pathao
@@ -55,16 +54,10 @@ npm test
 
 ## Launch checklist
 
-### 1a. Deploy on Vercel + Neon (current setup)
-1. Create a free Postgres database at neon.com (region: Singapore) and copy its **connection string** (it ends with `sslmode=require`).
-2. The Vercel project deploys this repo; `vercel.json` routes every request to `api/index.js` and runs functions in Singapore (`sin1`).
-3. In Vercel → Project → Settings → Environment Variables add: `DATABASE_URL` (Neon), `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `ENCRYPTION_KEY`, `APP_URL` (your `https://<project>.vercel.app`), `BILLING_TEST=true`, `NODEJS_HELPERS=0`. Redeploy after adding them.
-4. Vercel's free Hobby plan is for non-commercial use; move to Vercel Pro (or Railway Hobby) before you start charging merchants.
-
-### 1b. Or deploy on an always-on server (Railway)
+### 1. Deploy on Railway (current setup)
 1. Push this folder to a **new** GitHub repo. Don't reuse the old one: see the security note at the bottom.
 2. In Railway: **New Project → Deploy from GitHub repo**, then **+ New → Database → PostgreSQL**.
-3. In the service's **Variables**, set everything from `.env.example`. `DATABASE_URL` can reference the Postgres plugin (`${{Postgres.DATABASE_URL}}`). Generate `ENCRYPTION_KEY` with `openssl rand -hex 32` and keep a backup.
+3. In the service's **Variables**, set `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `ENCRYPTION_KEY`, `APP_URL`, `DATABASE_URL`, `BILLING_TEST=true` (and optionally `ADMIN_PASSWORD`). The app refuses to start if any required one is missing. `DATABASE_URL` can reference the Postgres plugin (`${{Postgres.DATABASE_URL}}`). Generate `ENCRYPTION_KEY` with `openssl rand -hex 32` and keep a backup.
 4. **Settings → Networking → Generate domain**. That URL is your `APP_URL`.
 
 ### 2. Create the Shopify app
@@ -105,7 +98,7 @@ Merged from `Shopify-ISMS-Bridge`. Each merchant can send customers an order-con
 - **Template placeholders:** `{{name}}`, `{{order_number}}`, `{{items}}`, `{{total}}`, `{{currency}}`. The default is the Bangla confirmation text from the original bridge.
 - **Once per order:** each order gets one SMS (logged in `sms_log`); duplicate webhooks are ignored, and orders placed before SMS was switched on are skipped.
 - **Status on orders:** the orders list shows *SMS sent*, *SMS failed: reason* or *No SMS: reason*.
-- **IP whitelisting:** if your SSL Wireless account only accepts whitelisted server IPs, Vercel's changing IPs will be rejected. Ask SSL Wireless to allow your API token without IP restriction, or host on a server with a fixed outbound IP.
+- **IP whitelisting:** if your SSL Wireless account only accepts whitelisted server IPs, the host's changing outbound IPs may be rejected. Ask SSL Wireless to allow your API token without IP restriction, or host on a server with a fixed outbound IP.
 - Code: `src/sms/sms.js` (provider + template + source filter), `src/sms/notifier.js` (when to send).
 
 ## Things to double-check with Pathao

@@ -1,4 +1,4 @@
-// Always-on server entry (Railway, Render, a VPS...). Vercel uses api/index.js instead.
+// Server entry point (Railway or any always-on Node host).
 const { load } = require('./config');
 const { createApp } = require('./app');
 const { makePool } = require('./pool');

@@ -12,8 +12,8 @@ const { planFromSubscriptionName } = require('../plans');
 // Confirm the current value in Pathao's merchant API docs.
 const PATHAO_INTEGRATION_HEADER = 'X-Pathao-Merchant-Webhook-Integration-Secret';
 
-// `defer` keeps background work alive after the response is sent (Vercel's
-// waitUntil). On a normal always-on server it can just let the promise run.
+// `defer` lets background work run after the response is sent. On an
+// always-on server it just lets the promise run.
 function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, notifier, log = console, defer = (p) => p }) {
   const router = express.Router();
   const raw = express.raw({ type: '*/*', limit: '2mb' });
