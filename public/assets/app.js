@@ -430,11 +430,11 @@
   }
   function renderOrders() { renderHeader(); renderPipeline(); renderGroups(); renderRows(); if (state.focus) renderDetail(); }
 
-  async function loadOrders(pending) {
+  async function loadOrders(pending, { fresh = false } = {}) {
     show($('orders-loading'), !state.orders.length);
     const statsP = loadStats();
     try {
-      state.orders = (await (pending || api('/orders'))).orders;
+      state.orders = (await (pending || api(fresh ? '/orders?fresh=1' : '/orders'))).orders;
       state.loaded = true;
       await statsP;
       const ok = new Set(state.orders.filter(canSend).map((o) => o.id));
@@ -711,7 +711,7 @@
         return await busy(b, () => sendOrders(ids, S().default_courier || 'pathao'));
       }
       if (b.id === 'bulk-default') return await busy(b, () => sendOrders([...state.selected], S().default_courier || 'pathao'));
-      if (b.id === 'reload-orders') return await busy(b, async () => { await refreshBoot(); await loadOrders(); });
+      if (b.id === 'reload-orders') return await busy(b, async () => { await Promise.all([refreshBoot(), loadOrders(null, { fresh: true })]); });
       if (b.id === 'save-connection') return await busy(b, saveConnection);
       if (b.id === 'save-webhook') return await busy(b, async () => {
         const secret = $('wh_secret').value.trim();

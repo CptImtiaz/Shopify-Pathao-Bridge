@@ -412,3 +412,20 @@ test('speed: gzip responses, versioned assets cached for a year', async (t) => {
   assert.match(r.headers.get('cache-control'), /max-age=31536000/);
   assert.equal(r.headers.get('content-encoding'), 'gzip');
 });
+
+test('speed: order list is cached briefly, refreshed by Refresh and by new-order webhooks', async (t) => {
+  const a = await startApp();
+  t.after(() => a.close());
+  const listCalls = () => a.fake.calls.filter((c) => c.body && String(c.body).includes('RecentOrders')).length;
+  a.fake.state.orders[501] = gqlOrder(501);
+  assert.equal((await a.api('/orders')).data.orders.length, 1);
+  const n = listCalls();
+  await a.api('/orders');
+  assert.equal(listCalls(), n, 'second load served from cache');
+  await a.api('/orders?fresh=1');
+  assert.equal(listCalls(), n + 1, 'Refresh button skips the cache');
+  a.fake.state.orders[502] = gqlOrder(502);
+  await a.webhook('/webhooks/orders/create', restOrder(502), 'orders/create');
+  await a.settle();
+  assert.equal((await a.api('/orders')).data.orders.length, 2, 'new order shows right away');
+});

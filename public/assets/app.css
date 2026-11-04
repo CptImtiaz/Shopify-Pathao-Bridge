@@ -176,7 +176,7 @@ input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); c
 
 /* drawer (order detail) */
 .drawer-bg { position: fixed; inset: 0; background: rgba(17,24,39,.28); z-index: 70; }
-.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 420px; max-width: 100%; background: #fff; z-index: 71; overflow-y: auto; box-shadow: -12px 0 40px rgba(17,24,39,.18); animation: slide .18s ease-out; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 420px; max-width: 100%; background: #fff; z-index: 71; overflow-y: auto; overflow-x: hidden; box-shadow: -12px 0 40px rgba(17,24,39,.18); animation: slide .18s ease-out; }
 @keyframes slide { from { transform: translateX(30px); opacity: .6; } to { transform: none; opacity: 1; } }
 .d-head { padding: 18px 20px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
 .d-head .name { font-size: 18px; font-weight: 750; margin-top: 2px; }
@@ -213,8 +213,11 @@ input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); c
 .d-money { margin: 8px 20px 20px; border-top: 1px solid var(--line); padding-top: 14px; display: grid; gap: 9px; }
 .d-money > div { display: flex; justify-content: space-between; gap: 10px; }
 .d-money .tot { font-size: 14.5px; font-weight: 750; }
-.d-items { display: grid; gap: 8px; }
-.d-items .it { display: flex; gap: 10px; align-items: center; }
+/* One product per line, however many items the order has. */
+.d-money > .d-items { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; padding-bottom: 6px; }
+.d-items .it { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.d-items .it .ellip { min-width: 0; }
+.d-items .it .sub { flex-shrink: 0; }
 
 /* bulk bar, menus, toast */
 .bulkbar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 40; display: flex; align-items: center; gap: 8px; background: #fff; border-radius: 14px; padding: 8px 8px 8px 16px; box-shadow: 0 14px 34px -10px rgba(17,24,39,.35), 0 0 0 1px rgba(79,70,229,.25); }

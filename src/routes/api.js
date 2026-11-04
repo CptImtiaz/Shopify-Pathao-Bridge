@@ -254,7 +254,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
   }));
 
   router.get('/orders', wrap(async (req) => {
-    const orders = await admin.listRecentOrders(req.shop, req.opts, 50, { rich: true });
+    const orders = await admin.listRecentOrdersCached(req.shop, req.opts, 50, { rich: true, fresh: req.query.fresh === '1' });
     const norm = orders.map(fromGraphql);
     const phoneOf = (n) => [n.shipping.phone, ...n.fallbackPhones].filter(Boolean).map(normalizePhone).find((p) => p.valid)?.phone || null;
     const phones = norm.map(phoneOf);
@@ -323,6 +323,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
         results.push({ id, ok: false, error: e.message });
       }
     }
+    admin.forgetOrders(req.shop);
     return { results };
   }));
 
@@ -333,6 +334,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, shipping, fulfillmen
     const status = info.order_status_slug || info.order_status || s.pathao_status;
     await db.finishShipment(req.shop, req.params.id, { pathao_status: status });
     if (fulfillment) await fulfillment.sync(req.shop, req.params.id, { status });
+    admin.forgetOrders(req.shop);
     return { pathaoStatus: status };
   }));
 

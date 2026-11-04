@@ -37,6 +37,7 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, no
   }
 
   router.post('/webhooks/orders/create', ...shopifyWebhook(async ({ shop, payload }) => {
+    if (admin.forgetOrders) admin.forgetOrders(shop);
     const row = await db.getShop(shop);
     if (!row || row.uninstalled_at) return;
 
@@ -128,6 +129,7 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, no
       // Update Shopify after acknowledging Pathao.
       defer((async () => {
         if (fulfillment) await fulfillment.sync(shop, shipment.shopify_order_id, { status });
+        if (admin.forgetOrders) admin.forgetOrders(shop);
         if (settings.tag_orders && ['delivered', 'returned', 'delivery-failed'].includes(status)) {
           await admin.annotateOrder(shop, shipment.shopify_order_id, { tags: [`pathao-${status}`] })
             .catch((e) => log.warn(`[${shop}] tag failed: ${e.message}`));
