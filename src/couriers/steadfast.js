@@ -20,7 +20,8 @@ class SteadfastError extends Error {
 }
 
 function describeError(status, data) {
-  if (status === 401) return 'Steadfast rejected the API key or secret key';
+  const said = data && (data.message || data.error) ? ` (Steadfast said: "${String(data.message || data.error).slice(0, 160)}")` : '';
+  if (status === 401) return `Steadfast rejected the API key or secret key${said}`;
   if (status === 403) return 'Steadfast account is inactive or needs its ownership (KYC) details resubmitted';
   if (status === 429) return 'Too many requests to Steadfast. Wait a few minutes and try again.';
   if (data && data.errors && typeof data.errors === 'object') {
@@ -30,15 +31,20 @@ function describeError(status, data) {
   return (data && (data.message || data.error)) || `Steadfast HTTP ${status}`;
 }
 
-function makeSteadfast({ config, cipher, fetchImpl = fetch }) {
+function makeSteadfast({ config, cipher, db = null, fetchImpl = fetch }) {
   const base = () => (config.steadfastBaseUrl || 'https://portal.packzy.com/api/v1').replace(/\/$/, '');
 
   function hasCredentials(s) {
     return Boolean(s && s.steadfast_api_key && s.steadfast_secret_enc);
   }
 
-  async function call(settings, path, { method = 'GET', body } = {}) {
+  // `probe`: checking keys that aren't saved yet, so a 401 isn't recorded on the shop.
+  async function call(settings, path, { method = 'GET', body, probe = false } = {}) {
     if (!hasCredentials(settings)) throw new SteadfastError('Steadfast is not connected yet. Add your API key and secret key under Couriers.', 400);
+    // Keys were rejected before: don't keep failing (Steadfast locks the key out after 10 failures).
+    if (!probe && settings.steadfast_auth_error) {
+      throw new SteadfastError(`${settings.steadfast_auth_error}. Re-enter your keys under Couriers → Steadfast.`, 401);
+    }
     const res = await fetchImpl(`${base()}${path}`, {
       method,
       headers: {
@@ -52,7 +58,11 @@ function makeSteadfast({ config, cipher, fetchImpl = fetch }) {
     const text = await res.text();
     let data;
     try { data = JSON.parse(text); } catch { data = { message: text.slice(0, 300) }; }
-    if (!res.ok) throw new SteadfastError(describeError(res.status, data), res.status, data);
+    if (!res.ok) {
+      const err = new SteadfastError(describeError(res.status, data), res.status, data);
+      if (res.status === 401 && !probe && db && settings.shop) await db.updateSettings(settings.shop, { steadfast_auth_error: err.message }).catch(() => {});
+      throw err;
+    }
     // A 200 can still carry a failure in the body.
     if (data && data.status != null && Number(data.status) !== 200) {
       throw new SteadfastError(describeError(Number(data.status) || 400, data), Number(data.status) || 400, data);
@@ -61,8 +71,8 @@ function makeSteadfast({ config, cipher, fetchImpl = fetch }) {
   }
 
   // Checks the keys and returns the current balance (what Steadfast owes the merchant).
-  async function balance(settings) {
-    const d = await call(settings, '/get_balance');
+  async function balance(settings, { probe = false } = {}) {
+    const d = await call(settings, '/get_balance', { probe });
     return { balance: d.current_balance != null ? Number(d.current_balance) : null };
   }
 

@@ -30,7 +30,7 @@ function createApp({ config, pool, fetchImpl = fetch, log = console, defer = (p)
   const admin = makeAdmin({ config, tokens, fetchImpl });
   const pathao = makePathao({ config, db, cipher, fetchImpl });
   const fulfillment = makeFulfillmentSync({ admin, db, log });
-  const steadfast = makeSteadfast({ config, cipher, fetchImpl });
+  const steadfast = makeSteadfast({ config, cipher, db, fetchImpl });
   const shipping = makeShipping({ db, pathao, steadfast, admin, fulfillment, log });
   const notifier = makeNotifier({ db, cipher, smsClient: makeSmsClient({ fetchImpl, apiUrl: config.smsApiUrl }), log });
 

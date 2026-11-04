@@ -109,6 +109,8 @@ const SCHEMA = [
   `ALTER TABLE settings ADD COLUMN IF NOT EXISTS steadfast_webhook_token TEXT`,
   `ALTER TABLE settings ADD COLUMN IF NOT EXISTS steadfast_webhook_at TIMESTAMPTZ`,
   `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS tracking_code TEXT`,
+  // Set when Steadfast answers 401: stops further calls (10 failures = 60 min lockout).
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS steadfast_auth_error TEXT`,
 ];
 
 function makeDb(pool) {

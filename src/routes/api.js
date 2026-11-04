@@ -95,6 +95,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, sh
         api_key: s.steadfast_api_key || '',
         has_secret: Boolean(s.steadfast_secret_enc),
         connected: Boolean(s.steadfast_api_key && s.steadfast_secret_enc),
+        auth_error: s.steadfast_auth_error || null,
       },
       sms: {
         available: Boolean(config.smsFeature),
@@ -171,10 +172,9 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, sh
     if (credsChanged) Object.assign(f, { pathao_token_enc: null, pathao_refresh_enc: null, pathao_token_expires_at: null });
 
     // ---- Steadfast ----
-    if (b.steadfast_api_key !== undefined) f.steadfast_api_key = String(b.steadfast_api_key).trim() || null;
-    if (b.steadfast_secret_key) f.steadfast_secret_enc = cipher.encrypt(String(b.steadfast_secret_key).trim());
+    // Keys are saved through /steadfast/connect (checked with Steadfast first).
     if (b.steadfast_disconnect) {
-      Object.assign(f, { steadfast_api_key: null, steadfast_secret_enc: null });
+      Object.assign(f, { steadfast_api_key: null, steadfast_secret_enc: null, steadfast_auth_error: null });
       // Don't leave auto-send pointing at a courier that can no longer book.
       if ((current.default_courier || 'pathao') === 'steadfast') Object.assign(f, { default_courier: 'pathao', auto_send: false });
     }
@@ -279,11 +279,37 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, sh
     }
   }));
 
-  // ---- Steadfast connection test (also returns the current balance) ----
+  // ---- Steadfast: check keys with Steadfast first, save only if they work ----
+  router.post('/steadfast/connect', wrap(async (req) => {
+    if (!steadfast) throw new Error('Steadfast is not available');
+    const b = req.body || {};
+    const current = await db.getSettings(req.shop);
+    const apiKey = String(b.api_key || '').trim();
+    const secret = String(b.secret_key || '').trim();
+    if (!apiKey) throw Object.assign(new Error('Enter your Steadfast API key'), { status: 400 });
+    if (/\s/.test(apiKey) || /\s/.test(secret)) throw Object.assign(new Error('Keys cannot contain spaces. Copy them again from the Steadfast portal.'), { status: 400 });
+    const secretEnc = secret ? cipher.encrypt(secret) : current.steadfast_secret_enc;
+    if (!secretEnc) throw Object.assign(new Error('Enter your Steadfast secret key'), { status: 400 });
+    const trial = { ...current, steadfast_api_key: apiKey, steadfast_secret_enc: secretEnc };
+    let balance;
+    try {
+      ({ balance } = await steadfast.balance(trial, { probe: true }));
+    } catch (e) {
+      log.warn(`[${req.shop}] steadfast connect failed: ${e.message}`);
+      throw Object.assign(new Error(e.message), { status: 400 });
+    }
+    const saved = await db.updateSettings(req.shop, { steadfast_api_key: apiKey, steadfast_secret_enc: secretEnc, steadfast_auth_error: null });
+    log.info(`[${req.shop}] steadfast connected`);
+    return { ok: true, balance, settings: publicSettings(saved), couriers: listCouriers(saved, { pathao }) };
+  }));
+
+  // ---- Steadfast balance (also re-checks saved keys) ----
   router.post('/steadfast/test', wrap(async (req) => {
     try {
       if (!steadfast) throw new Error('Steadfast is not available');
-      const { balance } = await steadfast.balance(await db.getSettings(req.shop));
+      const settings = await db.getSettings(req.shop);
+      if (settings.steadfast_auth_error) return { ok: false, error: settings.steadfast_auth_error };
+      const { balance } = await steadfast.balance(settings);
       return { ok: true, balance };
     } catch (e) {
       return { ok: false, error: e.message };

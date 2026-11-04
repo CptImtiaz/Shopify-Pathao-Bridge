@@ -16,8 +16,8 @@ async function steadfastShop(t) {
   const a = await startApp();
   t.after(() => a.close());
   await a.api('/bootstrap');
-  const r = await a.api('/settings', { method: 'POST', body: { steadfast_api_key: 'sf_key', steadfast_secret_key: 'sf_secret' } });
-  assert.equal(r.status, 200);
+  const r = await a.api('/steadfast/connect', { method: 'POST', body: { api_key: 'sf_key', secret_key: 'sf_secret' } });
+  assert.equal(r.status, 200, r.data.error);
   return a;
 }
 
@@ -69,10 +69,35 @@ test('steadfast connect: test shows balance, wrong keys are reported, courier sh
   assert.match(boot.steadfastWebhook.url, /\/steadfast\/webhook\/demo-store\.myshopify\.com$/);
   assert.ok(boot.steadfastWebhook.token.length >= 32);
 
-  await a.api('/settings', { method: 'POST', body: { steadfast_secret_key: 'wrong' } });
-  const bad = await a.api('/steadfast/test', { method: 'POST' });
-  assert.equal(bad.data.ok, false);
-  assert.match(bad.data.error, /rejected the API key/);
+  // Wrong keys are checked with Steadfast first and never saved over working ones.
+  const bad = await a.api('/steadfast/connect', { method: 'POST', body: { api_key: 'sf_key', secret_key: 'wrong' } });
+  assert.equal(bad.status, 400);
+  assert.match(bad.data.error, /rejected the API key or secret key \(Steadfast said: "Unauthenticated\."\)/);
+  assert.equal((await a.api('/steadfast/test', { method: 'POST' })).data.ok, true, 'old keys still work');
+  assert.equal((await a.api('/steadfast/connect', { method: 'POST', body: { api_key: 'sf key', secret_key: 'x' } })).status, 400);
+});
+
+test('steadfast 401 while booking: pauses Steadfast calls until keys are re-entered', async (t) => {
+  const a = await steadfastShop(t);
+  a.fake.state.orders['810'] = gqlOrder(810);
+  a.fake.state.orders['811'] = gqlOrder(811);
+  // Keys revoked in the Steadfast portal after connecting.
+  await a.db.updateSettings(SHOP, { steadfast_api_key: 'revoked' });
+  let r = await a.api('/orders/send', { method: 'POST', body: { ids: ['810'], courier: 'steadfast' } });
+  assert.match(r.data.results[0].error, /rejected the API key/);
+  const calls = () => a.fake.calls.filter((c) => c.url.includes('packzy')).length;
+  const before = calls();
+  r = await a.api('/orders/send', { method: 'POST', body: { ids: ['811'], courier: 'steadfast' } });
+  assert.match(r.data.results[0].error, /Re-enter your keys/);
+  assert.equal(calls(), before, 'no second failed login sent to Steadfast');
+  const boot = (await a.api('/bootstrap')).data;
+  assert.equal(boot.couriers.find((c) => c.key === 'steadfast').status, 'needs_keys');
+  assert.ok(boot.settings.steadfast.auth_error);
+
+  // Re-entering working keys clears the pause.
+  assert.equal((await a.api('/steadfast/connect', { method: 'POST', body: { api_key: 'sf_key', secret_key: 'sf_secret' } })).status, 200);
+  r = await a.api('/orders/send', { method: 'POST', body: { ids: ['811'], courier: 'steadfast' } });
+  assert.equal(r.data.results[0].ok, true, r.data.results[0].error);
 });
 
 test('send with Steadfast: books once, saves consignment + tracking code, fulfils with Steadfast tracking', async (t) => {
@@ -122,7 +147,7 @@ test('steadfast refusal is saved on the order; not connected gives a clear error
   assert.equal(no.status, 400);
   assert.match(no.data.error, /Connect your Steadfast account/);
 
-  await a.api('/settings', { method: 'POST', body: { steadfast_api_key: 'sf_key', steadfast_secret_key: 'sf_secret' } });
+  await a.api('/steadfast/connect', { method: 'POST', body: { api_key: 'sf_key', secret_key: 'sf_secret' } });
   a.fake.state.steadfastFail = { recipient_address: ['The recipient address field is required.'] };
   const r = await a.api('/orders/send', { method: 'POST', body: { ids: ['801'], courier: 'steadfast' } });
   assert.equal(r.data.results[0].ok, false);
@@ -160,7 +185,7 @@ test('steadfast as default courier: auto-send books new orders with Steadfast; d
   t.after(() => a.close());
   await a.api('/bootstrap');
   assert.equal((await a.api('/settings', { method: 'POST', body: { default_courier: 'steadfast' } })).status, 400);
-  await a.api('/settings', { method: 'POST', body: { steadfast_api_key: 'sf_key', steadfast_secret_key: 'sf_secret' } });
+  await a.api('/steadfast/connect', { method: 'POST', body: { api_key: 'sf_key', secret_key: 'sf_secret' } });
   const r = await a.api('/settings', { method: 'POST', body: { default_courier: 'steadfast', auto_send: true, hold_risky: false } });
   assert.equal(r.status, 200, r.data.error);
   await new Promise((res) => setTimeout(res, 20));

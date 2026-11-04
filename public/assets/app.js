@@ -50,7 +50,8 @@
   const webhookLive = (key = 'pathao') => Boolean(state.boot && (key === 'steadfast' ? state.boot.steadfastWebhook : state.boot.pathaoWebhook)?.live);
   const defKey = () => (state.boot && state.boot.settings && state.boot.settings.default_courier) || 'pathao';
   const cname = (key) => courier(key || 'pathao').name;
-  const sfConnected = () => Boolean(S().steadfast && S().steadfast.connected);
+  const sfConnected = () => Boolean(S().steadfast && S().steadfast.connected && !S().steadfast.auth_error);
+  const sfRejected = () => Boolean(S().steadfast && S().steadfast.auth_error);
   const courierReady = (key) => (key === 'steadfast' ? sfConnected() : Boolean(S().connected && S().pathao_store_id));
   const permMissing = () => Boolean(state.boot && state.boot.permissions && state.boot.permissions.missing && state.boot.permissions.missing.length);
   const S = () => state.boot.settings;
@@ -500,7 +501,7 @@
     const def = defKey();
     $('courier-nav').innerHTML = `<div class="cx-label">Your couriers</div>
       <button class="cx-item${view === 'pathao' ? ' active' : ''}" data-cview="pathao">${cmono(p)}<span class="cx-name"><b>Pathao</b><small class="${ready ? 'ok' : 'warn'}">${ready ? (webhookLive('pathao') ? 'Connected · Live' : 'Connected') : s.connected ? 'Choose a pickup store' : 'Not connected'}</small></span>${def === 'pathao' ? '<span class="cx-def">Default</span>' : ''}</button>
-      <button class="cx-item${view === 'steadfast' ? ' active' : ''}" data-cview="steadfast">${cmono(sf)}<span class="cx-name"><b>Steadfast</b><small class="${sfConnected() ? 'ok' : 'warn'}">${sfConnected() ? (webhookLive('steadfast') ? 'Connected · Live' : 'Connected') : 'Not connected'}</small></span>${def === 'steadfast' ? '<span class="cx-def">Default</span>' : ''}</button>
+      <button class="cx-item${view === 'steadfast' ? ' active' : ''}" data-cview="steadfast">${cmono(sf)}<span class="cx-name"><b>Steadfast</b><small class="${sfConnected() ? 'ok' : 'warn'}">${sfConnected() ? (webhookLive('steadfast') ? 'Connected · Live' : 'Connected') : sfRejected() ? 'Keys rejected — re-enter' : 'Not connected'}</small></span>${def === 'steadfast' ? '<span class="cx-def">Default</span>' : ''}</button>
       <button class="cx-item${view === 'sms' ? ' active' : ''}" data-cview="sms"><span class="cmono" style="background:#64748b">✉</span><span class="cx-name"><b>SMS to customers</b><small>Coming soon</small></span></button>
       ${soon.length ? '<div class="cx-label">Coming soon</div>' : ''}
       ${soon.map((c) => `<div class="cx-item off">${cmono(c)}<span class="cx-name"><b>${esc(c.name)}</b><small>${esc(c.tagline)}</small></span></div>`).join('')}`;
@@ -584,7 +585,7 @@
       api('/steadfast/test', { method: 'POST' }).then((r) => { if (r.ok) { state.sfBalance = r.balance; if (state.courierView === 'steadfast') renderSteadfast(); } }).catch(() => {});
     }
     $('sf-hero').innerHTML = `<div class="hero-l">${cmono(courier('steadfast'), 'hero-mono')}
-        <div><div class="hero-title"><h2>Steadfast</h2>${sfConnected() ? '<span class="badge green">Connected</span>' : '<span class="badge yellow">Setup needed</span>'}${webhookLive('steadfast') ? '<span class="live-pill"><i></i>Live</span>' : ''}</div>
+        <div><div class="hero-title"><h2>Steadfast</h2>${sfConnected() ? '<span class="badge green">Connected</span>' : sfRejected() ? '<span class="badge red">Keys rejected</span>' : '<span class="badge yellow">Setup needed</span>'}${webhookLive('steadfast') ? '<span class="live-pill"><i></i>Live</span>' : ''}</div>
         <p class="meta">${esc(courier('steadfast').tagline || '')}</p></div></div>
       <div class="hero-r"><span class="hero-ring" style="background:conic-gradient(#4f46e5 0 ${pct}%, #e4e5f7 ${pct}% 100%)"><b>${done}/${steps.length}</b></span><span class="meta">${done === steps.length ? 'All set' : 'steps done'}</span></div>
       <div class="hero-facts"><div><span>Balance</span><b>${state.sfBalance != null ? esc(taka(state.sfBalance)) : '—'}</b></div>
@@ -603,13 +604,16 @@
       el.querySelector('.step-act').textContent = isOpen ? 'Close' : x.done ? (x.key === 'sf-account' ? 'Edit' : 'View') : 'Set up';
       el.querySelector('.step-row').setAttribute('aria-expanded', String(isOpen));
     });
-    document.querySelector('[data-step="sf-account"] [data-summary]').textContent = sfConnected() ? `API key ${String(sf.api_key).slice(0, 6)}… · connected` : 'API key and secret key';
+    document.querySelector('[data-step="sf-account"] [data-summary]').textContent = sfConnected() ? `API key ${String(sf.api_key).slice(0, 6)}… · connected`
+      : sfRejected() ? 'Steadfast rejected these keys. Copy them again from the Steadfast portal.' : 'API key and secret key';
+    $('sf-auth-error').innerHTML = sfRejected() ? `<b>Steadfast stopped accepting your keys.</b> ${esc(sf.auth_error)}. ShipBridge has paused Steadfast bookings so your key doesn't get locked out. Enter the API key and secret key again and click Save &amp; connect.` : '';
+    show($('sf-auth-error'), sfRejected());
     document.querySelector('[data-step="sf-webhook"] [data-summary]').innerHTML = webhookLive('steadfast') ? '<span class="live" style="margin:0"><i></i>Live — statuses update instantly</span>' : 'Steadfast tells ShipBridge the moment a parcel moves';
     document.querySelector('[data-step="sf-default"] [data-summary]').textContent = defKey() === 'steadfast' ? 'New orders go to Steadfast' : `New orders go to ${cname(defKey())}`;
     if (document.activeElement !== $('sf_api_key')) setVal('sf_api_key', sf.api_key);
     $('sf_secret_key').placeholder = sf.has_secret ? '•••••••• saved' : '';
     setVal('sf_wh_url', wh.url); setVal('sf_wh_token', wh.token);
-    show($('sf-disconnect'), sfConnected());
+    show($('sf-disconnect'), sfConnected() || sfRejected());
     $('sf-wh-state').innerHTML = wh.live ? '<span class="ok-line"><span class="live" style="margin:0"><i></i></span>Connected — delivery status updates the moment Steadfast reports it.</span>'
       : sfConnected() ? '<span class="wait-line">Waiting for the first update from Steadfast.</span>' : '';
     $('sf-default-text').textContent = defKey() === 'steadfast'
@@ -621,15 +625,13 @@
     const key = $('sf_api_key').value.trim(), secret = $('sf_secret_key').value.trim();
     if (!key) throw new Error('Enter your Steadfast API key');
     if (!secret && !(S().steadfast && S().steadfast.has_secret)) throw new Error('Enter your Steadfast secret key');
-    const body = { steadfast_api_key: key };
-    if (secret) body.steadfast_secret_key = secret;
-    apply(await api('/settings', { method: 'POST', body }));
-    const test = await api('/steadfast/test', { method: 'POST' });
-    if (!test.ok) throw new Error(`Steadfast: ${test.error}`);
-    state.sfBalance = test.balance;
+    // Steadfast checks the keys first; nothing is saved if it refuses them.
+    const r = await api('/steadfast/connect', { method: 'POST', body: { api_key: key, secret_key: secret } });
+    apply(r);
+    state.sfBalance = r.balance;
     setVal('sf_secret_key', '');
     state.section = undefined;
-    toast(`Steadfast connected${test.balance != null ? ` · balance ${taka(test.balance)}` : ''}`);
+    toast(`Steadfast connected${r.balance != null ? ` · balance ${taka(r.balance)}` : ''}`);
     renderAll();
   }
   function gotoSection(sec) {

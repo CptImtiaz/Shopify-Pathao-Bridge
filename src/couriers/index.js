@@ -29,8 +29,8 @@ function listCouriers(settings, { pathao }) {
         : null;
     }
     if (available && c.key === 'steadfast') {
-      status = settings.steadfast_api_key && settings.steadfast_secret_enc ? 'connected' : 'not_connected';
-      detail = status === 'connected' ? 'API connected' : null;
+      status = settings.steadfast_api_key && settings.steadfast_secret_enc ? (settings.steadfast_auth_error ? 'needs_keys' : 'connected') : 'not_connected';
+      detail = status === 'connected' ? 'API connected' : status === 'needs_keys' ? 'Keys rejected' : null;
     }
     return { ...c, available, status, detail, isDefault: c.key === (settings.default_courier || 'pathao') };
   });
