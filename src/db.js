@@ -111,6 +111,14 @@ const SCHEMA = [
   `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS tracking_code TEXT`,
   // Set when Steadfast answers 401: stops further calls (10 failures = 60 min lockout).
   `ALTER TABLE settings ADD COLUMN IF NOT EXISTS steadfast_auth_error TEXT`,
+  // Merchant's own note on an order (e.g. why it is on hold). Never sent to couriers.
+  `CREATE TABLE IF NOT EXISTS order_notes (
+    shop TEXT NOT NULL,
+    shopify_order_id TEXT NOT NULL,
+    note TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (shop, shopify_order_id)
+  )`,
 ];
 
 function makeDb(pool) {
@@ -167,6 +175,7 @@ function makeDb(pool) {
       await q('DELETE FROM support_tickets WHERE shop = $1', [shop]);
       await q('DELETE FROM sms_log WHERE shop = $1', [shop]);
       await q('DELETE FROM shipments WHERE shop = $1', [shop]);
+      await q('DELETE FROM order_notes WHERE shop = $1', [shop]);
       await q('DELETE FROM settings WHERE shop = $1', [shop]);
       await q('DELETE FROM shops WHERE shop = $1', [shop]);
     },
@@ -359,6 +368,24 @@ function makeDb(pool) {
       if (!orderIds.length) return;
       await q('DELETE FROM shipments WHERE shop = $1 AND shopify_order_id = ANY($2)', [shop, orderIds.map(String)]);
       await q('DELETE FROM sms_log WHERE shop = $1 AND shopify_order_id = ANY($2)', [shop, orderIds.map(String)]);
+      await q('DELETE FROM order_notes WHERE shop = $1 AND shopify_order_id = ANY($2)', [shop, orderIds.map(String)]);
+    },
+
+    // ---------- order notes ----------
+    async notesForOrders(shop, orderIds) {
+      if (!orderIds.length) return [];
+      return (await q('SELECT shopify_order_id, note, updated_at FROM order_notes WHERE shop = $1 AND shopify_order_id = ANY($2)', [shop, orderIds.map(String)])).rows;
+    },
+    async setNote(shop, orderId, note) {
+      if (!note) {
+        await q('DELETE FROM order_notes WHERE shop = $1 AND shopify_order_id = $2', [shop, String(orderId)]);
+        return null;
+      }
+      return one(
+        `INSERT INTO order_notes (shop, shopify_order_id, note) VALUES ($1, $2, $3)
+         ON CONFLICT (shop, shopify_order_id) DO UPDATE SET note = EXCLUDED.note, updated_at = NOW() RETURNING *`,
+        [shop, String(orderId), note]
+      );
     },
   };
 }

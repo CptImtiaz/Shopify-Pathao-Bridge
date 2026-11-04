@@ -329,8 +329,9 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, sh
     const phones = norm.map(phoneOf);
     const history = await db.historyForPhones(req.shop, phones);
     const ids = orders.map((o) => String(o.legacyResourceId));
-    const [shipments, smsRows] = await Promise.all([db.shipmentsForOrders(req.shop, ids), db.smsForOrders(req.shop, ids)]);
+    const [shipments, smsRows, notes] = await Promise.all([db.shipmentsForOrders(req.shop, ids), db.smsForOrders(req.shop, ids), db.notesForOrders(req.shop, ids)]);
     const byId = new Map(shipments.map((s) => [s.shopify_order_id, s]));
+    const noteById = new Map(notes.map((n) => [n.shopify_order_id, n.note]));
     const smsById = new Map(smsRows.map((s) => [s.shopify_order_id, s]));
     return {
       orders: orders.map((o, idx) => {
@@ -362,6 +363,8 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, sh
           products: n.items.slice(0, 4).map((i) => ({ title: i.title, quantity: i.quantity, image: i.image })),
           fraud,
           cancelled: n.cancelled,
+          source: n.source || null,
+          note: noteById.get(n.id) || null,
           sms: smsById.has(n.id) ? { status: smsById.get(n.id).status, error: smsById.get(n.id).error } : null,
           shipment: s ? {
             status: s.status, courier: s.courier || 'pathao', consignmentId: s.consignment_id, trackingCode: s.tracking_code || null, pathaoStatus: s.pathao_status,
@@ -395,6 +398,15 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, sh
     }
     admin.forgetOrders(req.shop);
     return { results };
+  }));
+
+  // Merchant's own note on an order (shown on hold orders). Empty text removes it.
+  router.post('/orders/:id/note', wrap(async (req) => {
+    if (!/^\d+$/.test(req.params.id)) throw Object.assign(new Error('Unknown order'), { status: 400 });
+    const note = String(req.body?.note || '').trim();
+    if (note.length > 500) throw Object.assign(new Error('Note is too long (max 500 characters)'), { status: 400 });
+    await db.setNote(req.shop, req.params.id, note || null);
+    return { note: note || null };
   }));
 
   router.post('/orders/:id/refresh', wrap(async (req) => {

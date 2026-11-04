@@ -21,6 +21,10 @@ class SteadfastError extends Error {
 
 function describeError(status, data) {
   const said = data && (data.message || data.error) ? ` (Steadfast said: "${String(data.message || data.error).slice(0, 160)}")` : '';
+  const msg = String((data && (data.message || data.error)) || '');
+  if ((status === 401 || status === 403) && /not\s+active|inactive|kyc/i.test(msg)) {
+    return 'Your Steadfast account is not active yet (Steadfast said: "' + msg.slice(0, 120) + '"). Ask Steadfast support to activate it, then click Save & connect again';
+  }
   if (status === 401) return `Steadfast rejected the API key or secret key${said}`;
   if (status === 403) return 'Steadfast account is inactive or needs its ownership (KYC) details resubmitted';
   if (status === 429) return 'Too many requests to Steadfast. Wait a few minutes and try again.';

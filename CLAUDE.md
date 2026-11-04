@@ -45,3 +45,11 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 - `shipments.courier` says which courier booked an order; `shipments.pathao_status` holds the
   courier's status text for every courier (name predates multi-courier).
 - `settings.default_courier` drives Send buttons and auto-send.
+
+## Dashboard tabs
+- All = every order except Hold (cancelled included). Hold = unsent orders that wait for the
+  merchant: made from a draft (`sourceName: shopify_draft_order`, never auto-sent), high
+  fraud risk, bad phone, or skipped with a "Held: ..." reason. Problems = courier refused /
+  failed / returned. Merchant notes per order live in `order_notes` (never sent to couriers).
+- Before changing the order table, re-run the overlap check (widths 1060–1600): the app
+  area inside Shopify admin on a 1366px laptop is ~1060px wide.

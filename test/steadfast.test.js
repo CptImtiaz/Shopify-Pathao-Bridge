@@ -205,3 +205,12 @@ test('steadfast as default courier: auto-send books new orders with Steadfast; d
   assert.equal(d.data.settings.auto_send, false);
   assert.equal(d.data.settings.steadfast.connected, false);
 });
+
+test('steadfast "Account is not active!" is reported as an inactive account, not wrong keys', () => {
+  const { makeSteadfast } = require('../src/couriers/steadfast');
+  const sf = makeSteadfast({ config: {}, cipher: { decrypt: (x) => x }, fetchImpl: async () => new Response(JSON.stringify({ message: 'Account is not active!' }), { status: 401 }) });
+  return sf.balance({ steadfast_api_key: 'k', steadfast_secret_enc: 's' }, { probe: true }).then(
+    () => assert.fail('should throw'),
+    (e) => { assert.match(e.message, /account is not active yet/); assert.doesNotMatch(e.message, /rejected the API key/); }
+  );
+});

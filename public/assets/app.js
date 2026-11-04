@@ -52,6 +52,17 @@
   const cname = (key) => courier(key || 'pathao').name;
   const sfConnected = () => Boolean(S().steadfast && S().steadfast.connected && !S().steadfast.auth_error);
   const sfRejected = () => Boolean(S().steadfast && S().steadfast.auth_error);
+  // Why an unsent order is waiting for the merchant (null = not on hold).
+  const badPhoneOf = (o) => Boolean(o.fraud && o.fraud.reasons.some((r) => /not a valid|No phone/.test(r.text)));
+  function holdReason(o) {
+    if (o.cancelled || !canSend(o) || (o.shipment && o.shipment.status === 'failed')) return null;
+    if (held(o)) return (o.shipment.error || '').replace(/^Held( for review)?:\s*/i, '') || 'Held';
+    if (o.source === 'shopify_draft_order') return 'Draft order · created in Shopify admin';
+    if (badPhoneOf(o)) return 'Phone number needs fixing';
+    if (o.fraud && o.fraud.level === 'high') return 'High fraud risk';
+    return null;
+  }
+  const bucketOf = (o) => (holdReason(o) ? 'hold' : stageOf(o).key);
   const courierReady = (key) => (key === 'steadfast' ? sfConnected() : Boolean(S().connected && S().pathao_store_id));
   const permMissing = () => Boolean(state.boot && state.boot.permissions && state.boot.permissions.missing && state.boot.permissions.missing.length);
   const S = () => state.boot.settings;
@@ -105,9 +116,10 @@
   }
   function stageLabel(o) {
     const s = o.shipment;
+    if (holdReason(o)) return 'On hold';
     if (!s) return o.cancelled ? 'Cancelled' : 'Not sent';
     if (held(o)) return 'Held for review';
-    if (s.status === 'failed') return `${cname(s.courier)} refused`;
+    if (s.status === 'failed') return 'Refused';
     if (s.status === 'skipped') return 'Not sent';
     if (s.status === 'processing') return 'Sending…';
     const p = ps(o).replace(/^order\./, '');
@@ -115,15 +127,9 @@
       [/deliver/, 'Delivered'], [/return/, 'Returned'], [/pickup.?cancel|cancel/, 'Cancelled'], [/assigned.?for.?pickup/, 'Rider assigned'], [/picked/, 'Picked up'],
       [/sorting/, 'At sorting hub'], [/hub/, 'At delivery hub'], [/transit/, 'In transit'], [/hold/, 'On hold']];
     const hit = map.find(([re]) => re.test(p));
-    return hit ? hit[1] : 'Booked · waiting for rider';
+    return hit ? hit[1] : 'Booked';
   }
   const canSend = (o) => !o.cancelled && (!o.shipment || ['failed', 'skipped'].includes(o.shipment.status));
-  function groupOf(o) {
-    const st = stageOf(o).key;
-    if (canSend(o)) return 'action';
-    if (['booked', 'picked', 'onway'].includes(st)) return 'way';
-    return 'done';
-  }
   const riskKey = (o) => (o.fraud ? ({ high: 'high', medium: 'check', low: 'new', pending: 'new', safe: 'safe' }[o.fraud.level] || 'new') : 'new');
   const riskText = (o) => (o.fraud ? ({ high: 'High', medium: 'Check', low: 'New', pending: 'Checking', safe: 'Safe' }[o.fraud.level] || '—') : '—');
   function riskWhy(o) {
@@ -190,8 +196,19 @@
       { key: 'auto', done: Boolean(s.auto_send), html: 'Send new orders to Pathao automatically', btn: ['defaults', 'Turn on auto-send'] },
     ];
   }
-  const newReady = () => state.orders.filter((o) => !o.shipment && !o.cancelled && !(o.fraud && o.fraud.level === 'high'));
+  const newReady = () => state.orders.filter((o) => !o.shipment && !o.cancelled && bucketOf(o) === 'new');
+  // Dashboard auto-send: on = new orders go to the chosen courier; off = assign yourself.
+  function renderAutoBox() {
+    const s = S(), def = defKey(), on = Boolean(s.auto_send);
+    const avail = (state.boot.couriers || []).filter((c) => c.available);
+    $('auto-box').innerHTML = `<label class="mini-switch" title="${courierReady(def) ? '' : `Connect ${esc(cname(def))} first`}"><input type="checkbox" id="dash-auto" ${on ? 'checked' : ''} ${courierReady(def) || on ? '' : 'disabled'} /><i aria-hidden="true"></i><span>Auto-send</span></label>
+      ${on ? `<span class="auto-to">to</span><div class="seg sm" role="radiogroup" aria-label="Auto-send courier">${avail.map((c) => {
+        const ok = courierReady(c.key);
+        return `<button role="radio" data-defc="${esc(c.key)}" aria-checked="${c.key === def}" ${ok ? '' : 'disabled title="Connect it first"'}>${esc(c.name)}</button>`;
+      }).join('')}</div>` : '<span class="auto-off">Off · assign couriers yourself</span>'}`;
+  }
   function renderHeader() {
+    renderAutoBox();
     const u = state.boot.usage;
     $('usage-line').textContent = u.limit ? `Orders: ${u.used} / ${u.limit} this month` : `Orders: ${u.used} this month · Unlimited`;
     show($('live-pill'), webhookLive());
@@ -217,8 +234,7 @@
   function renderOverview() {
     $$('#range-seg button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.range === state.range)));
     const st = state.stats;
-    if (!st) { $('ov-kpis').innerHTML = '<div class="card kpi skeleton"></div>'.repeat(6); $('ov-chart').innerHTML = ''; return; }
-    const pct = (n, d) => (d ? Math.round((n / d) * 100) : 0);
+    if (!st) { $('ov-kpis').innerHTML = '<div class="card kpi skeleton"></div>'.repeat(6); return; }
     const sr = st.successRate;
     const srCol = sr == null ? '#9ca3af' : sr >= 85 ? '#22c55e' : sr >= 65 ? '#f59e0b' : '#ef4444';
     $('ov-sub').textContent = `Parcels booked through ShipBridge ${RANGE_TXT[st.range]}`;
@@ -240,28 +256,17 @@
       kpi('cash', '<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M7 9v.01M17 15v.01"/>', 'Cash with riders', taka(st.codOnTheWay),
         `<span class="k-foot">COD on parcels not delivered yet · fees ${taka(st.fees)}</span>`),
     ].join('');
-    const max = Math.max(1, ...st.daily.map((d) => d.booked));
-    const totB = st.daily.reduce((t, d) => t + d.booked, 0), totD = st.daily.reduce((t, d) => t + d.delivered, 0);
-    $('ov-chart').innerHTML = `<div class="ch-head"><div><b>Last 14 days</b><span class="meta">${totB} booked · ${totD} delivered</span></div>
-        <span class="legend"><i class="lb"></i>Booked<i class="ld"></i>Delivered</span></div>
-      <div class="bars">${st.daily.map((d, i) => {
-        const dt = new Date(`${d.date}T00:00:00`);
-        return `<div class="bar-col" title="${esc(dt.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))}: ${d.booked} booked, ${d.delivered} delivered">
-          <div class="bar-stack"><span class="b-booked" style="height:${pct(d.booked, max)}%"><span class="b-del" style="height:${pct(d.delivered, d.booked || 1)}%"></span></span></div>
-          <span class="bar-x">${i % 2 === 1 || i === 13 ? dt.getDate() : ''}</span></div>`;
-      }).join('')}</div>`;
   }
 
   const STAGES = [
-    ['new', 'New', 't-new', 'Not sent yet'], ['booked', 'Booked', 't-go', 'Waiting for rider'], ['picked', 'Picked up', 't-go', 'With Pathao'],
+    ['hold', 'Hold', 't-hold', 'Draft, risky or held'], ['new', 'New', 't-new', 'Not sent yet'], ['booked', 'Booked', 't-go', 'Waiting for rider'], ['picked', 'Picked up', 't-go', 'With Pathao'],
     ['onway', 'On the way', 't-go', 'Transit & delivery'], ['delivered', 'Delivered', 't-done', 'Recent orders'], ['problems', 'Problems', 't-bad', 'Returned or failed'],
   ];
   function renderPipeline() {
-    const c = {}; state.orders.forEach((o) => { const k = stageOf(o).key; c[k] = (c[k] || 0) + 1; });
-    const tabs = [['', 'All', state.orders.length, '']].concat(STAGES.map(([k, l, tone]) => [k, l, c[k] || 0, tone]));
+    const c = {}; state.orders.forEach((o) => { const k = bucketOf(o); c[k] = (c[k] || 0) + 1; });
+    const tabs = [['', 'All', state.orders.length - (c.hold || 0), '']].concat(STAGES.map(([k, l, tone]) => [k, l, c[k] || 0, tone]));
     $('pipeline').innerHTML = tabs.map(([k, l, n, tone]) => `<button role="tab" class="${tone}" aria-selected="${(state.stage || '') === k}" data-stage="${k}"><span>${l}</span><b>${n}</b></button>`).join('');
   }
-  const GROUPS = [['all', 'All'], ['action', 'Needs action'], ['way', 'On the way'], ['done', 'Done']];
   const RISKS = [['any', 'All risk'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low'], ['safe', 'Safe'], ['pending', 'Checking']];
   const levelOf = (o) => (o.fraud ? o.fraud.level : 'pending');
   function renderGroups() {
@@ -271,12 +276,13 @@
   }
   function visible() {
     const q = state.search.trim().toLowerCase();
-    return state.orders.filter((o) => (!state.stage || stageOf(o).key === state.stage)
+    // "All" is everything except Hold; Hold has its own tab.
+    return state.orders.filter((o) => (state.stage ? bucketOf(o) === state.stage : bucketOf(o) !== 'hold')
       && (state.risk === 'any' || levelOf(o) === state.risk)
       && (!q || `${o.name} ${o.customer} ${o.phone} ${o.city} ${o.shipment ? o.shipment.consignmentId : ''}`.toLowerCase().includes(q)));
   }
   function thumbs(o) {
-    const list = (o.products || []).slice(0, 3);
+    const list = (o.products || []).slice(0, 2);
     if (!list.length) return '<span class="thumb">–</span>';
     return list.map((p, i) => (p.image ? `<img class="thumb" style="z-index:${5 - i}" src="${esc(p.image)}" alt="" loading="lazy" />` : `<span class="thumb" style="z-index:${5 - i}">${esc((p.title || '?').charAt(0).toUpperCase())}</span>`)).join('');
   }
@@ -306,15 +312,13 @@
     }
     if (s && s.status === 'processing') return '<span class="sub">Sending…</span>';
     if (o.cancelled && !s) return '<span class="sub">—</span>';
-    const badPhone = o.fraud && o.fraud.reasons.some((r) => /not a valid|No phone/.test(r.text));
-    if (badPhone) return `<a class="assign warn" href="${esc(shopifyOrderUrl(o))}" target="_top">Fix phone</a>`;
-    if (held(o) || (o.fraud && o.fraud.level === 'high' && !s)) return `<button class="assign warn" data-open="${esc(o.id)}">Review</button>`;
+    if (badPhoneOf(o)) return `<a class="assign warn" href="${esc(shopifyOrderUrl(o))}" target="_top">Fix phone</a>`;
     return `<button class="assign" data-assign="${esc(o.id)}">${TRUCK}${s ? 'Retry' : 'Assign Courier'}</button>`;
   }
   // Delivery status: a coloured pill with icon, and a 5-dot stepper underneath.
   const ST_ICON = { ok: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', bad: '<path d="M7 7l10 10M17 7L7 17"/>', go: '<path d="M5 12h12M13 7l5 5-5 5"/>', wait: '<circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/>', hold: '<path d="M9 7v10M15 7v10"/>' };
   function statusTone(o, st) {
-    if (held(o)) return 'hold';
+    if (holdReason(o) || held(o)) return 'hold';
     if (st.bad) return 'bad';
     if (st.key === 'delivered') return 'ok';
     if (st.step > 0) return 'go';
@@ -345,7 +349,15 @@
     const st = stageOf(o), sel = state.selected.has(o.id), f = o.fraud, h = (f && f.history) || {};
     const first = (o.products && o.products[0]) || null;
     const more = (o.products || []).length > 1 ? `+${o.products.length - 1} more · ` : '';
-    const err = o.shipment && o.shipment.status !== 'sent' && o.shipment.error ? `<span class="err">${esc(o.shipment.error)}</span>` : '';
+    const hr = holdReason(o);
+    const err = hr ? `<span class="hold-why">${esc(hr)}</span>`
+      : o.shipment && o.shipment.status !== 'sent' && o.shipment.error ? (() => {
+        const c = o.shipment.status === 'failed' ? cname(o.shipment.courier) : '';
+        const msg = c && !o.shipment.error.startsWith(c) ? `${c}: ${o.shipment.error}` : o.shipment.error;
+        return `<span class="err" title="${esc(msg)}">${esc(msg)}</span>`;
+      })() : '';
+    const note = o.note ? `<button class="note-line" data-open="${esc(o.id)}" title="${esc(o.note)}"><span>Note:</span> ${esc(o.note)}</button>`
+      : hr ? `<button class="link-btn note-add" data-open="${esc(o.id)}">+ Add note</button>` : '';
     const synced = o.shipment && o.shipment.status === 'sent' && o.shipment.consignmentId ? `<span class="cn mono" title="Pathao consignment">${esc(o.shipment.consignmentId)}</span>` : '';
     return `<div class="row${sel ? ' sel' : ''}" data-row="${esc(o.id)}">
       <span>${canSend(o) ? `<input type="checkbox" data-select="${esc(o.id)}" ${sel ? 'checked' : ''} aria-label="Select ${esc(o.name)}" />` : ''}</span>
@@ -354,7 +366,7 @@
       <div style="min-width:0"><b class="ellip">${esc(o.customer || '—')}</b><span class="sub">${esc(o.phone || o.city || '')}</span></div>
       <div>${payCell(o)}</div>
       <div>${fulfillBadge(o)}</div>
-      <div>${statusCell(o, st)}${synced}${err}</div>
+      <div>${statusCell(o, st)}${synced}${err}${note}</div>
       <div>${fraudCell(o)}</div>
       <div>${courierCell(o)}</div>
     </div>`;
@@ -365,13 +377,8 @@
     show($('orders-empty'), !rows.length);
     if (!rows.length) {
       $('rows').innerHTML = '';
-      $('orders-empty').innerHTML = state.orders.length ? '<b>No orders here</b>Try another tab, risk filter or search.' : '<b>No orders yet</b>New orders from your store appear here.';
-    } else if (!state.stage && state.risk === 'any' && !state.search) {
-      const order = [['action', 'Needs action', '#d97706', '· send, check or fix'], ['way', 'On the way', '#4f46e5', webhookLive() ? '· updates arrive live' : ''], ['done', 'Done', '#9ca3af', '']];
-      $('rows').innerHTML = order.map(([g, t, c, sub]) => {
-        const list = rows.filter((o) => groupOf(o) === g);
-        return list.length ? `<div class="group-title"><i style="background:${c}"></i>${t}<span>${sub}</span></div>${list.map(rowHtml).join('')}` : '';
-      }).join('');
+      $('orders-empty').innerHTML = state.stage === 'hold' && !state.search ? '<b>Nothing on hold</b>Draft, high-risk and held orders wait here for you to assign a courier.'
+        : state.orders.length ? '<b>No orders here</b>Try another tab, risk filter or search.' : '<b>No orders yet</b>New orders from your store appear here.';
     } else {
       $('rows').innerHTML = rows.map(rowHtml).join('');
     }
@@ -432,6 +439,9 @@
         ${sent && o.shipment.consignmentId ? `<a class="btn ghost" href="${esc(trackUrl(o))}" target="_blank" rel="noopener">Track parcel</a>` : `<a class="btn ghost" href="${esc(shopifyOrderUrl(o))}" target="_top">Open in Shopify</a>`}
       </div>
       ${o.shipment && o.shipment.status !== 'sent' && o.shipment.error ? `<div class="d-note">${esc(o.shipment.error)}</div>` : ''}
+      ${sendable || o.note ? `<div class="d-sec d-notes"><div class="d-label">Your note${holdReason(o) ? ` · on hold: ${esc(holdReason(o))}` : ''}</div>
+        <textarea id="note-input" rows="2" maxlength="500" placeholder="e.g. Customer asked to deliver after Friday">${esc(o.note || '')}</textarea>
+        <div class="note-foot"><span class="hint">Only you see this. It is not sent to the courier.</span><button class="btn sm" data-savenote="${esc(o.id)}">Save note</button></div></div>` : ''}
       <div class="d-risk l-${esc(f.level)}">
         <div class="ring" style="background:conic-gradient(${colors[0]} 0 ${Number(f.score) || 0}%, ${colors[1]} ${Number(f.score) || 0}% 100%)"><b>${Number(f.score) || 0}</b></div>
         <div><div class="t">${esc(title)}</div><ul>${f.reasons.slice(0, 3).map((r) => `<li>${esc(r.text)}</li>`).join('')}</ul></div>
@@ -501,7 +511,7 @@
     const def = defKey();
     $('courier-nav').innerHTML = `<div class="cx-label">Your couriers</div>
       <button class="cx-item${view === 'pathao' ? ' active' : ''}" data-cview="pathao">${cmono(p)}<span class="cx-name"><b>Pathao</b><small class="${ready ? 'ok' : 'warn'}">${ready ? (webhookLive('pathao') ? 'Connected · Live' : 'Connected') : s.connected ? 'Choose a pickup store' : 'Not connected'}</small></span>${def === 'pathao' ? '<span class="cx-def">Default</span>' : ''}</button>
-      <button class="cx-item${view === 'steadfast' ? ' active' : ''}" data-cview="steadfast">${cmono(sf)}<span class="cx-name"><b>Steadfast</b><small class="${sfConnected() ? 'ok' : 'warn'}">${sfConnected() ? (webhookLive('steadfast') ? 'Connected · Live' : 'Connected') : sfRejected() ? 'Keys rejected — re-enter' : 'Not connected'}</small></span>${def === 'steadfast' ? '<span class="cx-def">Default</span>' : ''}</button>
+      <button class="cx-item${view === 'steadfast' ? ' active' : ''}" data-cview="steadfast">${cmono(sf)}<span class="cx-name"><b>Steadfast</b><small class="${sfConnected() ? 'ok' : 'warn'}">${sfConnected() ? (webhookLive('steadfast') ? 'Connected · Live' : 'Connected') : sfRejected() ? 'Needs attention' : 'Not connected'}</small></span>${def === 'steadfast' ? '<span class="cx-def">Default</span>' : ''}</button>
       <button class="cx-item${view === 'sms' ? ' active' : ''}" data-cview="sms"><span class="cmono" style="background:#64748b">✉</span><span class="cx-name"><b>SMS to customers</b><small>Coming soon</small></span></button>
       ${soon.length ? '<div class="cx-label">Coming soon</div>' : ''}
       ${soon.map((c) => `<div class="cx-item off">${cmono(c)}<span class="cx-name"><b>${esc(c.name)}</b><small>${esc(c.tagline)}</small></span></div>`).join('')}`;
@@ -585,7 +595,7 @@
       api('/steadfast/test', { method: 'POST' }).then((r) => { if (r.ok) { state.sfBalance = r.balance; if (state.courierView === 'steadfast') renderSteadfast(); } }).catch(() => {});
     }
     $('sf-hero').innerHTML = `<div class="hero-l">${cmono(courier('steadfast'), 'hero-mono')}
-        <div><div class="hero-title"><h2>Steadfast</h2>${sfConnected() ? '<span class="badge green">Connected</span>' : sfRejected() ? '<span class="badge red">Keys rejected</span>' : '<span class="badge yellow">Setup needed</span>'}${webhookLive('steadfast') ? '<span class="live-pill"><i></i>Live</span>' : ''}</div>
+        <div><div class="hero-title"><h2>Steadfast</h2>${sfConnected() ? '<span class="badge green">Connected</span>' : sfRejected() ? '<span class="badge red">Needs attention</span>' : '<span class="badge yellow">Setup needed</span>'}${webhookLive('steadfast') ? '<span class="live-pill"><i></i>Live</span>' : ''}</div>
         <p class="meta">${esc(courier('steadfast').tagline || '')}</p></div></div>
       <div class="hero-r"><span class="hero-ring" style="background:conic-gradient(#4f46e5 0 ${pct}%, #e4e5f7 ${pct}% 100%)"><b>${done}/${steps.length}</b></span><span class="meta">${done === steps.length ? 'All set' : 'steps done'}</span></div>
       <div class="hero-facts"><div><span>Balance</span><b>${state.sfBalance != null ? esc(taka(state.sfBalance)) : '—'}</b></div>
@@ -605,8 +615,8 @@
       el.querySelector('.step-row').setAttribute('aria-expanded', String(isOpen));
     });
     document.querySelector('[data-step="sf-account"] [data-summary]').textContent = sfConnected() ? `API key ${String(sf.api_key).slice(0, 6)}… · connected`
-      : sfRejected() ? 'Steadfast rejected these keys. Copy them again from the Steadfast portal.' : 'API key and secret key';
-    $('sf-auth-error').innerHTML = sfRejected() ? `<b>Steadfast stopped accepting your keys.</b> ${esc(sf.auth_error)}. ShipBridge has paused Steadfast bookings so your key doesn't get locked out. Enter the API key and secret key again and click Save &amp; connect.` : '';
+      : sfRejected() ? 'Steadfast refused the connection, see below' : 'API key and secret key';
+    $('sf-auth-error').innerHTML = sfRejected() ? `<b>Steadfast bookings are paused.</b> ${esc(sf.auth_error)}. ShipBridge stopped calling Steadfast so your key doesn't get locked out. When it's fixed, click Save &amp; connect.` : '';
     show($('sf-auth-error'), sfRejected());
     document.querySelector('[data-step="sf-webhook"] [data-summary]').innerHTML = webhookLive('steadfast') ? '<span class="live" style="margin:0"><i></i>Live — statuses update instantly</span>' : 'Steadfast tells ShipBridge the moment a parcel moves';
     document.querySelector('[data-step="sf-default"] [data-summary]').textContent = defKey() === 'steadfast' ? 'New orders go to Steadfast' : `New orders go to ${cname(defKey())}`;
@@ -771,8 +781,19 @@
     if (asg) { closeMenu(); openMenu(asg, [asg.dataset.assign]); return; }
     const sendBtn = t.closest('[data-send]');
     if (sendBtn) { try { await busy(sendBtn, () => sendOrders([sendBtn.dataset.send], S().default_courier || 'pathao')); } catch (e) { toast(e.message, true); } return; }
+    const sn = t.closest('[data-savenote]');
+    if (sn) {
+      try {
+        await busy(sn, async () => {
+          const r = await api(`/orders/${sn.dataset.savenote}/note`, { method: 'POST', body: { note: $('note-input').value } });
+          const o = state.orders.find((x) => x.id === sn.dataset.savenote); if (o) o.note = r.note;
+          toast(r.note ? 'Note saved' : 'Note removed'); renderOrders();
+        });
+      } catch (e) { toast(e.message, true); }
+      return;
+    }
     const opener = t.closest('[data-open]');
-    if (opener) { openDetail(opener.dataset.open); return; }
+    if (opener) { openDetail(opener.dataset.open); if (opener.classList.contains('note-add')) setTimeout(() => { const n = $('note-input'); if (n) n.focus(); }, 30); return; }
     const tr = t.closest('[data-track]');
     if (tr) { try { await busy(tr, async () => { await api(`/orders/${tr.dataset.track}/refresh`, { method: 'POST' }); await loadOrders(); }); } catch (e) { toast(e.message, true); } return; }
     if (t.closest('[data-select]') || t.closest('#check-all')) return;
@@ -856,6 +877,7 @@
     if (box) { if (box.checked) state.selected.add(box.dataset.select); else state.selected.delete(box.dataset.select); renderRows(); return; }
     if (el.id === 'check-all') { visible().filter(canSend).forEach((o) => { if (el.checked) state.selected.add(o.id); else state.selected.delete(o.id); }); renderRows(); return; }
     if (['auto_send', 'hold_risky', 'sync_fulfillment', 'notify_customer'].includes(el.id)) { savePrefs({ [el.id]: el.checked }); return; }
+    if (el.id === 'dash-auto') { savePrefs({ auto_send: el.checked }); return; }
     if (el.id === 'pathao_store_id' && /^\d+$/.test(el.value)) {
       const name = el.options[el.selectedIndex].textContent.replace(' (inactive)', '');
       api('/settings', { method: 'POST', body: { pathao_store_id: el.value, pathao_store_name: name } }).then((r) => { apply(r); toast('Pickup store saved'); renderAll(); }).catch((e) => toast(e.message, true));

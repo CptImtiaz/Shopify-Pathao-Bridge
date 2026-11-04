@@ -431,3 +431,33 @@ test('speed: order list is cached briefly, refreshed by Refresh and by new-order
   await a.settle();
   assert.equal((await a.api('/orders')).data.orders.length, 2, 'new order shows right away');
 });
+
+test('hold: orders made from drafts are not auto-sent; merchant notes are saved per order', async (t) => {
+  const a = await startApp();
+  t.after(() => a.close());
+  await a.api('/bootstrap');
+  await a.api('/settings', { method: 'POST', body: { pathao_client_id: 'c', pathao_client_secret: 's', pathao_username: 'u', pathao_password: 'p', pathao_store_id: 77, auto_send: true, hold_risky: false } });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(await a.webhook('/webhooks/orders/create', restOrder(950, { source_name: 'shopify_draft_order' }), 'orders/create'), 200);
+  await a.settle();
+  const s = await a.db.getShipment(SHOP, '950');
+  assert.equal(s.status, 'skipped');
+  assert.match(s.error, /^Held: created from a draft order/);
+  assert.equal(a.fake.calls.filter((c) => c.url.endsWith('/aladdin/api/v1/orders')).length, 0, 'not booked');
+
+  a.fake.state.orders['950'] = gqlOrder(950, { sourceName: 'shopify_draft_order' });
+  let r = await a.api('/orders/950/note', { method: 'POST', body: { note: '  Call after Friday ' } });
+  assert.equal(r.data.note, 'Call after Friday');
+  let o = (await a.api('/orders?fresh=1')).data.orders.find((x) => x.id === '950');
+  assert.equal(o.note, 'Call after Friday');
+  assert.equal(o.source, 'shopify_draft_order');
+  assert.equal((await a.api('/orders/950/note', { method: 'POST', body: { note: 'x'.repeat(501) } })).status, 400);
+  r = await a.api('/orders/950/note', { method: 'POST', body: { note: '' } });
+  assert.equal(r.data.note, null);
+  o = (await a.api('/orders?fresh=1')).data.orders.find((x) => x.id === '950');
+  assert.equal(o.note, null);
+
+  // A held order can still be sent by hand.
+  r = await a.api('/orders/send', { method: 'POST', body: { ids: ['950'], courier: 'pathao' } });
+  assert.equal(r.data.results[0].ok, true, r.data.results[0].error);
+});

@@ -23,7 +23,7 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
   // ---------------- orders ----------------
 
   const ORDER_FIELDS = `
-    id legacyResourceId name createdAt note tags phone
+    id legacyResourceId name createdAt note tags phone sourceName
     displayFinancialStatus displayFulfillmentStatus cancelledAt
     totalPriceSet { shopMoney { amount currencyCode } }
     totalOutstandingSet { shopMoney { amount } }

@@ -50,6 +50,7 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
       const reason = autoSendSkipReason(order, settings);
       if (reason) {
         if (settings.auto_send && reason !== 'Order was created before auto-send was turned on') {
+          // ("Held: ..." reasons put the order in the dashboard's Hold tab.)
           await db.recordSkip(shop, order.id, order.name, reason);
         }
         return;

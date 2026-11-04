@@ -48,10 +48,7 @@
             <button role="radio" data-range="today">Today</button><button role="radio" data-range="7d">7 days</button><button role="radio" data-range="month">This month</button><button role="radio" data-range="all">All time</button>
           </div>
         </div>
-        <div class="ov-grid">
-          <div class="ov-kpis" id="ov-kpis"></div>
-          <div class="card ov-chart" id="ov-chart"></div>
-        </div>
+        <div class="ov-kpis" id="ov-kpis"></div>
       </section>
 
       <section class="card setup collapsed" id="setup" hidden>
@@ -68,6 +65,7 @@
         <div class="list-top">
           <label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
             <input id="search" aria-label="Search orders" placeholder="Search orders by number, customer, phone or parcel…" /></label>
+          <div class="auto-box" id="auto-box"></div>
           <button class="btn primary" id="send-new" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.6"/><circle cx="17" cy="17.5" r="1.6"/></svg><span id="send-new-label">Send new orders</span></button>
         </div>
         <div class="pipe-tabs" role="tablist" id="pipeline" aria-label="Delivery status"></div>

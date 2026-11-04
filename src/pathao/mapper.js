@@ -35,6 +35,7 @@ function fromWebhook(o) {
     name: o.name || `#${o.order_number || o.id}`,
     createdAt: o.created_at,
     cancelled: Boolean(o.cancelled_at),
+    source: o.source_name || null,
     note: o.note || '',
     tags: String(o.tags || '').split(',').map((t) => t.trim()).filter(Boolean),
     paid: o.financial_status === 'paid',
@@ -57,6 +58,7 @@ function fromGraphql(o) {
     name: o.name,
     createdAt: o.createdAt,
     cancelled: Boolean(o.cancelledAt),
+    source: o.sourceName || null,
     note: o.note || '',
     tags: o.tags || [],
     paid: o.displayFinancialStatus === 'PAID',
@@ -148,6 +150,8 @@ function buildPathaoOrder(order, settings) {
 function autoSendSkipReason(order, settings) {
   if (!settings.auto_send) return 'Auto-send is off';
   if (order.cancelled) return 'Order is cancelled';
+  // Orders made by hand in Shopify admin wait for the merchant to pick a courier.
+  if (order.source === 'shopify_draft_order') return 'Held: created from a draft order in Shopify admin';
   if (settings.auto_send_since && order.createdAt && new Date(order.createdAt) < new Date(settings.auto_send_since)) {
     return 'Order was created before auto-send was turned on';
   }
