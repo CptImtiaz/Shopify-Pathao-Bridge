@@ -45,8 +45,24 @@
       <section class="overview" aria-label="Delivery overview">
         <div class="ov-head">
           <div><h2>Delivery overview</h2><p class="meta" id="ov-sub">All parcels sent through ShipBridge</p></div>
-          <div class="seg" role="radiogroup" aria-label="Period" id="range-seg">
-            <button role="radio" data-range="today">Today</button><button role="radio" data-range="7d">7 days</button><button role="radio" data-range="month">This month</button><button role="radio" data-range="all">All time</button>
+          <div class="dp" id="dp">
+            <button class="btn dp-btn" id="dp-btn" aria-haspopup="dialog" aria-expanded="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
+              <span id="dp-label">This month</span>
+              <svg class="dp-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="dp-pop" id="dp-pop" role="dialog" aria-label="Choose dates" hidden>
+              <div class="dp-presets" id="dp-presets"></div>
+              <div class="dp-main">
+                <div class="dp-inputs">
+                  <label class="dp-field"><span>Start</span><input type="date" id="dp-from" /></label>
+                  <svg class="dp-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 7l5 5-5 5"/></svg>
+                  <label class="dp-field"><span>End</span><input type="date" id="dp-to" /></label>
+                </div>
+                <div class="dp-cal" id="dp-cal"></div>
+                <div class="dp-foot"><span class="hint" id="dp-hint"></span><button class="btn" id="dp-cancel">Cancel</button><button class="btn primary" id="dp-apply">Apply</button></div>
+              </div>
+            </div>
           </div>
         </div>
         <div class="ov-kpis" id="ov-kpis"></div>

@@ -50,6 +50,9 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 - All = every order except Hold (errors and cancelled included), newest first; other tabs filter.
 - Wording: an order handed to a courier is "Sent to <Courier>" (pill, order panel), the tab is
   "Sent", cards say "N sent". Never "Booked" in the UI. Steadfast's `in_review` also shows as sent.
+- Overview cards follow the Shopify-style date picker (presets + 2-month calendar); `/api/stats`
+  takes `from`/`to` (ISO, `to` exclusive) or `range=all`. The Fraud check card counts the loaded
+  orders in those dates; clicking it filters to High risk across all tabs (Hold included).
 - Header live pill: one live courier = "<Courier> live"; several = stacked logos + "N couriers live".
 - Hold = waits for the merchant on purpose: open Shopify draft orders (id `d<draftId>`, need
   `read/write_draft_orders`), orders made from a draft (`sourceName: shopify_draft_order`,

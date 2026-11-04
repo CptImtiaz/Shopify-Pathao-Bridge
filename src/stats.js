@@ -27,9 +27,13 @@ function bucketOf(row) {
 
 function dayKey(d) { const x = new Date(d); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; }
 
-function summarise(rows, { range = 'month', now = new Date() } = {}) {
-  const start = rangeStart(range, now);
-  const inRange = rows.filter((r) => !start || new Date(r.created_at) >= start);
+// `from`/`to` (Dates, `to` exclusive) come from the dashboard's date picker and win over `range`.
+function summarise(rows, { range = 'month', from = null, to = null, now = new Date() } = {}) {
+  const start = from || (to ? null : rangeStart(range, now));
+  const inRange = rows.filter((r) => {
+    const t = new Date(r.created_at);
+    return (!start || t >= start) && (!to || t < to);
+  });
   const c = { booked: 0, picked: 0, transit: 0, delivered: 0, returned: 0, cancelled: 0, failed: 0, notSent: 0, processing: 0 };
   let codCollected = 0, codOnTheWay = 0, fees = 0, feeCount = 0;
   for (const r of inRange) {
@@ -54,7 +58,9 @@ function summarise(rows, { range = 'month', now = new Date() } = {}) {
   }
 
   return {
-    range,
+    range: from || to ? 'custom' : range,
+    from: start ? start.toISOString() : null,
+    to: to ? to.toISOString() : null,
     sent, ...c,
     onTheWay: c.booked + c.picked + c.transit,
     problems: c.returned + c.cancelled + c.failed,

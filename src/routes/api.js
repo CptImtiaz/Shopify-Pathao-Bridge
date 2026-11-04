@@ -319,7 +319,11 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, sh
   // ---- orders ----
   router.get('/stats', wrap(async (req) => {
     const range = RANGES.includes(req.query.range) ? req.query.range : 'month';
-    return summarise(await db.shipmentsForStats(req.shop), { range });
+    // Date picker: from/to are ISO timestamps from the merchant's browser (their own midnight).
+    const date = (v) => { const d = v ? new Date(String(v)) : null; return d && !Number.isNaN(d.getTime()) ? d : null; };
+    const from = date(req.query.from), to = date(req.query.to);
+    if (from && to && from >= to) throw Object.assign(new Error('The start date must be before the end date'), { status: 400 });
+    return summarise(await db.shipmentsForStats(req.shop), { range, from, to });
   }));
 
   router.get('/orders', wrap(async (req) => {

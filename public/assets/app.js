@@ -7,7 +7,7 @@
   const state = {
     boot: null, orders: [], loaded: false, selected: new Set(), focus: null,
     page: 'orders', group: null, stage: null, risk: 'any', search: '',
-    section: undefined, settingsTab: 'couriers', billing: null, period: 'monthly', range: 'month', stats: null, support: null, checks: null, menuFor: null,
+    section: undefined, settingsTab: 'couriers', billing: null, period: 'monthly', range: { key: 'month' }, dp: null, stats: null, support: null, checks: null, menuFor: null,
   };
 
   // ---------------- helpers ----------------
@@ -259,16 +259,128 @@
   }
   function renderStats() { renderOverview(); }
   async function loadStats() {
-    try { state.stats = await api(`/stats?range=${state.range}`); renderOverview(); } catch (e) { /* overview is optional */ }
+    const [from, to] = rangeDates(state.range);
+    const q = from ? `from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(addDays(to, 1).toISOString())}` : 'range=all';
+    try { state.stats = await api(`/stats?${q}`); renderOverview(); } catch (e) { /* overview is optional */ }
   }
-  const RANGE_TXT = { today: 'today', '7d': 'in the last 7 days', month: 'this month', all: 'since you started' };
+  // ---------------- date range (Shopify-style picker) ----------------
+  const DAY = 86400000;
+  const sod = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+  const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+  const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const fromYmd = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; };
+  const PRESETS = [
+    ['today', 'Today', 'today'], ['yesterday', 'Yesterday', 'yesterday'], ['7d', 'Last 7 days', 'in the last 7 days'],
+    ['30d', 'Last 30 days', 'in the last 30 days'], ['month', 'This month', 'this month'], ['lastmonth', 'Last month', 'last month'],
+    ['all', 'All time', 'since you started'],
+  ];
+  // [first day, last day] (inclusive, local midnight) or [null, null] for all time.
+  function rangeDates(r) {
+    const t = sod(new Date());
+    switch (r.key) {
+      case 'today': return [t, t];
+      case 'yesterday': return [addDays(t, -1), addDays(t, -1)];
+      case '7d': return [addDays(t, -6), t];
+      case '30d': return [addDays(t, -29), t];
+      case 'month': return [new Date(t.getFullYear(), t.getMonth(), 1), t];
+      case 'lastmonth': return [new Date(t.getFullYear(), t.getMonth() - 1, 1), new Date(t.getFullYear(), t.getMonth(), 0)];
+      case 'custom': return [sod(r.from), sod(r.to)];
+      default: return [null, null];
+    }
+  }
+  const fmtDay = (d, year) => d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', ...(year ? { year: 'numeric' } : {}) });
+  function rangeLabel(r) {
+    if (r.key !== 'custom') return PRESETS.find((p) => p[0] === r.key)[1];
+    const [a, b] = rangeDates(r);
+    return +a === +b ? fmtDay(a, true) : `${fmtDay(a, a.getFullYear() !== b.getFullYear())} – ${fmtDay(b, true)}`;
+  }
+  function rangeText(r) {
+    if (r.key !== 'custom') return PRESETS.find((p) => p[0] === r.key)[2];
+    const [a, b] = rangeDates(r);
+    return +a === +b ? `on ${fmtDay(a, true)}` : `from ${fmtDay(a, a.getFullYear() !== b.getFullYear())} to ${fmtDay(b, true)}`;
+  }
+  function openPicker() {
+    const [a, b] = rangeDates(state.range);
+    const end = b || sod(new Date());
+    state.dp = { key: state.range.key, from: a, to: b, view: new Date(end.getFullYear(), end.getMonth() - 1, 1), picking: 'start' };
+    show($('dp-pop'), true); $('dp-btn').setAttribute('aria-expanded', 'true');
+    renderPicker();
+  }
+  function closePicker() { state.dp = null; show($('dp-pop'), false); $('dp-btn').setAttribute('aria-expanded', 'false'); }
+  function setDraft(key) {
+    const [a, b] = rangeDates({ key });
+    Object.assign(state.dp, { key, from: a, to: b, picking: 'start' });
+    if (b) state.dp.view = new Date(b.getFullYear(), b.getMonth() - 1, 1);
+    renderPicker();
+  }
+  function monthHtml(first) {
+    const today = sod(new Date()), dp = state.dp;
+    const days = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+    let cells = '';
+    for (let i = 0; i < first.getDay(); i++) cells += '<span></span>';
+    for (let d = 1; d <= days; d++) {
+      const day = new Date(first.getFullYear(), first.getMonth(), d);
+      const a = dp.from && +day === +dp.from, z = dp.to && +day === +dp.to;
+      const mid = dp.from && dp.to && day > dp.from && day < dp.to;
+      const cls = [a && 'is-start', z && 'is-end', mid && 'in-range', +day === +today && 'is-today'].filter(Boolean).join(' ');
+      cells += `<button class="${cls}" data-day="${ymd(day)}" ${day > today ? 'disabled' : ''} aria-pressed="${Boolean(a || z)}">${d}</button>`;
+    }
+    const title = first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    return `<div class="dp-month"><div class="dp-title">${esc(title)}</div><div class="dp-grid">${['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((x) => `<span class="dp-dow">${x}</span>`).join('')}${cells}</div></div>`;
+  }
+  function renderPicker() {
+    const dp = state.dp; if (!dp) return;
+    $('dp-presets').innerHTML = PRESETS.map(([k, l]) => `<button data-preset="${k}" aria-pressed="${dp.key === k}">${l}</button>`).join('')
+      + `<button data-preset="custom" aria-pressed="${dp.key === 'custom'}">Custom range</button>`;
+    const next = new Date(dp.view.getFullYear(), dp.view.getMonth() + 1, 1);
+    const atEnd = next.getFullYear() === new Date().getFullYear() && next.getMonth() === new Date().getMonth();
+    $('dp-cal').innerHTML = `<button class="dp-nav prev" data-dpnav="-1" aria-label="Previous month"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <button class="dp-nav next" data-dpnav="1" aria-label="Next month" ${atEnd ? 'disabled' : ''}><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+      ${monthHtml(dp.view)}${monthHtml(next)}`;
+    if (document.activeElement !== $('dp-from')) $('dp-from').value = dp.from ? ymd(dp.from) : '';
+    if (document.activeElement !== $('dp-to')) $('dp-to').value = dp.to ? ymd(dp.to) : '';
+    $('dp-from').max = $('dp-to').max = ymd(new Date());
+    $('dp-hint').textContent = dp.key === 'all' ? 'All parcels since you started' : dp.from && !dp.to ? 'Now pick the end date' : '';
+    $('dp-apply').disabled = Boolean(dp.key !== 'all' && !(dp.from && dp.to));
+  }
+  function pickDay(day) {
+    const dp = state.dp;
+    if (dp.picking === 'start' || !dp.from) { Object.assign(dp, { key: 'custom', from: day, to: null, picking: 'end' }); }
+    else {
+      if (day < dp.from) [dp.from, day] = [day, dp.from];
+      Object.assign(dp, { key: 'custom', to: day, picking: 'start' });
+    }
+    renderPicker();
+  }
+  function applyPicker() {
+    const dp = state.dp;
+    state.range = dp.key === 'custom' ? { key: 'custom', from: dp.from, to: dp.to || dp.from } : { key: dp.key };
+    // A custom range that equals a preset is shown with the preset's name.
+    if (dp.key === 'custom') {
+      const same = PRESETS.find(([k]) => { const [a, b] = rangeDates({ key: k }); return a && +a === +state.range.from && +b === +state.range.to; });
+      if (same) state.range = { key: same[0] };
+    }
+    closePicker();
+    $('dp-label').textContent = rangeLabel(state.range);
+    state.stats = null; renderOverview(); loadStats();
+  }
+  // Fraud check over the orders on the dashboard that fall in the chosen dates.
+  function fraudSummary() {
+    const [a, b] = rangeDates(state.range);
+    const end = b ? addDays(b, 1) : null;
+    const list = state.orders.filter((o) => !o.cancelled && o.fraud && (!a || (new Date(o.createdAt) >= a && new Date(o.createdAt) < end)));
+    const c = { high: 0, medium: 0, low: 0, safe: 0, pending: 0 };
+    list.forEach((o) => { c[o.fraud.level] = (c[o.fraud.level] || 0) + 1; });
+    return { total: list.length, ...c };
+  }
   function renderOverview() {
-    $$('#range-seg button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.range === state.range)));
     const st = state.stats;
     if (!st) { $('ov-kpis').innerHTML = '<div class="card kpi skeleton"></div>'.repeat(6); return; }
     const sr = st.successRate;
     const srCol = sr == null ? '#9ca3af' : sr >= 85 ? '#22c55e' : sr >= 65 ? '#f59e0b' : '#ef4444';
-    $('ov-sub').textContent = `Parcels sent through ShipBridge ${RANGE_TXT[st.range]}`;
+    $('ov-sub').textContent = `Parcels sent through ShipBridge ${rangeText(state.range)}`;
+    $('dp-label').textContent = rangeLabel(state.range);
+    const fr = fraudSummary();
     const kpi = (cls, icon, label, value, foot) => `<div class="card kpi k-${cls}"><div class="kpi-top"><span class="k-icon"><svg viewBox="0 0 24 24" aria-hidden="true">${icon}</svg></span><span class="k-label">${label}</span></div><b class="k-value">${value}</b>${foot}</div>`;
     const way = st.onTheWay || 0;
     $('ov-kpis').innerHTML = [
@@ -284,8 +396,11 @@
       `<div class="card kpi k-rate"><div class="kpi-top"><span class="k-label">Success rate</span></div>
         <div class="rate"><span class="rate-ring" style="background:conic-gradient(${srCol} 0 ${sr || 0}%, #eceef2 ${sr || 0}% 100%)"><b>${sr == null ? '—' : sr + '%'}</b></span>
         <span class="k-foot">${sr == null ? 'Shows once parcels finish' : `${st.delivered} of ${st.delivered + st.problems} finished parcels delivered`}</span></div></div>`,
-      kpi('cash', '<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M7 9v.01M17 15v.01"/>', 'Cash with riders', taka(st.codOnTheWay),
-        `<span class="k-foot">COD on parcels not delivered yet · fees ${taka(st.fees)}</span>`),
+      `<button class="card kpi k-fraud" data-fraudcard title="Show high-risk orders">
+        <div class="kpi-top"><span class="k-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M12 8v4M12 15h.01"/></svg></span><span class="k-label">Fraud check</span></div>
+        <b class="k-value">${fr.high}<small> high-risk</small></b>
+        <span class="k-split">${fr.total ? `<i style="flex:${fr.high}" class="f-high"></i><i style="flex:${fr.medium}" class="f-med"></i><i style="flex:${fr.low + fr.pending}" class="f-low"></i><i style="flex:${fr.safe}" class="f-safe"></i>` : '<i style="flex:1" class="s0"></i>'}</span>
+        <span class="k-foot">${fr.total ? `${fr.medium} medium · ${fr.low + fr.pending} low · ${fr.safe} safe · ${fr.total} order${fr.total === 1 ? '' : 's'}` : 'No orders in these dates'}</span></button>`,
     ].join('');
   }
 
@@ -308,7 +423,8 @@
   function visible() {
     const q = state.search.trim().toLowerCase();
     // "All" = every order except Hold, newest first (sorted on load); Hold has its own tab.
-    return state.orders.filter((o) => (state.stage ? bucketOf(o) === state.stage : bucketOf(o) !== 'hold')
+    // A risk filter (e.g. from the Fraud check card) looks across every tab, Hold included.
+    return state.orders.filter((o) => (state.stage ? bucketOf(o) === state.stage : (bucketOf(o) !== 'hold' || state.risk !== 'any'))
       && (state.risk === 'any' || levelOf(o) === state.risk)
       && (!q || `${o.name} ${o.customer} ${o.phone} ${o.city} ${o.shipment ? o.shipment.consignmentId : ''}`.toLowerCase().includes(q)));
   }
@@ -512,6 +628,7 @@
       const r = await (pending || api(fresh ? '/orders?fresh=1' : '/orders'));
       state.draftsError = r.draftsError || null;
       state.orders = r.orders.concat(r.drafts || []).sort((x, y) => new Date(y.createdAt) - new Date(x.createdAt));
+      if (state.stats) renderOverview();
       state.loaded = true;
       await statsP;
       const ok = new Set(state.orders.filter(canSend).map((o) => o.id));
@@ -883,8 +1000,22 @@
     if (t.closest('#reload-stores')) { const b = t.closest('button'); try { await busy(b, async () => { await loadStores(S().pathao_store_id); renderAll(); toast('Stores reloaded'); }); } catch (e) { toast(e.message, true); } return; }
 
     // billing
-    const rg = t.closest('[data-range]');
-    if (rg) { state.range = rg.dataset.range; renderOverview(); loadStats(); return; }
+    if (t.closest('#dp-btn')) { if (state.dp) closePicker(); else openPicker(); return; }
+    if (state.dp) {
+      const pr = t.closest('[data-preset]');
+      if (pr) { if (pr.dataset.preset === 'custom') { Object.assign(state.dp, { key: 'custom', picking: 'start' }); renderPicker(); } else setDraft(pr.dataset.preset); return; }
+      const nav = t.closest('[data-dpnav]');
+      if (nav && !nav.disabled) { const v = state.dp.view; state.dp.view = new Date(v.getFullYear(), v.getMonth() + Number(nav.dataset.dpnav), 1); renderPicker(); return; }
+      const dayBtn = t.closest('[data-day]');
+      if (dayBtn && !dayBtn.disabled) { pickDay(fromYmd(dayBtn.dataset.day)); return; }
+      if (t.closest('#dp-apply')) { applyPicker(); return; }
+      if (t.closest('#dp-cancel') || !t.closest('#dp-pop')) { closePicker(); if (t.closest('#dp-cancel')) return; }
+      else return;
+    }
+    if (t.closest('[data-fraudcard]')) {
+      state.risk = 'high'; state.stage = null; renderOrders();
+      document.querySelector('.list').scrollIntoView({ behavior: 'smooth', block: 'start' }); return;
+    }
     const per = t.closest('[data-period]');
     if (per) { state.period = per.dataset.period; renderBilling(); return; }
 
@@ -947,7 +1078,16 @@
   }));
   $('search').addEventListener('input', (e) => { state.search = e.target.value; renderRows(); });
   window.addEventListener('resize', closeMenu);
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMenu(); closeDetail(); } });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (state.dp) { closePicker(); return; } closeMenu(); closeDetail(); } });
+  // Typing a date in the Start / End boxes.
+  ['dp-from', 'dp-to'].forEach((id) => $(id).addEventListener('change', () => {
+    if (!state.dp) return;
+    const d = fromYmd($(id).value); if (!d) return;
+    const dp = state.dp; dp.key = 'custom';
+    if (id === 'dp-from') { dp.from = d; if (dp.to && dp.to < d) dp.to = d; } else { dp.to = d; if (!dp.from || dp.from > d) dp.from = d; }
+    dp.picking = 'start'; dp.view = new Date(d.getFullYear(), d.getMonth() - (id === 'dp-to' ? 1 : 0), 1);
+    renderPicker();
+  }));
   // Webhook updates land in the database instantly; pull them into the screen every 30s.
   setInterval(() => {
     if (document.visibilityState === 'visible' && state.page === 'orders' && state.loaded && !state.selected.size && $('courier-menu').hidden) loadOrders();

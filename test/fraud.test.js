@@ -75,3 +75,14 @@ test('dashboard overview counts every shipment by delivery stage, COD and succes
   assert.equal(summarise(rows, { range: 'all', now }).delivered, 3);
   assert.equal(summarise(rows, { range: 'today', now }).sent, 4);
 });
+
+test('stats: custom from/to range (to is exclusive) overrides the preset', () => {
+  const { summarise } = require('../src/stats');
+  const row = (day, status = 'sent', ps = 'Delivered') => ({ created_at: new Date(Date.UTC(2026, 10, day, 6)).toISOString(), status, pathao_status: ps, amount_to_collect: 100 });
+  const rows = [row(1), row(2), row(3, 'sent', 'Pending'), row(5)];
+  const m = summarise(rows, { range: 'month', from: new Date(Date.UTC(2026, 10, 2)), to: new Date(Date.UTC(2026, 10, 4)) });
+  assert.equal(m.range, 'custom');
+  assert.equal(m.sent, 2);
+  assert.equal(m.delivered, 1);
+  assert.equal(summarise(rows, { from: new Date(Date.UTC(2026, 10, 3)) }).sent, 2);
+});
