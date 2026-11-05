@@ -73,6 +73,7 @@ function createApp({ config, pool, fetchImpl: rawFetch = fetch, log = console, d
     maxAge: '1h',
     setHeaders: (res, file) => {
       if (/app\.(js|css)$/.test(file)) res.set('Cache-Control', 'public, max-age=31536000, immutable');
+      else if (/[\\/]fonts[\\/].*\.woff2$/.test(file)) res.set('Cache-Control', 'public, max-age=31536000, immutable'); // self-hosted Inter
       // Courier logos: the dashboard asks for them as ?v=<fingerprint of all logos>, so a new logo gets
       // a new address and they can be kept for a year. Without ?v= browsers re-check every visit.
       else if (/[\\/]couriers[\\/]/.test(file)) res.set('Cache-Control', res.req && res.req.query && res.req.query.v ? 'public, max-age=31536000, immutable' : 'no-cache');
@@ -125,8 +126,13 @@ function createApp({ config, pool, fetchImpl: rawFetch = fetch, log = console, d
   app.use((req, res) => res.status(404).json({ error: 'Not found' }));
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
-    log.error('Unhandled error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    // Bad JSON bodies: the parser's message quotes the body, so log only the type.
+    if (err && (err.type === 'entity.parse.failed' || err.type === 'entity.too.large')) {
+      log.warn(`Rejected request body (${err.type}) on ${req.method} ${req.path}`);
+      return res.status(err.status || 400).json({ error: 'The request could not be read. Try again.' });
+    }
+    log.error(`Unhandled error on ${req.method} ${req.path}:`, err); // redacted: secrets + personal data
+    return res.status(500).json({ error: 'Internal server error' });
   });
 
   return { app, db, tracker, bus };

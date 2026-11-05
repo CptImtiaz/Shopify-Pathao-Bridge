@@ -216,6 +216,13 @@ test('uninstall wipes tokens and Pathao secrets; shop/redact deletes everything;
 
   assert.equal(await a.webhook('/webhooks/compliance', { customer: { id: 1 }, orders_requested: [56] }, 'customers/data_request'), 200);
 
+  // customers/redact also removes rows found only by the customer's phone (fraud history).
+  await a.db.pool.query(`INSERT INTO shipments (shop, shopify_order_id, status, phone) VALUES ($1, '57', 'sent', '01712345678')`, [SHOP]);
+  await a.webhook('/webhooks/compliance', { customer: { id: 2, phone: '+8801712345678' }, orders_to_redact: [] }, 'customers/redact');
+  await a.settle();
+  assert.equal(await a.db.getShipment(SHOP, 57), null);
+  assert.ok(await a.db.getShipment(SHOP, 56));
+
   await a.webhook('/webhooks/app/uninstalled', { id: 1 }, 'app/uninstalled');
   await a.settle();
   const shop = await a.db.getShop(SHOP);
@@ -510,7 +517,8 @@ test('order list: page info, older pages and store-wide search go to Shopify', a
   assert.equal(first.status, 200);
   assert.deepEqual(Object.keys(first.data.pageInfo).sort(), ['endCursor', 'hasNextPage']);
   await a.api('/orders?after=abc123');
-  await a.api('/orders?q=Rahim');
+  await a.api('/orders/search', { method: 'POST', body: { q: 'Rahim' } });
+  assert.equal((await a.api('/orders/search', { method: 'POST', body: { q: ' ' } })).status, 400);
   const bodies = a.fake.calls.filter((c) => c.url.includes('/graphql.json') && c.body && c.body.includes('RecentOrders')).map((c) => JSON.parse(c.body).variables);
   assert.ok(bodies.some((v) => v.after === 'abc123'));
   assert.ok(bodies.some((v) => v.query === 'Rahim'));
@@ -573,4 +581,32 @@ test('versioned courier logos are cached for a year; unversioned ones are re-che
   assert.match(v.headers.get('cache-control'), /max-age=31536000, immutable/);
   const plain = await fetch(`${a.base}/assets/couriers/pathao-mark.png`);
   assert.equal(plain.headers.get('cache-control'), 'no-cache');
+});
+
+test('merchant can delete stored customer data (needs DELETE); settings stay', async (t) => {
+  const a = await connected(t);
+  await a.db.pool.query(`INSERT INTO shipments (shop, shopify_order_id, status, phone) VALUES ($1, '70', 'sent', '01712345678')`, [SHOP]);
+  await a.db.setNote(SHOP, '70', 'call before 5pm');
+  assert.equal((await a.api('/data/delete', { method: 'POST', body: {} })).status, 400);
+  const r = await a.api('/data/delete', { method: 'POST', body: { confirm: 'DELETE' } });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.removed, 2);
+  assert.equal(await a.db.getShipment(SHOP, 70), null);
+  assert.ok((await a.db.getSettings(SHOP)).pathao_client_id);
+});
+
+test('self-hosted font: served from the app and cached; no Google Fonts in the page', async (t) => {
+  const a = await connected(t);
+  const f = await fetch(a.base + '/assets/fonts/inter-latin-400.woff2');
+  assert.equal(f.status, 200);
+  assert.match(f.headers.get('cache-control'), /immutable/);
+  const html = await (await fetch(a.base + '/app?shop=' + SHOP)).text();
+  assert.doesNotMatch(html, /fonts\.googleapis|fonts\.gstatic/);
+});
+
+test('bad JSON body: 400 and the body is not written to the log', async (t) => {
+  const a = await connected(t);
+  const res = await fetch(a.base + '/webhooks/steadfast/' + SHOP, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"phone":"01712345678",' });
+  assert.ok(res.status >= 400 && res.status < 500);
+  assert.ok(a.logs.every((l) => !String(l).includes('01712345678')), a.logs.join('\n'));
 });

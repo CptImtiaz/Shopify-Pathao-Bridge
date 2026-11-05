@@ -670,7 +670,7 @@
     const seq = ++searchSeq;
     searchTimer = setTimeout(async () => {
       try {
-        const r = await api(`/orders?q=${encodeURIComponent(q.trim())}`);
+        const r = await api('/orders/search', { method: 'POST', body: { q: q.trim() } });
         if (seq !== searchSeq) return;
         const known = new Set(state.orders.map((o) => o.id));
         const extra = r.orders.filter((o) => !known.has(o.id));
@@ -833,7 +833,7 @@
       el.querySelector('.step-act').textContent = isOpen ? 'Close' : x.done ? (x.key === 'sf-webhook' ? 'View' : 'Edit') : 'Set up';
       el.querySelector('.step-row').setAttribute('aria-expanded', String(isOpen));
     });
-    document.querySelector('[data-step="sf-account"] [data-summary]').textContent = sfConnected() ? `API key ${String(sf.api_key).slice(0, 6)}… · connected`
+    document.querySelector('[data-step="sf-account"] [data-summary]').textContent = sfConnected() ? `API key ${sf.api_key_hint || ''} · connected`
       : sfRejected() ? 'Steadfast refused the connection, see below' : 'API key and secret key';
     $('sf-auth-error').innerHTML = sfRejected() ? `<b>Steadfast bookings are paused.</b> ${esc(sf.auth_error)}. ShipBridge stopped calling Steadfast so your key doesn't get locked out. When it's fixed, click Save &amp; connect.` : '';
     show($('sf-auth-error'), sfRejected());
@@ -1144,6 +1144,13 @@
       savePrefs(id === 'default_weight' ? { default_weight: w } : { default_note: $(id).value }, true);
     }, 700);
   }));
+  $('delete-data').addEventListener('click', async () => {
+    const typed = prompt('This deletes every parcel record, order note and SMS log ShipBridge keeps for this store. Couriers and settings stay. It can\'t be undone.\n\nType DELETE to confirm.');
+    if (typed === null) return;
+    if (typed.trim() !== 'DELETE') { toast('Nothing deleted. Type DELETE to confirm.', true); return; }
+    try { const r = await api('/data/delete', { method: 'POST', body: { confirm: 'DELETE' } }); toast(`Deleted ${r.removed} stored record${r.removed === 1 ? '' : 's'}`); }
+    catch (e) { toast(e.message, true); }
+  });
   $('search').addEventListener('input', (e) => { state.search = e.target.value; renderRows(); searchStore(e.target.value); });
   window.addEventListener('resize', closeMenu);
   // ---------------- live updates ----------------

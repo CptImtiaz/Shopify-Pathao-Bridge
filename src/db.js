@@ -433,11 +433,34 @@ function makeDb(pool) {
       return (await q('SELECT * FROM sms_log WHERE shop = $1 AND shopify_order_id = ANY($2)', [shop, orderIds.map(String)])).rows;
     },
 
-    async redactOrders(shop, orderIds) {
-      if (!orderIds.length) return;
-      await q('DELETE FROM shipments WHERE shop = $1 AND shopify_order_id = ANY($2)', [shop, orderIds.map(String)]);
-      await q('DELETE FROM sms_log WHERE shop = $1 AND shopify_order_id = ANY($2)', [shop, orderIds.map(String)]);
-      await q('DELETE FROM order_notes WHERE shop = $1 AND shopify_order_id = ANY($2)', [shop, orderIds.map(String)]);
+    // GDPR customers/redact: the customer's orders, plus any parcel / SMS row with their phone
+    // (fraud history is kept by phone, so order IDs alone could miss rows).
+    async redactOrders(shop, orderIds, phones = []) {
+      const ids = (orderIds || []).map(String);
+      if (ids.length) {
+        await q('DELETE FROM shipments WHERE shop = $1 AND shopify_order_id = ANY($2)', [shop, ids]);
+        await q('DELETE FROM sms_log WHERE shop = $1 AND shopify_order_id = ANY($2)', [shop, ids]);
+        await q('DELETE FROM order_notes WHERE shop = $1 AND shopify_order_id = ANY($2)', [shop, ids]);
+      }
+      if (phones.length) {
+        await q('DELETE FROM shipments WHERE shop = $1 AND phone = ANY($2)', [shop, phones]);
+        await q('DELETE FROM sms_log WHERE shop = $1 AND phone = ANY($2)', [shop, phones]);
+      }
+    },
+    async customerRecordCount(shop, orderIds, phones = []) {
+      const ids = (orderIds || []).map(String);
+      const n = async (sql, args) => Number((await one(sql, args)).n);
+      return (await n('SELECT COUNT(*) AS n FROM shipments WHERE shop = $1 AND (shopify_order_id = ANY($2) OR phone = ANY($3))', [shop, ids, phones]))
+        + (await n('SELECT COUNT(*) AS n FROM order_notes WHERE shop = $1 AND shopify_order_id = ANY($2)', [shop, ids]))
+        + (await n('SELECT COUNT(*) AS n FROM sms_log WHERE shop = $1 AND (shopify_order_id = ANY($2) OR phone = ANY($3))', [shop, ids, phones]));
+    },
+    // Merchant "Delete customer data": every row that holds customer details. Settings stay.
+    async deleteCustomerData(shop) {
+      let removed = 0;
+      for (const t of ['shipments', 'sms_log', 'order_notes', 'support_tickets']) {
+        removed += (await q(`DELETE FROM ${t} WHERE shop = $1`, [shop])).rowCount || 0;
+      }
+      return removed;
     },
 
     // ---------- order notes ----------

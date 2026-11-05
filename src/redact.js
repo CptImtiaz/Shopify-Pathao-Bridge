@@ -11,6 +11,16 @@ const PATTERNS = [
   [/\bshp(?:at|ss|ca|pa|ua)_[A-Za-z0-9]+/g, '[redacted]'],
 ];
 
+// Personal data that must never reach the logs (the merchant still sees it in the dashboard).
+const PII_PATTERNS = [
+  [/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '[REDACTED email]'],
+  // Bangladeshi mobiles in any common spelling (+880 / 880 / 0 prefix, spaces or dashes).
+  [/(?:\+?88[\s-]?)?0?1[3-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}\b/g, '[REDACTED phone]'],
+  // Any quoted value after the word "Phone" (invalid numbers are personal data too).
+  [/(phone\s*"?)[^"\s]*"/gi, '$1[REDACTED]"'],
+];
+const redactPII = (text) => PII_PATTERNS.reduce((s, [re, to]) => s.replace(re, to), String(text));
+
 function makeRedactor(secrets = []) {
   const exact = [...new Set(secrets.filter((v) => v && String(v).length >= 6).map(String))]
     .sort((a, b) => b.length - a.length);
@@ -25,10 +35,11 @@ function makeRedactor(secrets = []) {
 // The app's own secrets, read from config (which reads them from environment variables).
 const secretsOf = (config) => [config.shopifyApiSecret, config.encryptionKey, config.adminPassword, config.databaseUrl, config.pathaoIntegrationSecret];
 
-// A logger with the same methods whose every argument is redacted first.
+// A logger with the same methods whose every argument is redacted first: secrets and personal data.
 function redactingLog(log, redact) {
-  const wrap = (fn) => (...args) => fn.apply(log, args.map((a) => redact(a instanceof Error ? a.stack || a.message : a)));
+  const clean = (a) => redactPII(redact(a instanceof Error ? a.stack || a.message : a));
+  const wrap = (fn) => (...args) => fn.apply(log, args.map(clean));
   return { info: wrap(log.info || log.log), warn: wrap(log.warn || log.log), error: wrap(log.error || log.log), log: wrap(log.log || log.info) };
 }
 
-module.exports = { makeRedactor, secretsOf, redactingLog };
+module.exports = { makeRedactor, secretsOf, redactingLog, redactPII };

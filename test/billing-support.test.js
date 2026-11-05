@@ -38,19 +38,19 @@ test('billing page data: plans, usage, history; yearly subscriptions use the yea
   assert.equal(b2.usage.limit, 300);
 });
 
-test('support tickets: validated, stored per shop, listed on the owner page', async (t) => {
+test('support: the app collects no emails or messages; owner page shows no customer phones', async (t) => {
   const a = await startApp({ adminPassword: 'pw-123456' });
   t.after(() => a.close());
-  assert.equal((await a.api('/support', { method: 'POST', body: { email: 'nope', message: 'Help me please' } })).status, 400);
-  assert.equal((await a.api('/support', { method: 'POST', body: { email: 'me@shop.com', message: 'short' } })).status, 400);
-  const ok = await a.api('/support', { method: 'POST', body: { email: 'me@shop.com', topic: 'delivery', message: 'Order #1001 shows returned but customer got it', order_name: '#1001' } });
-  assert.equal(ok.status, 200);
-  const list = (await a.api('/support')).data.tickets;
-  assert.equal(list.length, 1);
-  assert.equal(list[0].topic, 'delivery');
+  assert.equal((await a.api('/support', { method: 'POST', body: { email: 'me@shop.com', message: 'Order #1001 shows returned' } })).status, 404);
+  const s = await a.api('/support');
+  assert.equal(s.status, 200);
+  assert.equal(s.data.tickets, undefined);
+  assert.ok('contact' in s.data);
+  await a.api('/bootstrap');
+  await a.db.pool.query(`INSERT INTO shipments (shop, shopify_order_id, order_name, status, error) VALUES ('test-shop.myshopify.com', '9', '#9', 'failed', 'Phone "01712345678" is not valid')`);
   const html = await (await fetch(a.base + '/admin', { headers: { Authorization: 'Basic ' + Buffer.from('x:pw-123456').toString('base64') } })).text();
-  assert.match(html, /me@shop\.com/);
-  assert.match(html, /customer got it/);
+  assert.doesNotMatch(html, /01712345678/);
+  assert.match(html, /REDACTED/);
 });
 
 test('hold high-risk orders: a customer with repeated returns is held, not auto-sent', async (t) => {

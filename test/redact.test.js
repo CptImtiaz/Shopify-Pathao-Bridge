@@ -18,3 +18,12 @@ test('redacting logger blanks secrets in every argument', () => {
   log.info('password is', 'hunter2-secret');
   assert.equal(lines[0], 'password is [redacted]');
 });
+
+test('logs never carry customer phones or emails', () => {
+  const { redactingLog, redactPII } = require('../src/redact');
+  const out = [];
+  const log = redactingLog({ info: (...a) => out.push(a.join(' ')), warn() {}, error() {} }, (x) => String(x));
+  log.info('#1006 failed: Phone "555" isn\'t valid; call +880 1712-345678 or 01912345678, mail rahim@example.com');
+  assert.doesNotMatch(out[0], /555|1712|01912345678|rahim@/);
+  assert.equal(redactPII('cid=316866324 order #1010'), 'cid=316866324 order #1010');
+});

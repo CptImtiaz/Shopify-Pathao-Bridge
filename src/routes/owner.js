@@ -1,6 +1,7 @@
 // App-owner admin page: /admin. Protected by HTTP Basic auth with ADMIN_PASSWORD
 // (any username). Shows installed shops, plans and usage — no customer data.
 // Disabled (404) when ADMIN_PASSWORD is not set.
+const { redactPII } = require('../redact');
 
 const crypto = require('crypto');
 const express = require('express');
@@ -29,7 +30,7 @@ function makeOwnerRouter({ config, db }) {
 
   router.get('/', async (req, res, next) => {
     try {
-      const [shops, failures, tickets, recent] = await Promise.all([db.ownerOverview(), db.recentFailures(25), db.allTickets(50), db.recentShipments(40)]);
+      const [shops, failures, recent] = await Promise.all([db.ownerOverview(), db.recentFailures(25), db.recentShipments(40)]);
       const active = shops.filter((s) => !s.uninstalled_at);
       const paid = active.filter((s) => s.plan !== 'free');
       const mrr = paid.reduce((t, s) => t + ((PLANS[s.plan] && PLANS[s.plan].price) || 0), 0);
@@ -62,13 +63,10 @@ ${shops.map((s) => `<tr><td><a href="https://${esc(s.shop)}" target="_blank" rel
 </table></div>
 <div class="card"><h2>Recent bookings</h2><table><tr><th>Updated</th><th>Shop</th><th>Order</th><th>Courier</th><th>Result</th><th>Courier status</th><th>Parcel</th><th>Error</th></tr>
 ${recent.map((r) => `<tr><td>${esc(new Date(r.updated_at).toISOString().slice(0, 16).replace('T', ' '))}</td><td>${esc(r.shop)}</td><td>${esc(r.order_name)}</td><td>${esc(r.courier || 'pathao')}</td>
-<td><span class="b ${r.status === 'sent' ? 'g' : r.status === 'failed' ? 'r' : r.status === 'skipped' ? 'y' : ''}">${esc(r.status)}</span></td><td>${esc(r.pathao_status || '—')}</td><td>${esc(r.consignment_id || '—')}</td><td class="err">${esc(r.error || '')}</td></tr>`).join('') || '<tr><td colspan="8">None yet</td></tr>'}
-</table></div>
-<div class="card"><h2>Support requests</h2><table><tr><th>When</th><th>Shop</th><th>Topic</th><th>Reply to</th><th>Order</th><th>Message</th></tr>
-${tickets.map((t) => `<tr><td>${esc(new Date(t.created_at).toISOString().slice(0, 16).replace('T', ' '))}</td><td>${esc(t.shop)}</td><td><span class="b">${esc(t.topic)}</span></td><td><a href="mailto:${esc(t.email)}">${esc(t.email)}</a></td><td>${esc(t.order_name || '—')}</td><td class="err" style="color:#15171a">${esc(t.message)}</td></tr>`).join('') || '<tr><td colspan="6">None yet</td></tr>'}
+<td><span class="b ${r.status === 'sent' ? 'g' : r.status === 'failed' ? 'r' : r.status === 'skipped' ? 'y' : ''}">${esc(r.status)}</span></td><td>${esc(r.pathao_status || '—')}</td><td>${esc(r.consignment_id || '—')}</td><td class="err">${esc(redactPII(r.error || ''))}</td></tr>`).join('') || '<tr><td colspan="8">None yet</td></tr>'}
 </table></div>
 <div class="card"><h2>Recent failed bookings</h2><table><tr><th>When</th><th>Shop</th><th>Order</th><th>Error</th></tr>
-${failures.map((f) => `<tr><td>${esc(new Date(f.updated_at).toISOString().slice(0, 16).replace('T', ' '))}</td><td>${esc(f.shop)}</td><td>${esc(f.order_name)}</td><td class="err">${esc(f.error)}</td></tr>`).join('') || '<tr><td colspan="4">None</td></tr>'}
+${failures.map((f) => `<tr><td>${esc(new Date(f.updated_at).toISOString().slice(0, 16).replace('T', ' '))}</td><td>${esc(f.shop)}</td><td>${esc(f.order_name)}</td><td class="err">${esc(redactPII(f.error || ''))}</td></tr>`).join('') || '<tr><td colspan="4">None</td></tr>'}
 </table></div></div></body></html>`);
     } catch (e) { next(e); }
   });

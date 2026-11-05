@@ -389,12 +389,16 @@ function makeApiRouter({ redact = (t) => String(t), config, db, tokens, admin, p
     return summarise(await db.shipmentsForStats(req.shop), { range, from, to });
   }));
 
-  router.get('/orders', wrap(async (req) => {
+  // Orders list. GET = first page / older pages. Search is POST /orders/search so customer names
+  // and phone numbers travel in the body and never land in URL access logs.
+  const listOrders = (from) => wrap(async (req) => {
     // Dashboard open: check parcels on the way in the background (at most once a minute).
-    if (tracker && config.pollStatuses !== false) tracker.refreshSoon(req.shop);
+    if (from === 'get' && tracker && config.pollStatuses !== false) tracker.refreshSoon(req.shop);
     // First page is cached (live updates redraw often); older pages and searches are not.
     const after = req.query.after ? String(req.query.after).slice(0, 500) : null;
-    const q = req.query.q ? String(req.query.q).trim().slice(0, 100) : null;
+    const raw = from === 'search' ? (req.body || {}).q : null;
+    const q = raw ? String(raw).trim().slice(0, 100) || null : null;
+    if (from === 'search' && !q) throw Object.assign(new Error('Type something to search'), { status: 400 });
     const page = after || q
       ? await admin.listOrdersPage(req.shop, req.opts, { first: 50, after, query: q, rich: true })
       : await admin.listRecentOrdersCached(req.shop, req.opts, 50, { rich: true, fresh: req.query.fresh === '1' });
@@ -451,7 +455,9 @@ function makeApiRouter({ redact = (t) => String(t), config, db, tokens, admin, p
         };
       }),
     };
-  }));
+  });
+  router.get('/orders', listOrders('get'));
+  router.post('/orders/search', listOrders('search'));
 
   router.post('/orders/send', wrap(async (req) => {
     const ids = [...new Set((req.body?.ids || []).map(String))].filter((id) => /^\d+$/.test(id)).slice(0, 50);
@@ -541,21 +547,19 @@ function makeApiRouter({ redact = (t) => String(t), config, db, tokens, admin, p
   }));
 
   // ---- support ----
-  const TOPICS = ['setup', 'orders', 'delivery', 'billing', 'other'];
-  router.get('/support', wrap(async (req) => ({
-    tickets: (await db.listTickets(req.shop)).map((t) => ({ id: t.id, topic: t.topic, message: t.message, orderName: t.order_name, status: t.status, createdAt: t.created_at })),
+  // Support happens on WhatsApp / email; the app no longer collects support messages or emails.
+  router.get('/support', wrap(async () => ({
     contact: { email: config.supportEmail || null, whatsapp: config.supportWhatsapp || null },
   })));
-  router.post('/support', wrap(async (req) => {
-    const b = req.body || {};
-    const email = String(b.email || '').trim();
-    const message = String(b.message || '').trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 200) throw Object.assign(new Error('Enter a valid email so we can reply'), { status: 400 });
-    if (message.length < 10) throw Object.assign(new Error('Tell us a little more (at least 10 characters)'), { status: 400 });
-    const topic = TOPICS.includes(b.topic) ? b.topic : 'other';
-    const t = await db.createTicket(req.shop, { email, topic, message: message.slice(0, 4000), orderName: b.order_name ? String(b.order_name).slice(0, 40) : null });
-    log.info(`[${req.shop}] support ticket #${t.id} (${topic})`);
-    return { id: t.id };
+
+  // Merchant deletes everything ShipBridge keeps about their customers (order data, notes, SMS log).
+  // Courier connections and settings stay so the app keeps working; uninstalling removes the rest.
+  router.post('/data/delete', wrap(async (req) => {
+    if ((req.body || {}).confirm !== 'DELETE') throw Object.assign(new Error('Type DELETE to confirm'), { status: 400 });
+    const removed = await db.deleteCustomerData(req.shop);
+    admin.forgetOrders(req.shop);
+    log.info(`[${req.shop}] merchant deleted stored customer data (${removed} records)`);
+    return { removed };
   }));
 
   router.post('/billing/cancel', wrap(async (req) => {

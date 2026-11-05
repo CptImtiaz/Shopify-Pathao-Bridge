@@ -7,10 +7,8 @@
   <meta name="logo-version" content="%LOGO_VERSION%" />
   <title>ShipBridge</title>
   <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <!-- Font loads without blocking the first paint -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+  <!-- Inter is served from this app (no Google Fonts call, so merchants' IPs aren't shared) -->
+  <link rel="preload" href="/assets/fonts/inter-latin-400.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/assets/app.css" />
 </head>
 <body>
@@ -225,6 +223,9 @@
               <label class="switch-row"><span><b>Email the customer a tracking link</b><small>Shopify sends its shipping confirmation</small></span><input type="checkbox" role="switch" id="notify_customer" /><i aria-hidden="true"></i></label>
               <label class="switch-row"><span><b>Mark paid when delivered</b><small>Cash on delivery orders turn Paid when the courier confirms delivery</small></span><input type="checkbox" role="switch" id="mark_paid_on_delivery" /><i aria-hidden="true"></i></label>
               <label class="switch-row"><span><b>Unfulfill returned parcels</b><small>A returned or cancelled parcel puts the order back to Unfulfilled</small></span><input type="checkbox" role="switch" id="undo_on_return" /><i aria-hidden="true"></i></label>
+          <div class="rules-sub">Customer data</div>
+          <div class="pref data-del"><span class="hint">ShipBridge keeps parcel records (order number, customer phone, courier status), your order notes and the SMS log. Your orders in Shopify are not touched.</span>
+            <button class="btn sm danger-text" id="delete-data">Delete stored customer data</button></div>
         </aside>
       </div>
     </main>

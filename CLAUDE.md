@@ -191,3 +191,16 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 - Webhook addresses answer GET with a "ready" page for installed shops (merchants open them in a
   browser and read 404 as "broken"). Steadfast only calls on a parcel
   status change; until then the tracker polls it every minute.
+
+## Personal data (audit 2026-11-05)
+- Customer data stored: phone (shipments, sms_log, for fraud history), order IDs/numbers, courier status, merchant notes.
+  Names/addresses/emails are read from Shopify per request and passed only to the chosen courier (never stored).
+- Logs: `redactingLog` also strips BD phone numbers, emails and quoted `Phone "…"` values (src/redact.js `redactPII`);
+  owner page errors go through `redactPII`; bad JSON bodies are logged by type only.
+- Store search is `POST /api/orders/search` (body), never `?q=` in the URL (access logs).
+- Inter is self-hosted in public/assets/fonts (no Google Fonts). No support-ticket collection (`POST /support` removed).
+- customers/redact deletes by order IDs AND the customer's normalized phone; data_request logs a record count.
+- Merchant "Delete stored customer data" (Couriers page, right column) = `POST /api/data/delete {confirm:'DELETE'}`:
+  shipments, sms_log, order_notes, support_tickets; settings and courier connections stay.
+- Pathao password is encrypted (AES-256-GCM), not hashed, because it must be sent to Pathao; the app has no user
+  passwords of its own (Shopify session tokens). Steadfast Api-Key is plaintext in DB (useless without the encrypted secret).

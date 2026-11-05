@@ -127,12 +127,15 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
 
   // Mandatory privacy (GDPR) webhooks. Configured as compliance_topics in shopify.app.toml.
   router.post('/webhooks/compliance', ...shopifyWebhook(async ({ shop, topic, payload }) => {
+    const customer = payload.customer || {};
+    const phones = [customer.phone].filter(Boolean).map(normalizePhone).filter((p) => p.valid).map((p) => p.phone);
     if (topic === 'customers/data_request') {
-      // We store no customer personal data (only order IDs, order names and
-      // Pathao consignment IDs), so there is nothing to export beyond those.
-      log.info(`[${shop}] customers/data_request received for orders ${JSON.stringify(payload.orders_requested || [])}`);
+      // What we hold for this customer: their orders' parcel rows (name, phone, courier status) and
+      // merchant notes. Shopify forwards the request to the merchant, who sees all of it in the app.
+      const held = await db.customerRecordCount(shop, (payload.orders_requested || []).map(String), phones);
+      log.info(`[${shop}] customers/data_request: ${held} stored records for ${(payload.orders_requested || []).length} orders`);
     } else if (topic === 'customers/redact') {
-      await db.redactOrders(shop, (payload.orders_to_redact || []).map(String));
+      await db.redactOrders(shop, (payload.orders_to_redact || []).map(String), phones);
     } else if (topic === 'shop/redact') {
       await db.deleteShopData(shop);
     }
