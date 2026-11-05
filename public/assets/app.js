@@ -699,8 +699,8 @@
     });
     document.querySelector('[data-step="account"] [data-summary]').textContent = s.connected ? `${s.pathao_username} · connected` : 'Client ID, secret, merchant email and password';
     document.querySelector('[data-step="delivery"] [data-summary]').textContent = s.pathao_store_id
-      ? `${s.pathao_store_name || 'Store #' + s.pathao_store_id} · ${String(s.delivery_type) === '12' ? 'Express' : 'Regular'} · ${Number(s.default_weight) || 0.5} kg`
-      : 'Pickup store, delivery type, parcel weight, note for rider';
+      ? `${s.pathao_store_name || 'Store #' + s.pathao_store_id} · ${String(s.delivery_type) === '12' ? 'Express' : 'Regular'} · ${Number(s.default_weight) || 0.5} kg${defKey() === 'pathao' ? ' · default' : ''}`
+      : 'Pickup store, parcel weight, note, delivery type';
     document.querySelector('[data-step="webhook"] [data-summary]').innerHTML = webhookLive() ? '<span class="live" style="margin:0"><i></i>Live</span>' : webhookSaved('pathao') ? 'Saved' : 'Pathao tells ShipBridge the moment a parcel moves';
     const wh = state.boot.pathaoWebhook || {};
     $('wh-state').innerHTML = webhookState(wh, 'Pathao', 'secret key', 'Pathao Merchant Panel');
@@ -728,9 +728,19 @@
     $('auto-hint').textContent = `Sent to ${cname(def)} within seconds`;
     $('auto_send').checked = Boolean(s.auto_send); $('auto_send').disabled = !courierReady(def);
     $('hold_risky').checked = s.hold_risky !== false;
-    $$('#speed-seg button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.speed === String(s.delivery_type))));
+    $$('input[name="pathao-speed"]').forEach((r) => { r.checked = r.value === String(s.delivery_type); });
+    renderDefBoxes();
     if (document.activeElement !== $('default_weight')) setVal('default_weight', s.default_weight);
     if (document.activeElement !== $('default_note')) setVal('default_note', s.default_note);
+  }
+  // "Set <Courier> as default courier": ticked on the default; a courier that isn't connected can't be ticked.
+  // There is always one default, so it is changed by ticking another courier.
+  function renderDefBoxes() {
+    $$('[data-defbox]').forEach((b) => {
+      const k = b.dataset.defbox, isDef = defKey() === k;
+      b.checked = isDef; b.disabled = !isDef && !courierReady(k);
+      b.closest('label').title = isDef ? 'This is your default courier. To change it, tick it on another courier.' : courierReady(k) ? '' : `Connect ${cname(k)} first`;
+    });
   }
   // Steadfast setup page.
   function renderSteadfast() {
@@ -774,11 +784,11 @@
     document.querySelector('[data-step="sf-webhook"] [data-summary]').innerHTML = webhookLive('steadfast') ? '<span class="live" style="margin:0"><i></i>Live</span>' : webhookSaved('steadfast') ? 'Saved' : 'Steadfast tells ShipBridge the moment a parcel moves';
     document.querySelector('[data-step="sf-delivery"] [data-summary]').textContent = [
       sf.delivery_type === 1 ? 'Point delivery' : 'Home delivery',
-      sf.item_desc !== false ? 'product list' : null, sf.total_lot ? 'item count' : null, sf.alt_phone ? '2nd phone' : null,
+      defKey() === 'steadfast' ? 'default' : null,
       S().default_note ? `note: ${S().default_note}` : null,
     ].filter(Boolean).join(' · ');
-    $$('#sf-type-seg button').forEach((b) => b.setAttribute('aria-checked', String(Number(b.dataset.sftype) === (sf.delivery_type || 0))));
-    $('sf_item_desc').checked = sf.item_desc !== false; $('sf_total_lot').checked = Boolean(sf.total_lot); $('sf_alt_phone').checked = Boolean(sf.alt_phone);
+    $$('input[name="sf-type"]').forEach((r) => { r.checked = Number(r.value) === (sf.delivery_type || 0); });
+    renderDefBoxes();
     if (document.activeElement !== $('sf_default_note')) setVal('sf_default_note', S().default_note);
     if (document.activeElement !== $('sf_api_key')) setVal('sf_api_key', sf.api_key);
     $('sf_secret_key').placeholder = sf.has_secret ? '•••••••• saved' : '';
@@ -976,8 +986,6 @@
       state.section = undefined;
       renderCouriers(); return;
     }
-    const sft = t.closest('[data-sftype]');
-    if (sft) { savePrefs({ sf_delivery_type: Number(sft.dataset.sftype) }); return; }
     const dc = t.closest('[data-defc]');
     if (dc && !dc.disabled) { savePrefs({ default_courier: dc.dataset.defc }); return; }
     const cp = t.closest('[data-copy]');
@@ -988,8 +996,6 @@
     }
     const ts = t.closest('[data-toggle-step]');
     if (ts) { const k = ts.dataset.toggleStep; const isOpen = document.querySelector(`.step[data-step="${k}"]`).classList.contains('open'); state.section = isOpen ? null : k; if (!isOpen) fillAccount(); renderCouriers(); return; }
-    const sp = t.closest('[data-speed]');
-    if (sp) { savePrefs({ delivery_type: Number(sp.dataset.speed) }); return; }
     const wn = t.closest('[data-when]');
     if (wn) { savePrefs({ fulfill_when: wn.dataset.when }); return; }
     if (t.closest('#copy-url')) {
@@ -1063,7 +1069,14 @@
       renderRows(); return;
     }
     if (el.id === 'check-all') { visible().filter(canSend).forEach((o) => { if (el.checked) state.selected.add(o.id); else state.selected.delete(o.id); }); renderRows(); return; }
-    if (['auto_send', 'hold_risky', 'sync_fulfillment', 'notify_customer', 'sf_item_desc', 'sf_total_lot', 'sf_alt_phone'].includes(el.id)) { savePrefs({ [el.id]: el.checked }); return; }
+    if (['auto_send', 'hold_risky', 'sync_fulfillment', 'notify_customer'].includes(el.id)) { savePrefs({ [el.id]: el.checked }); return; }
+    if (el.name === 'pathao-speed') { savePrefs({ delivery_type: Number(el.value) }); return; }
+    if (el.name === 'sf-type') { savePrefs({ sf_delivery_type: Number(el.value) }); return; }
+    if (el.dataset && el.dataset.defbox) {
+      if (el.checked) savePrefs({ default_courier: el.dataset.defbox });
+      else { el.checked = true; toast('To change the default, tick it on another courier'); }
+      return;
+    }
     if (el.id === 'dash-auto') { savePrefs({ auto_send: el.checked }); return; }
     if (el.id === 'pathao_store_id' && /^\d+$/.test(el.value)) {
       const name = el.options[el.selectedIndex].textContent.replace(' (inactive)', '');

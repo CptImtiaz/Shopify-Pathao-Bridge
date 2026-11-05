@@ -643,3 +643,11 @@ button.kpi.k-fraud:hover { box-shadow: 0 0 0 2px #fecaca, var(--shadow); }
 .bad-line { display: block; padding: 10px 12px; border-radius: 10px; background: #fdecec; color: #991b1b; font-size: 13px; line-height: 1.45; }
 .bad-line b { color: #7f1d1d; }
 .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; margin-right: 7px; vertical-align: -2px; animation: spin .8s linear infinite; }
+.check-row { display: flex; align-items: center; gap: 10px; font-weight: 550; cursor: pointer; }
+.check-row input { width: 16px; height: 16px; accent-color: var(--ink, #111); margin: 0; }
+.check-row input:disabled + span { color: var(--muted); }
+.radio-list { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.radio-list legend { padding: 0; margin-bottom: 10px; font-weight: 600; }
+.radio-list label { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.radio-list input { width: 16px; height: 16px; margin: 0; accent-color: var(--ink, #111); }
+.step-body textarea { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; }

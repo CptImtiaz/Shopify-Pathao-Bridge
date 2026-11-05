@@ -151,12 +151,12 @@
             <div class="step-body">
               <label class="field"><span>Pickup store · riders collect parcels from</span><select id="pathao_store_id"><option value="">Connect your account first</option></select></label>
               <div class="sec-foot" style="margin-top:8px"><button class="btn" id="reload-stores">Reload stores</button></div>
-              <div class="pref"><b>Delivery type</b>
-                <div class="seg" role="radiogroup" aria-label="Delivery type" id="speed-seg"><button role="radio" data-speed="48">Regular</button><button role="radio" data-speed="12">Express</button></div></div>
-              <div class="grid2">
-                <label class="field"><span>Parcel weight (kg)</span><input id="default_weight" type="number" min="0.5" max="10" step="0.5" /><small class="hint">Used when a product has no weight</small></label>
-                <label class="field"><span>Note for rider</span><input id="default_note" data-note maxlength="200" placeholder="e.g. Call before delivery" /><small class="hint">Used when the order has no note</small></label>
-              </div>
+              <label class="check-row"><input type="checkbox" data-defbox="pathao" /><span>Set Pathao as default courier</span></label>
+              <label class="field"><span>Default parcel weight (kg)</span><input id="default_weight" type="number" min="0.5" max="10" step="0.5" /><small class="hint">Used when a product has no weight in Shopify</small></label>
+              <label class="field"><span>Default parcel note</span><textarea id="default_note" data-note maxlength="200" rows="3" placeholder="e.g. Call before delivery"></textarea><small class="hint">Used when the order has no note</small></label>
+              <fieldset class="radio-list"><legend>Default delivery type</legend>
+                <label><input type="radio" name="pathao-speed" value="48" /> Regular delivery</label>
+                <label><input type="radio" name="pathao-speed" value="12" /> On-demand delivery (Express)</label></fieldset>
               <p class="hint" id="prefs-state-pathao"></p>
             </div>
           </div>
@@ -192,13 +192,11 @@
           <div class="step" data-step="sf-delivery">
             <button class="step-row" data-toggle-step="sf-delivery"><span class="step-dot"></span><span class="step-text"><b>Delivery settings</b><span class="meta" data-summary></span></span><span class="step-act"></span></button>
             <div class="step-body">
-              <div class="pref" style="margin-top:0"><b>Delivery type</b>
-                <div class="seg" role="radiogroup" aria-label="Steadfast delivery type" id="sf-type-seg"><button role="radio" data-sftype="0">Home delivery</button><button role="radio" data-sftype="1">Point delivery</button></div></div>
-              <label class="switch-row"><span><b>Send product list</b><small>Product names and quantities, shown to the rider</small></span><input type="checkbox" role="switch" id="sf_item_desc" /><i aria-hidden="true"></i></label>
-              <label class="switch-row"><span><b>Send number of items</b><small>Total quantity in the parcel</small></span><input type="checkbox" role="switch" id="sf_total_lot" /><i aria-hidden="true"></i></label>
-              <label class="switch-row"><span><b>Send a second phone number</b><small>Billing or account phone, when it differs from the shipping phone</small></span><input type="checkbox" role="switch" id="sf_alt_phone" /><i aria-hidden="true"></i></label>
-              <label class="field"><span>Note for rider</span><input id="sf_default_note" data-note maxlength="200" placeholder="e.g. Call before delivery" /><small class="hint">Used when the order has no note (same note for every courier)</small></label>
-              <p class="hint">Cash to collect is what the customer still owes in Shopify (0 for paid orders).</p>
+              <label class="check-row"><input type="checkbox" data-defbox="steadfast" /><span>Set Steadfast as default courier</span></label>
+              <label class="field"><span>Default parcel note</span><textarea id="sf_default_note" data-note maxlength="200" rows="3" placeholder="e.g. Call before delivery"></textarea><small class="hint">Used when the order has no note</small></label>
+              <fieldset class="radio-list"><legend>Default delivery type</legend>
+                <label><input type="radio" name="sf-type" value="0" /> Home delivery</label>
+                <label><input type="radio" name="sf-type" value="1" /> Point delivery</label></fieldset>
             </div>
           </div>
         </section>

@@ -68,10 +68,13 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 
 ## Couriers page
 - Left: courier list. Main: hero + exactly three steps per courier, same names for every courier:
-  **API configuration**, **Webhook configuration**, **Delivery settings** (Pathao: pickup store,
-  delivery type, parcel weight, note; Steadfast: delivery type Home / Point delivery (`delivery_type` 1 only sent
-  for Point delivery; the API has no Regular/Express or weight field, so those are not offered), product list (`item_description`, on by default), item count (`total_lot`), second phone
-  (`alternative_phone`), note). The note for rider is one shared setting. Webhook status shows just "Live".
+  **API configuration**, **Webhook configuration**, **Delivery settings**. Delivery settings is a short
+  form (owner's request, like other BD courier apps): "Set <Courier> as default courier" checkbox (always one
+  default; changed by ticking another courier), Pathao: pickup store, default parcel weight, default parcel note,
+  default delivery type radios Regular / On-demand (Express); Steadfast: default parcel note, delivery type radios
+  Home / Point delivery (`delivery_type` 1 only sent for Point). Steadfast's API has no Regular/Express or weight
+  field, so those are not offered. Product list (`item_description`), item count (`total_lot`) and a second phone
+  (`alternative_phone`, when it differs) always go to Steadfast; no switches. The note for rider is one shared setting. Webhook status shows just "Live".
 - Webhook configuration: editable secret (Pathao) / auth token (Steadfast) + Save. No self-test
   (removed: ShipBridge can't read the courier's portal, so a self-test proved nothing). "Live" only
   from real courier calls. A courier call with the wrong secret/token is refused (401) AND recorded
