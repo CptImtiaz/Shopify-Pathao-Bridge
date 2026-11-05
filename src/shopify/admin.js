@@ -50,21 +50,32 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
     const key = `${first}:${rich}`;
     const hit = orderCache.get(shop);
     if (!fresh && hit && hit.key === key && Date.now() - hit.at < ORDERS_TTL_MS) return hit.promise;
-    const entry = { key, at: Date.now(), promise: listRecentOrders(shop, opts, first, { rich }) };
+    const entry = { key, at: Date.now(), promise: listOrdersPage(shop, opts, { first, rich }) };
     orderCache.set(shop, entry);
     entry.promise.catch(() => { if (orderCache.get(shop) === entry) orderCache.delete(shop); });
     return entry.promise;
   }
 
   async function listRecentOrders(shop, opts, first = 30, { rich = false } = {}) {
-    const run = async (fields) => (await graphql(
-      shop,
-      `query RecentOrders($first: Int!) {
-        orders(first: $first, sortKey: CREATED_AT, reverse: true) { nodes { ${fields} } }
-      }`,
-      { first },
-      opts
-    )).orders.nodes;
+    return (await listOrdersPage(shop, opts, { first, rich })).nodes;
+  }
+
+  // One page of orders, newest first. `after` = cursor of the previous page,
+  // `query` = Shopify order search (order number, customer name, phone...).
+  async function listOrdersPage(shop, opts, { first = 50, after = null, query = null, rich = false } = {}) {
+    const run = async (fields) => {
+      const d = await graphql(
+        shop,
+        `query RecentOrders($first: Int!, $after: String, $query: String) {
+          orders(first: $first, after: $after, query: $query, sortKey: CREATED_AT, reverse: true) {
+            nodes { ${fields} } pageInfo { hasNextPage endCursor }
+          }
+        }`,
+        { first, after, query },
+        opts
+      );
+      return { nodes: d.orders.nodes, pageInfo: d.orders.pageInfo || { hasNextPage: false, endCursor: null } };
+    };
     if (!rich) return run(ORDER_FIELDS);
     try { return await run(RICH_FIELDS); } catch (e) {
       if (e.status === 401) throw e;
@@ -234,7 +245,7 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
     if (errs.length) throw new Error(errs.map((e) => e.message).join('; '));
   }
 
-  return { graphql, listRecentOrders, listRecentOrdersCached, forgetOrders, activePlanCached, forgetPlan, getOrder, annotateOrder, removeTags, activePlan, createSubscription, cancelSubscription, billingHistory, ensureWebhooks };
+  return { graphql, listRecentOrders, listOrdersPage, listRecentOrdersCached, forgetOrders, activePlanCached, forgetPlan, getOrder, annotateOrder, removeTags, activePlan, createSubscription, cancelSubscription, billingHistory, ensureWebhooks };
 }
 
 module.exports = { makeAdmin };

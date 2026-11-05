@@ -139,6 +139,9 @@ function fakeFetch() {
     if (url.includes('/aladdin/api/v1/stores')) {
       return json(200, { data: { data: [{ store_id: 77, store_name: 'Dhaka Warehouse', store_address: 'Mirpur', is_active: 1 }] } });
     }
+    if (url.endsWith('/aladdin/api/v1/orders') && state.pathaoTimeout) {
+      throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
+    }
     if (url.endsWith('/aladdin/api/v1/orders')) {
       if (state.pathaoFail) return json(422, { message: 'Validation failed', errors: state.pathaoFail });
       const b = JSON.parse(body);

@@ -5,7 +5,7 @@
   const $ = (id) => document.getElementById(id);
   const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
   const state = {
-    boot: null, orders: [], loaded: false, selected: new Set(), focus: null,
+    boot: null, orders: [], older: [], found: [], nextCursor: null, loaded: false, selected: new Set(), focus: null,
     page: 'orders', group: null, stage: null, risk: 'any', search: '',
     section: undefined, settingsTab: 'couriers', billing: null, period: 'monthly', range: { key: 'month' }, dp: null, stats: null, support: null, checks: null, menuFor: null,
   };
@@ -529,6 +529,7 @@
     $('check-all').checked = sendable.length > 0 && sendable.every((o) => state.selected.has(o.id));
     $('check-all').disabled = !sendable.length;
     renderBulk();
+    renderLoadMore();
   }
   function renderBulk() {
     const on = state.page === 'orders' && state.selected.size > 0;
@@ -617,7 +618,10 @@
     const statsP = loadStats();
     try {
       const r = await (pending || api(fresh ? '/orders?fresh=1' : '/orders'));
-      state.orders = r.orders.slice().sort((x, y) => new Date(y.createdAt) - new Date(x.createdAt));
+      // Keep older pages and search results the merchant loaded; the first page replaces itself.
+      if (!state.older.length) state.nextCursor = r.pageInfo && r.pageInfo.hasNextPage ? r.pageInfo.endCursor : null;
+      state.firstPage = r.orders;
+      mergeOrders();
       if (state.stats) renderOverview();
       state.loaded = true;
       await statsP;
@@ -626,12 +630,53 @@
       renderOrders();
     } catch (e) { show($('orders-loading'), false); toast(e.message, true); }
   }
-  async function sendOrders(ids, key) {
+  function mergeOrders() {
+    const byId = new Map();
+    for (const o of [...state.found, ...state.older, ...(state.firstPage || [])]) byId.set(o.id, o); // newest data wins
+    state.orders = [...byId.values()].sort((x, y) => new Date(y.createdAt) - new Date(x.createdAt));
+  }
+  function renderLoadMore() {
+    const el = $('load-more');
+    if (!el) return;
+    show(el, Boolean(state.loaded && state.nextCursor));
+    $('load-more-note').textContent = `Showing ${state.orders.length} orders`;
+  }
+  async function loadOlder() {
+    if (!state.nextCursor) return;
+    const r = await api(`/orders?after=${encodeURIComponent(state.nextCursor)}`);
+    state.older = state.older.concat(r.orders);
+    state.nextCursor = r.pageInfo && r.pageInfo.hasNextPage ? r.pageInfo.endCursor : null;
+    mergeOrders(); renderOrders();
+  }
+  // Search: filter what's loaded at once, then ask Shopify for matching older orders.
+  let searchTimer, searchSeq = 0;
+  function searchStore(q) {
+    clearTimeout(searchTimer);
+    if (q.trim().length < 2) return;
+    const seq = ++searchSeq;
+    searchTimer = setTimeout(async () => {
+      try {
+        const r = await api(`/orders?q=${encodeURIComponent(q.trim())}`);
+        if (seq !== searchSeq) return;
+        const known = new Set(state.orders.map((o) => o.id));
+        const extra = r.orders.filter((o) => !known.has(o.id));
+        if (extra.length) { state.found = state.found.concat(extra); mergeOrders(); renderOrders(); }
+      } catch (e) { /* local results still show */ }
+    }, 450);
+  }
+
+  async function sendOrders(ids, key, { confirm: ok2 = false } = {}) {
     if (!ids.length) return;
     const c = courier(key);
-    const r = await api('/orders/send', { method: 'POST', body: { ids, courier: key } });
+    const r = await api('/orders/send', { method: 'POST', body: { ids, courier: key, confirm: ok2 } });
+    const unsure = r.results.filter((x) => x.needsConfirm);
+    if (unsure.length && !ok2) {
+      if (confirm(`${unsure.length === 1 ? 'This order' : `${unsure.length} orders`} may already be booked: ${c.name} did not answer last time.\n\nCheck your ${c.name} panel first. Send again anyway?`)) {
+        return sendOrders(unsure.map((x) => x.id), key, { confirm: true });
+      }
+    }
     const ok = r.results.filter((x) => x.ok).length;
-    const failed = r.results.filter((x) => !x.ok && !x.duplicate);
+    const failed = r.results.filter((x) => !x.ok && !x.duplicate && !x.needsConfirm);
     if (ok) toast(`${ok} order${ok > 1 ? 's' : ''} sent to ${c.name}`);
     if (failed.length) toast(`${failed.length} not sent: ${failed[0].error}`, true);
     ids.forEach((id) => state.selected.delete(id));
@@ -976,6 +1021,7 @@
     if (t.closest('#bulk-menu-btn')) { openMenu($('bulk-menu-btn'), [...state.selected]); return; }
     const pick = t.closest('[data-pick]');
     if (pick && !pick.disabled) { const ids = state.menuFor || []; closeMenu(); try { await sendOrders(ids, pick.dataset.pick); } catch (e) { toast(e.message, true); } return; }
+    if (t.closest('#load-older')) { const b = t.closest('button'); try { await busy(b, loadOlder); } catch (e) { toast(e.message, true); } return; }
     if (t.closest('#bulk-clear')) { state.selected.clear(); renderOrders(); return; }
 
     // couriers
@@ -1092,7 +1138,7 @@
       savePrefs(id === 'default_weight' ? { default_weight: w } : { default_note: $(id).value }, true);
     }, 700);
   }));
-  $('search').addEventListener('input', (e) => { state.search = e.target.value; renderRows(); });
+  $('search').addEventListener('input', (e) => { state.search = e.target.value; renderRows(); searchStore(e.target.value); });
   window.addEventListener('resize', closeMenu);
   // ---------------- live updates ----------------
   // The server pushes an event whenever this shop's orders change (new order, Shopify edit,

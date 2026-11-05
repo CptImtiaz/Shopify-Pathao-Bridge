@@ -502,3 +502,44 @@ test('every outbound call carries a timeout signal', async (t) => {
   assert.ok(calls.length > 0);
   assert.ok(calls.every((c) => c.signal instanceof AbortSignal));
 });
+
+test('order list: page info, older pages and store-wide search go to Shopify', async (t) => {
+  const a = await connected(t);
+  a.fake.state.orders['320'] = gqlOrder(320);
+  const first = await a.api('/orders');
+  assert.equal(first.status, 200);
+  assert.deepEqual(Object.keys(first.data.pageInfo).sort(), ['endCursor', 'hasNextPage']);
+  await a.api('/orders?after=abc123');
+  await a.api('/orders?q=Rahim');
+  const bodies = a.fake.calls.filter((c) => c.url.includes('/graphql.json') && c.body && c.body.includes('RecentOrders')).map((c) => JSON.parse(c.body).variables);
+  assert.ok(bodies.some((v) => v.after === 'abc123'));
+  assert.ok(bodies.some((v) => v.query === 'Rahim'));
+});
+
+test('Pathao timeout: order is "Not confirmed" and needs the merchant\'s OK before sending again', async (t) => {
+  const a = await connected(t);
+  await a.api('/settings', { method: 'POST', body: { pathao_store_id: 77 } });
+  a.fake.state.orders['330'] = gqlOrder(330);
+  a.fake.state.pathaoTimeout = true;
+  let r = (await a.api('/orders/send', { method: 'POST', body: { ids: ['330'] } })).data.results[0];
+  assert.equal(r.ok, false);
+  assert.match(r.error, /^Not confirmed: Pathao did not answer in time/);
+  a.fake.state.pathaoTimeout = false;
+  const booked = () => a.fake.calls.filter((c) => c.url.endsWith('/aladdin/api/v1/orders')).length;
+  const before = booked();
+  r = (await a.api('/orders/send', { method: 'POST', body: { ids: ['330'] } })).data.results[0];
+  assert.equal(r.needsConfirm, true);
+  assert.equal(booked(), before); // nothing sent without the OK
+  r = (await a.api('/orders/send', { method: 'POST', body: { ids: ['330'], confirm: true } })).data.results[0];
+  assert.equal(r.ok, true);
+  assert.equal(booked(), before + 1);
+});
+
+test('Pathao status spellings are stored in one form and pickup-cancelled counts as finished', () => {
+  const { pathaoSlug, DONE } = require('../src/tracking');
+  assert.equal(pathaoSlug('Pickup_Cancelled'), 'pickup-cancelled');
+  assert.equal(pathaoSlug('order.In Transit'), 'in-transit');
+  assert.ok(DONE.test('pickup-cancelled'));
+  assert.ok(DONE.test('partial-delivery'));
+  assert.ok(!DONE.test('in-transit'));
+});

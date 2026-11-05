@@ -362,7 +362,13 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
   router.get('/orders', wrap(async (req) => {
     // Dashboard open: check parcels on the way in the background (at most once a minute).
     if (tracker && config.pollStatuses !== false) tracker.refreshSoon(req.shop);
-    const orders = await admin.listRecentOrdersCached(req.shop, req.opts, 50, { rich: true, fresh: req.query.fresh === '1' });
+    // First page is cached (live updates redraw often); older pages and searches are not.
+    const after = req.query.after ? String(req.query.after).slice(0, 500) : null;
+    const q = req.query.q ? String(req.query.q).trim().slice(0, 100) : null;
+    const page = after || q
+      ? await admin.listOrdersPage(req.shop, req.opts, { first: 50, after, query: q, rich: true })
+      : await admin.listRecentOrdersCached(req.shop, req.opts, 50, { rich: true, fresh: req.query.fresh === '1' });
+    const orders = page.nodes;
     const norm = orders.map(fromGraphql);
     const phoneOf = (n) => [n.shipping.phone, ...n.fallbackPhones].filter(Boolean).map(normalizePhone).find((p) => p.valid)?.phone || null;
     const phones = norm.map(phoneOf);
@@ -373,6 +379,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
     const noteById = new Map(notes.map((n) => [n.shopify_order_id, n.note]));
     const smsById = new Map(smsRows.map((s) => [s.shopify_order_id, s]));
     return {
+      pageInfo: page.pageInfo || { hasNextPage: false, endCursor: null },
       orders: orders.map((o, idx) => {
         const n = norm[idx];
         const s = byId.get(n.id);
@@ -430,8 +437,8 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
       try {
         const o = await admin.getOrder(req.shop, id, req.opts);
         if (!o) { results.push({ id, ok: false, error: 'Order not found' }); continue; }
-        const r = await shipping.sendOrder(req.shop, fromGraphql(o), { courier });
-        results.push({ id, ok: r.ok, duplicate: Boolean(r.duplicate), error: r.shipment?.error || null, consignmentId: r.shipment?.consignment_id || null });
+        const r = await shipping.sendOrder(req.shop, fromGraphql(o), { courier, confirmed: Boolean(req.body?.confirm) });
+        results.push({ id, ok: r.ok, duplicate: Boolean(r.duplicate), needsConfirm: Boolean(r.needsConfirm), error: r.needsConfirm ? r.error : (r.shipment?.error || null), consignmentId: r.shipment?.consignment_id || null });
       } catch (e) {
         results.push({ id, ok: false, error: e.message });
       }

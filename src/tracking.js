@@ -9,7 +9,10 @@
 const { COURIER_NAMES } = require('./couriers');
 
 // Final statuses: nothing more will happen to these parcels.
-const DONE = /^(order\.)?(delivered|partial[_-]delivered|cancelled|returned|paid[_-]return|cancelled_return_received|partial_delivered_return_received)$/i;
+const DONE = /^(order\.)?(delivered|partial[_-]delivered|partial[_-]delivery|cancelled|returned|paid[_-]return|pickup[_-]cancell?ed|cancelled_return_received|partial_delivered_return_received)$/i;
+
+// Pathao's status check says "Pickup_Cancelled", its webhook "pickup-cancelled": store one form.
+const pathaoSlug = (s) => (s ? String(s).trim().toLowerCase().replace(/^order\./, '').replace(/[\s_]+/g, '-') : s);
 
 function makeTracker({ db, pathao, steadfast, fulfillment = null, admin = null, log = console }) {
   const lastRun = new Map();
@@ -43,7 +46,8 @@ function makeTracker({ db, pathao, steadfast, fulfillment = null, admin = null, 
     } else {
       if (!pathao.hasCredentials(settings)) return s.pathao_status; // Pathao not connected: nothing to ask
       const info = await pathao.orderInfo(settings, s.consignment_id);
-      status = info.order_status_slug || info.order_status || s.pathao_status;
+      status = pathaoSlug(info.order_status_slug || info.order_status) || s.pathao_status;
+      if (pathaoSlug(s.pathao_status) === status) status = s.pathao_status; // same status, different spelling
     }
     if (status !== s.pathao_status) {
       await db.finishShipment(shop, s.shopify_order_id, { pathao_status: status });
@@ -98,4 +102,4 @@ function makeTracker({ db, pathao, steadfast, fulfillment = null, admin = null, 
   return { refreshShipment, refreshActive, refreshSoon, pollAll, start };
 }
 
-module.exports = { makeTracker, DONE };
+module.exports = { makeTracker, DONE, pathaoSlug };

@@ -29,7 +29,7 @@ function makeOwnerRouter({ config, db }) {
 
   router.get('/', async (req, res, next) => {
     try {
-      const [shops, failures, tickets] = await Promise.all([db.ownerOverview(), db.recentFailures(25), db.allTickets(50)]);
+      const [shops, failures, tickets, recent] = await Promise.all([db.ownerOverview(), db.recentFailures(25), db.allTickets(50), db.recentShipments(40)]);
       const active = shops.filter((s) => !s.uninstalled_at);
       const paid = active.filter((s) => s.plan !== 'free');
       const mrr = paid.reduce((t, s) => t + ((PLANS[s.plan] && PLANS[s.plan].price) || 0), 0);
@@ -50,13 +50,19 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px 16p
 td.err{white-space:normal;color:#8e0b21;max-width:520px}</style></head><body><div class="wrap">
 <h1>ShipBridge owner dashboard</h1><p class="meta">Live from the app database · ${esc(new Date().toUTCString())}</p>
 <div class="tiles">${tiles.map(([k, v]) => `<div class="tile"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>
-<div class="card"><h2>Shops</h2><table><tr><th>Shop</th><th>Status</th><th>Plan</th><th>Pathao</th><th>Auto-send</th><th>Sent this month</th><th>Failed (7 days)</th><th>Installed</th><th>Last activity</th><th>Granted scopes</th></tr>
+<div class="card"><h2>Shops</h2><table><tr><th>Shop</th><th>Status</th><th>Plan</th><th>Pathao</th><th>Steadfast</th><th>Default</th><th>Auto-send</th><th>Sent this month</th><th>Failed (7 days)</th><th>Installed</th><th>Last activity</th><th>Granted scopes</th></tr>
 ${shops.map((s) => `<tr><td><a href="https://${esc(s.shop)}" target="_blank" rel="noopener">${esc(s.shop)}</a></td>
 <td>${s.uninstalled_at ? `<span class="b r">Uninstalled ${esc(day(s.uninstalled_at))}</span>` : '<span class="b g">Active</span>'}</td>
 <td><span class="b ${s.plan !== 'free' ? 'g' : ''}">${esc((PLANS[s.plan] && PLANS[s.plan].name) || s.plan)}</span></td>
-<td>${s.pathao_connected ? `<span class="b g">Connected</span>${s.pathao_env === 'sandbox' ? ' <span class="b y">Sandbox</span>' : ''}` : '<span class="b">Not set up</span>'}</td>
+<td>${s.pathao_connected ? `<span class="b g">Connected</span>${s.pathao_live ? ' <span class="b g">Live</span>' : ''}` : '<span class="b">Not set up</span>'}</td>
+<td>${s.steadfast_connected ? `<span class="b g">Connected</span>${s.steadfast_live ? ' <span class="b g">Live</span>' : ''}` : '<span class="b">Not set up</span>'}</td>
+<td>${esc(s.default_courier === 'steadfast' ? 'Steadfast' : 'Pathao')}</td>
 <td>${s.auto_send ? 'On' : 'Off'}</td><td>${esc(s.sent_month)}</td><td>${s.failed_week ? `<span class="b r">${esc(s.failed_week)}</span>` : '0'}</td>
-<td>${esc(day(s.installed_at))}</td><td>${esc(day(s.last_activity))}</td><td style="white-space:normal;max-width:320px;font-size:12px">${esc(s.scope)}</td></tr>`).join('') || '<tr><td colspan="10">No installs yet</td></tr>'}
+<td>${esc(day(s.installed_at))}</td><td>${esc(day(s.last_activity))}</td><td style="white-space:normal;max-width:320px;font-size:12px">${esc(s.scope)}</td></tr>`).join('') || '<tr><td colspan="12">No installs yet</td></tr>'}
+</table></div>
+<div class="card"><h2>Recent bookings</h2><table><tr><th>Updated</th><th>Shop</th><th>Order</th><th>Courier</th><th>Result</th><th>Courier status</th><th>Parcel</th><th>Error</th></tr>
+${recent.map((r) => `<tr><td>${esc(new Date(r.updated_at).toISOString().slice(0, 16).replace('T', ' '))}</td><td>${esc(r.shop)}</td><td>${esc(r.order_name)}</td><td>${esc(r.courier || 'pathao')}</td>
+<td><span class="b ${r.status === 'sent' ? 'g' : r.status === 'failed' ? 'r' : r.status === 'skipped' ? 'y' : ''}">${esc(r.status)}</span></td><td>${esc(r.pathao_status || '—')}</td><td>${esc(r.consignment_id || '—')}</td><td class="err">${esc(r.error || '')}</td></tr>`).join('') || '<tr><td colspan="8">None yet</td></tr>'}
 </table></div>
 <div class="card"><h2>Support requests</h2><table><tr><th>When</th><th>Shop</th><th>Topic</th><th>Reply to</th><th>Order</th><th>Message</th></tr>
 ${tickets.map((t) => `<tr><td>${esc(new Date(t.created_at).toISOString().slice(0, 16).replace('T', ' '))}</td><td>${esc(t.shop)}</td><td><span class="b">${esc(t.topic)}</span></td><td><a href="mailto:${esc(t.email)}">${esc(t.email)}</a></td><td>${esc(t.order_name || '—')}</td><td class="err" style="color:#15171a">${esc(t.message)}</td></tr>`).join('') || '<tr><td colspan="6">None yet</td></tr>'}

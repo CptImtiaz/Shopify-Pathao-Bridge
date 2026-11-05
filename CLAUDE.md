@@ -13,8 +13,8 @@ publish it on the **Shopify App Store as a paid app** and make money from it
 ## Hosting (moved from Vercel + Neon to Railway on 2026-11-04)
 - Railway project `shipbridge-pathao` (id `16500b22-0f21-4363-9e27-da3a908b2186`),
   environment `production`, region Singapore (`asia-southeast1-eqsg3a`).
-  - Service `shipbridge` (app) deploys from GitHub branch **`main`**; `railway.json` sets
-    `npm start` and the `/health` check.
+  - Service `shipbridge` (app) deploys from GitHub branch **`main`**; `railway.json` starts
+    `node src/server.js` directly (clean SIGTERM shutdown, no npm noise) with the `/health` check.
   - Service `Postgres` (Railway template, volume in Singapore). Fresh, empty database.
 - Public URL: `https://shipbridge-production-7b96.up.railway.app` (also in `shopify.app.toml`).
 - Required env vars: `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `ENCRYPTION_KEY` (64 hex),
@@ -26,7 +26,8 @@ publish it on the **Shopify App Store as a paid app** and make money from it
 ## Migration status / open items
 - Done: `SHOPIFY_API_SECRET` set on Railway; app version with Railway URLs released;
   app opened on `pathao-test.myshopify.com`, Pathao connected, Pathao webhook handshake OK.
-- Open: confirm a real test order arrives via `orders/create` and books with Pathao.
+- Done: Pathao bookings confirmed on Railway (pathao-test #1012–#1014, 2026-11-04) and Steadfast
+  (nishi-qolyyvis #1002/#1003, 2026-11-05), both fulfilled in Shopify.
 - Open: only after that, delete the old Vercel project and Neon database
   (ask the owner first — irreversible).
 - Rotate the Shopify client secret before launch (it was pasted in chat).
@@ -108,3 +109,15 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 - Merchant notes per order live in `order_notes` (never sent to couriers).
 - Before changing the order table, re-run the overlap check (widths 1060–1600): the app
   area inside Shopify admin on a 1366px laptop is ~1060px wide.
+
+## Reliability rules (review 2026-11-05)
+- Every outbound call (Shopify, couriers, SMS) aborts after 30 s (`httpTimeoutMs`, wrapper in app.js).
+- A booking that times out is saved as failed with error `Not confirmed: ...`; `/orders/send` returns
+  `needsConfirm` for it until the dashboard resends with `confirm: true` (Pathao accepts duplicates).
+- Pathao `order.created` / `order.updated` / `order.paid` are not parcel statuses: they never overwrite
+  `pathao_status` (`paid` only sets `courier_message`). Pathao statuses are stored lowercase-hyphen
+  (`pathaoSlug` in tracking.js); `pickup-cancelled` counts as finished.
+- Courier webhooks answer 404 for shops that never installed / uninstalled (no rows created).
+- Order list: first page cached; `GET /api/orders?after=<cursor>` for older pages, `?q=` searches the
+  whole store (Shopify order search). Dashboard keeps loaded pages and search hits across live redraws.
+- Owner page `/admin` shows recent bookings (no customer data) to trace any order.

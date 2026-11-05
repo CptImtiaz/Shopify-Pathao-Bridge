@@ -651,3 +651,5 @@ button.kpi.k-fraud:hover { box-shadow: 0 0 0 2px #fecaca, var(--shadow); }
 .radio-list label { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 .radio-list input { width: 16px; height: 16px; margin: 0; accent-color: var(--ink, #111); }
 .step-body textarea { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; }
+
+.load-more { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 14px; border-top: 1px solid var(--line); }

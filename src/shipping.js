@@ -38,11 +38,21 @@ function makeShipping({ db, pathao, steadfast = null, admin, fulfillment = null,
 
   // `order` is a normalised order from mapper.fromWebhook / fromGraphql.
   // `courier` defaults to the shop's default courier.
-  async function sendOrder(shop, order, { courier } = {}) {
+  // A courier that didn't answer may still have booked the parcel. Pathao doesn't refuse a
+  // second booking of the same order, so these need the merchant's OK before sending again.
+  const UNSURE = 'Not confirmed:';
+  const isUnsure = (e) => e && (e.name === 'TimeoutError' || e.name === 'AbortError' || /timed? ?out|aborted|fetch failed|ECONNRESET|ETIMEDOUT|socket hang up/i.test(String(e.message || '')));
+
+  async function sendOrder(shop, order, { courier, confirmed = false } = {}) {
     const settings = await db.getSettings(shop);
     const key = COURIERS[courier] ? courier : COURIERS[settings.default_courier] ? settings.default_courier : 'pathao';
     const c = COURIERS[key];
     const label = COURIER_NAMES[key] || key;
+
+    const before = await db.getShipment(shop, order.id);
+    if (before && String(before.error || '').startsWith(UNSURE) && !confirmed) {
+      return { ok: false, needsConfirm: true, shipment: before, error: before.error };
+    }
 
     const claimed = await db.claimShipment(shop, order.id, order.name);
     if (!claimed) {
@@ -91,6 +101,9 @@ function makeShipping({ db, pathao, steadfast = null, admin, fulfillment = null,
       return { ok: true, shipment: (await db.getShipment(shop, order.id)) || shipment };
     } catch (e) {
       log.error(`[${shop}] ${order.name} failed: ${e.message}`);
+      if (isUnsure(e)) {
+        return fail('failed', `${UNSURE} ${label} did not answer in time. Check your ${label} panel before sending again — it may already be booked.`);
+      }
       return fail('failed', e.message || 'Unknown error');
     }
   }

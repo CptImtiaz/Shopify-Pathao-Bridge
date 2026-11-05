@@ -292,7 +292,7 @@ function makeDb(pool) {
     // Owner overview: one row per installed shop, no customer data.
     async ownerOverview() {
       const [shops, agg] = await Promise.all([
-        q(`SELECT s.shop, s.plan, s.scope, s.installed_at, s.uninstalled_at, st.pathao_client_id, st.pathao_env, st.auto_send
+        q(`SELECT s.shop, s.plan, s.scope, s.installed_at, s.uninstalled_at, st.pathao_client_id, st.pathao_store_id, st.steadfast_api_key, st.steadfast_auth_error, st.default_courier, st.pathao_webhook_at, st.steadfast_webhook_at, st.pathao_env, st.auto_send
            FROM shops s LEFT JOIN settings st ON st.shop = s.shop`),
         q(`SELECT shop,
                   SUM(CASE WHEN counted = TRUE AND created_at >= date_trunc('month', NOW()) THEN 1 ELSE 0 END)::int AS sent_month,
@@ -305,10 +305,18 @@ function makeDb(pool) {
         const a = byShop.get(s.shop) || {};
         return {
           shop: s.shop, plan: s.plan, scope: s.scope || '', installed_at: s.installed_at, uninstalled_at: s.uninstalled_at,
-          pathao_connected: Boolean(s.pathao_client_id), pathao_env: s.pathao_env, auto_send: Boolean(s.auto_send),
+          pathao_connected: Boolean(s.pathao_client_id && s.pathao_store_id), pathao_env: s.pathao_env, auto_send: Boolean(s.auto_send),
+          steadfast_connected: Boolean(s.steadfast_api_key && !s.steadfast_auth_error), default_courier: s.default_courier || 'pathao',
+          pathao_live: Boolean(s.pathao_webhook_at), steadfast_live: Boolean(s.steadfast_webhook_at),
           sent_month: Number(a.sent_month) || 0, failed_week: Number(a.failed_week) || 0, last_activity: a.last_activity || null,
         };
       }).sort((x, y) => (Boolean(x.uninstalled_at) - Boolean(y.uninstalled_at)) || (new Date(y.installed_at || 0) - new Date(x.installed_at || 0)));
+    },
+
+    async recentShipments(limit = 40) {
+      return (await q(
+        `SELECT shop, order_name, courier, status, pathao_status, error, consignment_id, updated_at FROM shipments ORDER BY updated_at DESC LIMIT $1`, [limit]
+      )).rows;
     },
 
     async recentFailures(limit = 20) {
