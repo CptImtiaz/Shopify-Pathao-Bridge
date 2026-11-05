@@ -150,7 +150,7 @@ function buildSteadfastOrder(order, settings = {}) {
   // Optional fields, each only when the merchant switched it on (Delivery settings).
   if (settings.sf_item_desc !== false) payload.item_description = clip(clean(items || `Shopify order ${order.name}`), 480);
   if (settings.sf_total_lot) payload.total_lot = order.items.reduce((t, i) => t + (i.quantity || 0), 0) || 1;
-  if (Number(settings.sf_delivery_type) === 1) payload.delivery_type = 1; // 1 = customer picks up at a Steadfast hub
+  if (Number(settings.sf_delivery_type) === 1) payload.delivery_type = 1; // 1 = Point delivery (customer collects from a Steadfast point)
   if (settings.sf_alt_phone && phone.valid) {
     const second = [...order.fallbackPhones, s.phone].filter(Boolean).map(normalizePhone).find((p) => p.valid && p.phone !== phone.phone);
     if (second) payload.alternative_phone = second.phone;

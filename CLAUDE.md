@@ -69,8 +69,8 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 ## Couriers page
 - Left: courier list. Main: hero + exactly three steps per courier, same names for every courier:
   **API configuration**, **Webhook configuration**, **Delivery settings** (Pathao: pickup store,
-  delivery type, parcel weight, note; Steadfast: delivery type home/hub (`delivery_type` 1 only sent
-  for hub), product list (`item_description`, on by default), item count (`total_lot`), second phone
+  delivery type, parcel weight, note; Steadfast: delivery type Home / Point delivery (`delivery_type` 1 only sent
+  for Point delivery; the API has no Regular/Express or weight field, so those are not offered), product list (`item_description`, on by default), item count (`total_lot`), second phone
   (`alternative_phone`), note). The note for rider is one shared setting. Webhook status shows just "Live".
 - Webhook configuration: editable secret (Pathao) / auth token (Steadfast) + Save. No self-test
   (removed: ShipBridge can't read the courier's portal, so a self-test proved nothing). "Live" only

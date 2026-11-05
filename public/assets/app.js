@@ -773,7 +773,7 @@
     show($('sf-auth-error'), sfRejected());
     document.querySelector('[data-step="sf-webhook"] [data-summary]').innerHTML = webhookLive('steadfast') ? '<span class="live" style="margin:0"><i></i>Live</span>' : webhookSaved('steadfast') ? 'Saved' : 'Steadfast tells ShipBridge the moment a parcel moves';
     document.querySelector('[data-step="sf-delivery"] [data-summary]').textContent = [
-      sf.delivery_type === 1 ? 'Hub pick-up' : 'Home delivery',
+      sf.delivery_type === 1 ? 'Point delivery' : 'Home delivery',
       sf.item_desc !== false ? 'product list' : null, sf.total_lot ? 'item count' : null, sf.alt_phone ? '2nd phone' : null,
       S().default_note ? `note: ${S().default_note}` : null,
     ].filter(Boolean).join(' · ');
