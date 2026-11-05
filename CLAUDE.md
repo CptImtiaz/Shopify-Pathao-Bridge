@@ -79,7 +79,7 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   takes `from`/`to` (ISO, `to` exclusive) or `range=all`. The Fraud check card counts the loaded
   orders in those dates; clicking it filters the list to High risk.
 - Setup checklist covers every courier: connect a courier (any), live updates for each connected
-  courier, Shopify permission, auto-send (asks to pick a connected default first).
+  courier, auto-send (asks to pick a connected default first). No Shopify-permission step (granted at install).
 - Header live pill: one live courier = "<Courier> live"; several = stacked logos + "N couriers live".
 - No Hold tab and no draft orders (removed 2026-11-05 at the owner's request; scopes are back to
   orders + fulfillments only). A merchant-driven "hold this order" feature was proposed, not built.

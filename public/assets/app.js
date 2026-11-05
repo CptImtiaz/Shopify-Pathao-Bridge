@@ -208,7 +208,7 @@
       { key: 'live', done: ready.length > 0 && notLive.length === 0,
         html: notLive.length ? `Turn on live delivery updates for ${notLive.map((c) => c.name).join(' and ')}` : 'Live delivery updates for your couriers',
         btn: [notLive.length ? `${prefix(notLive[0].key)}webhook` : 'webhook', 'Set up webhook'] },
-      { key: 'shopify', done: s.sync_fulfillment === false || !permMissing(), html: 'Allow ShipBridge to update orders inside Shopify', btn: ['shopify', 'Allow access'] },
+      // (No "allow Shopify access" step: the app asks for it when it is installed.)
       { key: 'auto', done: Boolean(s.auto_send) && courierReady(defKey()),
         html: !courierReady(defKey()) && ready.length ? `Make ${ready[0].name} your default courier, then turn on auto-send` : `Send new orders to ${cname(defKey())} automatically`,
         btn: ['defaults', !courierReady(defKey()) && ready.length ? 'Choose default' : 'Turn on auto-send'] },
