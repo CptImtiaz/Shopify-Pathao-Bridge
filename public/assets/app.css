@@ -710,3 +710,93 @@ button.cx-item.off.active { border-style: solid; border-color: var(--accent); }
 }
 
 .cx-rules .seg button { font-size: 12px; white-space: nowrap; padding: 0 8px; }
+
+/* ===== Polaris theme (owner's choice 2026-11-05): Shopify admin look. Overrides the base styles above. ===== */
+:root {
+  --bg: #f1f1f1; --card: #fff; --ink: #303030; --ink-2: #303030; --muted: #616161; --line: #ebebeb; --soft: #f7f7f7;
+  --accent: #303030; --accent-2: #303030; --accent-soft: #f1f1f1; --accent-line: #e3e3e3;
+  --radius: 12px;
+  --shadow: 0 1px 0 0 rgba(26,26,26,.07), 0 0 0 1px rgba(0,0,0,.08);
+  --grad: #303030;
+}
+html, body { font-size: 13px; color: #303030; background: #f1f1f1; font-feature-settings: normal; }
+a { color: #005bd3; }
+h1 { font-size: 20px; letter-spacing: -.01em; }
+h2 { font-size: 14px; font-weight: 600; }
+
+/* buttons: Polaris secondary + black primary with bevel */
+.btn { height: 32px; border-radius: 8px; font-size: 13px; font-weight: 600; color: #303030; background: #fff;
+  box-shadow: 0 -1px 0 0 #b5b5b5 inset, 0 0 0 1px rgba(0,0,0,.1) inset, 0 .5px 0 1.5px #fff inset; }
+.btn:hover { background: #fafafa; }
+.btn.ghost { background: #fff; box-shadow: 0 -1px 0 0 #b5b5b5 inset, 0 0 0 1px rgba(0,0,0,.1) inset; }
+.btn.primary { background: linear-gradient(180deg, rgba(48,48,48,0) 63.53%, rgba(255,255,255,.15) 100%), #303030; color: #fff;
+  box-shadow: 0 -1px 0 1px rgba(0,0,0,.8) inset, 0 0 0 1px #303030 inset, 0 .5px 0 1.5px rgba(255,255,255,.25) inset; }
+.btn.primary:hover { filter: none; background: #1a1a1a; }
+.btn:focus-visible, input:focus-visible { outline: 2px solid #005bd3; outline-offset: 1px; }
+.btn.wa svg { color: #29845a; }
+.logo { background: #303030; border-radius: 10px; }
+
+/* cards */
+.card { border-radius: 12px; box-shadow: var(--shadow); }
+.kpi { min-height: 0; }
+.k-icon { background: #f1f1f1 !important; color: #4a4a4a !important; border-radius: 8px; }
+.k-label { color: #616161; font-weight: 600; }
+.k-split .s1 { background: #d4d4d4; } .k-split .s2 { background: #8a8a8a; } .k-split .s3 { background: #303030; }
+
+/* badges: Polaris tones */
+.badge { border-radius: 8px; padding: 2px 8px; font-weight: 600; background: #e3e3e3; color: #616161; }
+.badge.green { background: #cdfee1; color: #0c5132; }
+.badge.yellow { background: #ffef9d; color: #4f4700; }
+.badge.red { background: #fed1d7; color: #8e0b21; }
+.badge.blue { background: #e0f0ff; color: #00527c; }
+.c-pay .badge.yellow { background: #ffd6a4; color: #5e4200; } /* Payment pending = warning (orange) in Shopify */
+.st { border-radius: 8px; }
+.st-wait { background: #e3e3e3; color: #4a4a4a; }
+.st-go { background: #e0f0ff; color: #00527c; }
+.st-ok { background: #cdfee1; color: #0c5132; }
+.st-bad { background: #fed1d7; color: #8e0b21; }
+.dots i.on, .dots i.on + i.on::before { background: #303030; }
+.dots i.cur { box-shadow: 0 0 0 3px rgba(48,48,48,.15); }
+.dots-ok i.on, .dots-ok i.on + i.on::before { background: #29845a; }
+.dots-bad i.on, .dots-bad i.on + i.on::before { background: #e51c00; }
+.cn { background: #f7f7f7; border-color: #ebebeb; color: #616161; }
+.live-pill { background: #cdfee1; color: #0c5132; }
+.live { color: #29845a; } .live-pill i, .live i { background: #29845a; }
+
+/* tabs: Polaris index-table views (text tabs, grey selected) */
+.pipe-tabs { gap: 2px; padding: 6px 10px; }
+.pipe-tabs button { height: 28px; border: 0; border-radius: 8px; background: transparent; color: #616161; font-weight: 600; padding: 0 10px; }
+.pipe-tabs button:hover { background: #f1f1f1; }
+.pipe-tabs button[aria-selected="true"] { background: #ebebeb; color: #303030; border: 0; }
+.pipe-tabs button b, .pipe-tabs button[aria-selected="true"] b, .pipe-tabs button.t-new b, .pipe-tabs button.t-go b, .pipe-tabs button.t-done b, .pipe-tabs button.t-bad b { background: transparent; color: #616161; min-width: 0; padding: 0; }
+.risk-filter button { border-radius: 8px; }
+.risk-filter button.active { background: #303030; border-color: #303030; }
+
+/* index table */
+.list { padding-top: 10px; }
+.search { border-radius: 8px; background: #fff; border-color: #8a8a8a; height: 32px; }
+.search:focus-within { border-color: #005bd3; box-shadow: 0 0 0 1px #005bd3; }
+.auto-box { border-radius: 8px; height: 32px; }
+.list-head { background: #f7f7f7; text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 600; color: #616161; padding: 8px 14px; }
+.row { padding: 10px 14px; border-bottom-color: #ebebeb; }
+.row:hover { background: #f7f7f7; }
+.row.sel { background: #f1f1f1; }
+input[type=checkbox] { accent-color: #303030; }
+.thumb { border-radius: 8px; box-shadow: 0 0 0 1px #e3e3e3; }
+.assign { color: #303030; background: #fff; border: 0; border-radius: 8px; box-shadow: 0 -1px 0 0 #b5b5b5 inset, 0 0 0 1px rgba(0,0,0,.1) inset; }
+.assign:hover { background: #fafafa; }
+.assign.warn { color: #8e0b21; background: #fff; box-shadow: 0 -1px 0 0 #b5b5b5 inset, 0 0 0 1px rgba(0,0,0,.1) inset; }
+.fc-low .fc-t b, .fc-safe .fc-t b { color: #0c5132; } .fc-medium .fc-t b { color: #5e4200; } .fc-high .fc-t b { color: #8e0b21; }
+
+/* setup card, stepper, switches */
+.setup-cta, .setup-top .setup-cta { color: #005bd3; }
+.step.done .step-dot { background: #303030; }
+.seg { background: #f1f1f1; border-radius: 8px; }
+.seg button { border-radius: 6px; }
+input[role=switch]:checked + i, .switch-row input:checked + i { background: #303030 !important; }
+.cx-item.active, .cx-item[aria-current="true"] { box-shadow: 0 0 0 2px #303030 !important; }
+.hero-ring { color: #303030; }
+.cx-def { background: #e3e3e3; color: #303030; border-radius: 8px; }
+.cx-hero { background: #fff; }
+.cx-label, .hero-facts span, .rules-sub { text-transform: none; letter-spacing: 0; font-size: 12px; color: #616161; }
+.k-foot b { color: #0c5132; }

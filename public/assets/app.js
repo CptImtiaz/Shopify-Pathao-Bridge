@@ -253,7 +253,7 @@
     $('setup-title').textContent = next ? `Next: ${next.html}` : 'All set';
     $('setup-count').textContent = `${done} of ${steps.length} setup tasks complete`;
     const pct = Math.round((done / steps.length) * 100);
-    $('setup-ring').style.background = `conic-gradient(#4f46e5 0 ${pct}%, #e4e5f7 ${pct}% 100%)`;
+    $('setup-ring').style.background = `conic-gradient(#303030 0 ${pct}%, #e3e3e3 ${pct}% 100%)`;
     $('setup-ring').innerHTML = `<b>${done}/${steps.length}</b>`;
     $('steps').innerHTML = steps.map((x) => `<li class="${x.done ? 'done' : ''}"><span class="tick"></span><span class="step-text">${esc(x.html)}</span>${x.done ? '' : `<button class="btn sm" data-goto="${x.btn[0]}">${esc(x.btn[1])}</button>`}</li>`).join('');
     const ready = newReady();
@@ -737,7 +737,7 @@
     $('cx-hero').innerHTML = `<div class="hero-l">${cmono(courier('pathao'), 'hero-mono')}
         <div><div class="hero-title"><h2>Pathao</h2>${ready ? '<span class="badge green">Connected</span>' : '<span class="badge yellow">Setup needed</span>'}${webhookLive() ? '<span class="live-pill"><i></i>Live</span>' : ''}${s.pathao_env === 'sandbox' ? '<span class="badge yellow">Test mode</span>' : ''}</div>
         <p class="meta">${esc(p.tagline || '')}</p></div></div>
-      <div class="hero-r"><span class="hero-ring" style="background:conic-gradient(#4f46e5 0 ${pct}%, #e4e5f7 ${pct}% 100%)"><b>${done}/${steps.length}</b></span><span class="meta">${done === steps.length ? 'All set' : 'steps done'}</span></div>
+      <div class="hero-r"><span class="hero-ring" style="background:conic-gradient(#303030 0 ${pct}%, #e3e3e3 ${pct}% 100%)"><b>${done}/${steps.length}</b></span><span class="meta">${done === steps.length ? 'All set' : 'steps done'}</span></div>
       <div class="hero-facts"><div><span>Pickup store</span><b>${esc(s.pathao_store_name || (s.pathao_store_id ? 'Store #' + s.pathao_store_id : '—'))}</b></div>
         <div><span>Default</span><b>${defKey() === 'pathao' ? 'Yes' : 'No'}</b></div>
         <div><span>Auto-send</span><b>${s.auto_send ? 'On' : 'Off'}</b></div>
@@ -814,7 +814,7 @@
     $('sf-hero').innerHTML = `<div class="hero-l">${cmono(courier('steadfast'), 'hero-mono')}
         <div><div class="hero-title"><h2>Steadfast</h2>${sfConnected() ? '<span class="badge green">Connected</span>' : sfRejected() ? '<span class="badge red">Needs attention</span>' : '<span class="badge yellow">Setup needed</span>'}${webhookLive('steadfast') ? '<span class="live-pill"><i></i>Live</span>' : ''}</div>
         <p class="meta">${esc(courier('steadfast').tagline || '')}</p></div></div>
-      <div class="hero-r"><span class="hero-ring" style="background:conic-gradient(#4f46e5 0 ${pct}%, #e4e5f7 ${pct}% 100%)"><b>${done}/${steps.length}</b></span><span class="meta">${done === steps.length ? 'All set' : 'steps done'}</span></div>
+      <div class="hero-r"><span class="hero-ring" style="background:conic-gradient(#303030 0 ${pct}%, #e3e3e3 ${pct}% 100%)"><b>${done}/${steps.length}</b></span><span class="meta">${done === steps.length ? 'All set' : 'steps done'}</span></div>
       <div class="hero-facts"><div><span>Balance</span><b>${state.sfBalance != null ? esc(taka(state.sfBalance)) : '—'}</b></div>
         <div><span>Default</span><b>${defKey() === 'steadfast' ? 'Yes' : 'No'}</b></div>
         <div><span>Auto-send</span><b>${s.auto_send && defKey() === 'steadfast' ? 'On' : 'Off'}</b></div>

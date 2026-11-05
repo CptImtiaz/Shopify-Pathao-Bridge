@@ -129,6 +129,11 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   area inside Shopify admin on a 1366px laptop is ~1060px wide.
 
 ## Design rules (design review 2026-11-05)
+- LOOK = Shopify Polaris (owner's choice 2026-11-05): "Polaris theme" block at the end of app.css overrides the
+  base styles. Primary = #303030 (black bevel buttons, toggles, ticks, rings); page #f1f1f1; text #303030 /
+  #616161; links #005bd3; badges in Polaris tones (success #cdfee1/#0c5132, attention #ffef9d/#4f4700,
+  Payment pending = warning #ffd6a4/#5e4200, critical #fed1d7/#8e0b21, info #e0f0ff/#00527c); radius 8/12px;
+  plain-text tabs with grey selected; table headers not uppercase. No indigo anywhere new.
 - All text >= 4.5:1 contrast (`--muted` #5f6673; small uppercase labels #4b5563). Re-measure after colour changes.
 - Type scale (UI report fixes 2026-11-05): font sizes only 11 / 12 / 13.5 (body) / 15 / 20 / 26 px; weights only
   400 / 600 / 700. Near-duplicate colours merged into one palette (WhatsApp keeps #25D366).
