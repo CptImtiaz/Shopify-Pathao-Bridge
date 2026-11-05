@@ -451,7 +451,7 @@
   }
   function payCell(o) {
     const f = String(o.financial || '').toUpperCase();
-    const badge = f === 'PAID' ? '<span class="badge green">Paid</span>' : f === 'PARTIALLY_PAID' ? '<span class="badge yellow">Partially paid</span>' : /REFUND/.test(f) ? '<span class="badge">Refunded</span>' : (o.cod > 0 ? '<span class="badge">COD pending</span>' : '<span class="badge yellow">Pending</span>');
+    const badge = f === 'PAID' ? '<span class="badge green">Paid</span>' : f === 'PARTIALLY_PAID' ? '<span class="badge yellow">Partially paid</span>' : /REFUND/.test(f) ? '<span class="badge">Refunded</span>' : (o.cod > 0 ? '<span class="badge" title="Cash on delivery · collected by the rider">COD</span>' : '<span class="badge yellow">Pending</span>');
     return `<span class="amount">${esc(taka(o.total))}</span><span class="sub">${badge}</span>`;
   }
   function courierCell(o) {
@@ -605,7 +605,6 @@
       <div class="d-sec"><div class="d-label">Delivery${sent && o.shipment.consignmentId ? ` · <span class="mono">${esc(o.shipment.consignmentId)}</span>` : ''}</div>
         <ul class="tl">${tl}</ul>
         ${sent && o.shipment.courierMessage ? `<div class="courier-msg"><b>Latest from ${esc(cname(o.shipment.courier))}</b>${esc(o.shipment.courierMessage)}${o.shipment.courierMessageAt ? `<span class="sub">${esc(time(o.shipment.courierMessageAt))}</span>` : ''}</div>` : ''}
-        ${sent && o.shipment.shopifySynced ? '<div class="synced"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Shopify order updated automatically</div>' : ''}
         ${sent ? `<div class="d-refresh">${webhookLive(o.shipment.courier || 'pathao') ? '<span class="live"><i></i>Live</span>' : '<span class="sub">Status is checked automatically</span>'}</div>` : ''}
       </div>
       <div class="d-money">

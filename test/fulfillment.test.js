@@ -190,3 +190,19 @@ test('status helpers: pickup cancelled, came back, fully delivered', () => {
   assert.equal(fullyDelivered('partial_delivered', 'steadfast'), false);
   assert.equal(fullyDelivered('order.delivered', 'pathao'), true);
 });
+
+test('catch-up on start: older pickup-cancelled / delivered parcels get the Shopify update', async (t) => {
+  const a = await ready(t);
+  a.fake.state.orders['720'] = gqlOrder(720);
+  a.fake.state.orders['721'] = gqlOrder(721);
+  const [r1, r2] = (await a.api('/orders/send', { method: 'POST', body: { ids: ['720', '721'] } })).data.results;
+  // Statuses saved directly (as if they arrived before this logic existed).
+  await a.db.finishShipment(SHOP, '720', { pathao_status: 'pickup-cancelled' });
+  await a.db.finishShipment(SHOP, '721', { pathao_status: 'delivered' });
+  const n = await a.tracker.catchUp();
+  assert.equal(n, 2);
+  assert.equal((await a.db.getShipment(SHOP, '720')).status, 'skipped');
+  assert.deepEqual(a.fake.state.paid, ['721']);
+  assert.equal(await a.tracker.catchUp(), 0, 'nothing left the second time');
+  assert.ok(r1.ok && r2.ok);
+});

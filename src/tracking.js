@@ -93,13 +93,23 @@ function makeTracker({ db, pathao, steadfast, fulfillment = null, admin = null, 
     }
   }
 
+  // Once per start: bring older finished parcels up to the COD standard in Shopify.
+  async function catchUp() {
+    if (!fulfillment || !db.shipmentsNeedingShopifyCatchUp) return 0;
+    const rows = await db.shipmentsNeedingShopifyCatchUp();
+    for (const r of rows) await fulfillment.sync(r.shop, r.shopify_order_id);
+    if (rows.length) log.info(`Shopify catch-up: ${rows.length} finished parcel(s) checked`);
+    return rows.length;
+  }
+
   function start(everyMs = 60 * 1000) {
+    setTimeout(() => catchUp().catch((e) => log.warn(`Shopify catch-up failed: ${e.message}`)), 5000).unref?.();
     const timer = setInterval(() => pollAll().catch((e) => log.warn(`status poll failed: ${e.message}`)), everyMs);
     if (timer.unref) timer.unref();
     return timer;
   }
 
-  return { refreshShipment, refreshActive, refreshSoon, pollAll, start };
+  return { refreshShipment, refreshActive, refreshSoon, pollAll, start, catchUp };
 }
 
 module.exports = { makeTracker, DONE, pathaoSlug };

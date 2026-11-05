@@ -129,7 +129,7 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 - All text >= 4.5:1 contrast (`--muted` #5f6673; table headers #545b66). Re-measure after colour changes.
 - Overview cards are neutral (no coloured stripes); colour only where it means something.
 - Fraud: traffic light — low/safe green, medium amber, high red; score shown as x/100.
-- COD orders show a grey "COD pending" payment badge (normal for COD); yellow only for real attention.
+- COD orders show a grey "COD" payment badge (turns green "Paid" on delivery) (normal for COD); yellow only for real attention.
 - Row actions share one button shape (`.assign`; `.assign.warn` red for fixes). To-do step dots are grey.
 - Phones (<=640px): each order row is a card (grid areas c-chk/c-order/...); keep every column's class.
 - Phone numbers shown in local format 01XXX-XXXXXX on one line. Header: Billing, WhatsApp (outline,

@@ -281,6 +281,19 @@ function makeDb(pool) {
       return (await q('SELECT * FROM support_tickets ORDER BY created_at DESC LIMIT $1', [limit])).rows;
     },
 
+    // Finished parcels whose Shopify order still needs the COD-standard update (paid / unfulfil),
+    // e.g. statuses that arrived before that logic existed. All shops.
+    async shipmentsNeedingShopifyCatchUp(limit = 200) {
+      return (await q(
+        `SELECT s.shop, s.shopify_order_id FROM shipments s JOIN shops sh ON sh.shop = s.shop AND sh.uninstalled_at IS NULL
+          WHERE s.status = 'sent' AND s.consignment_id IS NOT NULL AND (
+            (lower(s.pathao_status) IN ('pickup-cancelled', 'pickup_cancelled', 'pickup-canceled'))
+            OR (s.shopify_fulfillment_id IS NOT NULL AND lower(s.pathao_status) IN ('returned', 'paid-return', 'cancelled', 'cancelled_return_received'))
+            OR (s.shopify_paid_at IS NULL AND lower(s.pathao_status) = 'delivered'))
+          ORDER BY s.updated_at DESC LIMIT $1`, [limit]
+      )).rows;
+    },
+
     async pendingShopifySync(shop, limit = 25) {
       return (await q(
         `SELECT shopify_order_id FROM shipments WHERE shop = $1 AND status = 'sent' AND consignment_id IS NOT NULL
