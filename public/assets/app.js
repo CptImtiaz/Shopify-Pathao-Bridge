@@ -55,7 +55,7 @@
   const sfConnected = () => Boolean(S().steadfast && S().steadfast.connected && !S().steadfast.auth_error);
   const sfRejected = () => Boolean(S().steadfast && S().steadfast.auth_error);
   // Why an unsent order is waiting for the merchant (null = not on hold).
-  const badPhoneOf = (o) => Boolean(o.fraud && o.fraud.reasons.some((r) => /not a valid|No phone/.test(r.text)));
+  const badPhoneOf = (o) => Boolean(o.fraud && o.fraud.reasons.some((r) => /not a valid|isn't a Bangladesh mobile|No phone/.test(r.text)));
   // Something must be fixed before this order can be booked (null = nothing).
   function errorReason(o) {
     if (o.cancelled || !canSend(o)) return null;
@@ -139,11 +139,11 @@
     if (errorReason(o)) return 'Needs fixing';
     if (!s) return o.cancelled ? 'Cancelled' : 'Not sent';
     if (held(o)) return 'Held for review';
-    if (s.status === 'failed') return 'Refused';
+    if (s.status === 'failed') return `Refused by ${cname(s.courier)}`;
     if (s.status === 'skipped') return 'Not sent';
     if (s.status === 'processing') return 'Sending…';
     const p = ps(o).replace(/^order\./, '');
-    const map = [[/approval.?pending/, 'Awaiting confirmation'], [/exceptional/, 'Needs attention'], [/partial/, 'Partially delivered'], [/paid.?return/, 'Paid return'], [/deliver.*fail|fail/, 'Delivery failed'], [/assigned.?for.?delivery|out.?for/, 'Out for delivery'],
+    const map = [[/approval.?pending/, 'Waiting to confirm'], [/exceptional/, 'Lost or damaged'], [/partial/, 'Partially delivered'], [/paid.?return/, 'Returned · fee paid'], [/deliver.*fail|fail/, 'Delivery failed'], [/assigned.?for.?delivery|out.?for/, 'Out for delivery'],
       [/deliver/, 'Delivered'], [/return/, 'Returned'], [/pickup.?cancel|cancel/, 'Cancelled'], [/assigned.?for.?pickup/, 'Rider assigned'], [/picked/, 'Picked up'],
       [/sorting/, 'At sorting hub'], [/hub/, 'At delivery hub'], [/transit/, 'In transit'], [/hold/, 'On hold']];
     const hit = map.find(([re]) => re.test(p));
@@ -159,7 +159,7 @@
     const bad = f.reasons.find((r) => r.level === f.level) || f.reasons[0];
     if (!bad) return '';
     const t = bad.text;
-    if (/not a valid|No phone/.test(t)) return 'Invalid phone';
+    if (/not a valid|isn't a Bangladesh mobile|No phone/.test(t)) return 'Invalid phone';
     if (/Shopify flags|Shopify suggests/.test(t)) return 'Shopify flagged';
     if (/returned or cancelled (\d+) of/.test(t)) return `${h.successRate}% success`;
     if (/returned or cancelled/.test(t)) return `${h.returned + h.cancelled} past return`;
@@ -173,7 +173,7 @@
     if (o.cancelled && !o.shipment) return null;
     if (o.shipment && o.shipment.status === 'sent') return { label: 'Track', cls: 'btn sm', act: 'open' };
     if (o.shipment && o.shipment.status === 'processing') return null;
-    const badPhone = o.fraud && o.fraud.reasons.some((r) => /not a valid|No phone/.test(r.text));
+    const badPhone = o.fraud && o.fraud.reasons.some((r) => /not a valid|isn't a Bangladesh mobile|No phone/.test(r.text));
     if (badPhone) return { label: 'Fix phone', cls: 'btn sm warn', act: 'shopify' };
     if (held(o) || (o.fraud && o.fraud.level === 'high')) return { label: 'Review', cls: 'btn sm warn', act: 'open' };
     if (o.shipment && o.shipment.status === 'failed') return { label: 'Retry', cls: 'btn sm', act: 'send' };
@@ -491,7 +491,9 @@
       return `<i class="${on ? 'on' : ''}${cur ? ' cur' : ''}${st.bad && i === Math.max(st.step, 1) ? ' x' : ''}"></i>`;
     }).join('');
     const label = stageLabel(o);
-    const why = errorReason(o) || waitReason(o) || (o.shipment && o.shipment.status !== 'sent' && o.shipment.error) || label;
+    const cn = o.shipment ? cname(o.shipment.courier) : '';
+    const longer = { 'Waiting to confirm': `The rider marked it; waiting for ${cn} to confirm`, 'Lost or damaged': `Lost or damaged · contact ${cn}`, 'Returned · fee paid': 'Returned; the customer paid the delivery fee' }[label];
+    const why = errorReason(o) || waitReason(o) || (o.shipment && o.shipment.status !== 'sent' && o.shipment.error) || longer || label;
     return `<span class="st st-${tone}" title="${esc(why)}"><svg viewBox="0 0 24 24" aria-hidden="true">${ST_ICON[tone]}</svg><span class="st-t">${esc(label)}</span></span><span class="dots dots-${tone}">${dots}</span>`;
   }
   // Fraud check: mini ring gauge with the score, label and delivery history.
@@ -738,7 +740,7 @@
         <div><div class="hero-title"><h2>Pathao</h2>${ready ? '<span class="badge green">Connected</span>' : '<span class="badge yellow">Setup needed</span>'}${webhookLive() ? '<span class="live-pill"><i></i>Live</span>' : ''}${s.pathao_env === 'sandbox' ? '<span class="badge yellow">Test mode</span>' : ''}</div>
         <p class="meta">${esc(p.tagline || '')}</p></div></div>
       <div class="hero-r"><span class="hero-ring" style="background:conic-gradient(#303030 0 ${pct}%, #e3e3e3 ${pct}% 100%)"><b>${done}/${steps.length}</b></span><span class="meta">${done === steps.length ? 'All set' : 'steps done'}</span></div>
-      <div class="hero-facts"><div><span>Pickup store</span><b>${esc(s.pathao_store_name || (s.pathao_store_id ? 'Store #' + s.pathao_store_id : '—'))}</b></div>
+      <div class="hero-facts"><div><span>Pickup store</span><b>${esc(s.pathao_store_name || (s.pathao_store_id ? '#' + s.pathao_store_id : '—'))}</b></div>
         <div><span>Default</span><b>${defKey() === 'pathao' ? 'Yes' : 'No'}</b></div>
         <div><span>Auto-send</span><b>${s.auto_send ? 'On' : 'Off'}</b></div>
         <div><span>Delivery type</span><b>${String(s.delivery_type) === '12' ? 'Express' : 'Regular'}</b></div></div>`;
@@ -756,7 +758,7 @@
     });
     document.querySelector('[data-step="account"] [data-summary]').textContent = s.connected ? `${s.pathao_username} · connected` : 'Client ID, secret, merchant email and password';
     document.querySelector('[data-step="delivery"] [data-summary]').textContent = s.pathao_store_id
-      ? `${s.pathao_store_name || 'Store #' + s.pathao_store_id} · ${String(s.delivery_type) === '12' ? 'Express' : 'Regular'} · ${Number(s.default_weight) || 0.5} kg${defKey() === 'pathao' ? ' · default' : ''}`
+      ? `${s.pathao_store_name || 'Pickup store #' + s.pathao_store_id} · ${String(s.delivery_type) === '12' ? 'Express' : 'Regular'} · ${Number(s.default_weight) || 0.5} kg${defKey() === 'pathao' ? ' · default' : ''}`
       : 'Pickup store, parcel weight, note, delivery type';
     document.querySelector('[data-step="webhook"] [data-summary]').innerHTML = webhookLive() ? '<span class="live" style="margin:0"><i></i>Live</span>' : webhookSaved('pathao') ? 'Saved' : 'Pathao tells ShipBridge the moment a parcel moves';
     const wh = state.boot.pathaoWebhook || {};
@@ -890,7 +892,7 @@
     setVal('wh_url', state.boot.pathaoWebhook.url); setVal('wh_secret', state.boot.pathaoWebhook.secret);
     const sel = $('pathao_store_id');
     if (s.pathao_store_id && !sel.querySelector(`option[value="${s.pathao_store_id}"]`)) {
-      sel.innerHTML = `<option value="${esc(s.pathao_store_id)}">${esc(s.pathao_store_name || 'Store #' + s.pathao_store_id)}</option>`;
+      sel.innerHTML = `<option value="${esc(s.pathao_store_id)}">${esc(s.pathao_store_name || 'Pickup store #' + s.pathao_store_id)}</option>`;
     }
     sel.value = s.pathao_store_id ? String(s.pathao_store_id) : '';
   }
@@ -1040,7 +1042,7 @@
     const cp = t.closest('[data-copy]');
     if (cp) {
       const el = $(cp.dataset.copy);
-      try { await navigator.clipboard.writeText(el.value); toast('Copied'); } catch (e) { el.select(); toast('Press Ctrl+C to copy'); }
+      try { await navigator.clipboard.writeText(el.value); toast('Copied'); } catch (e) { el.select(); toast('Press Ctrl+C (⌘C on Mac) to copy'); }
       return;
     }
     const ts = t.closest('[data-toggle-step]');
@@ -1049,7 +1051,7 @@
     if (wn) { savePrefs({ fulfill_when: wn.dataset.when }); return; }
     if (t.closest('#copy-url')) {
       try { await navigator.clipboard.writeText(state.boot.pathaoWebhook.url); toast('Callback URL copied'); }
-      catch (e) { $('wh_url').select(); toast('Press Ctrl+C to copy the selected URL'); }
+      catch (e) { $('wh_url').select(); toast('Press Ctrl+C (⌘C on Mac) to copy the selected URL'); }
       return;
     }
     if (t.closest('#reload-stores')) { const b = t.closest('button'); try { await busy(b, async () => { await loadStores(S().pathao_store_id); renderAll(); toast('Stores reloaded'); }); } catch (e) { toast(e.message, true); } return; }

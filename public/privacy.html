@@ -3,48 +3,63 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Privacy Policy – ShipBridge for Pathao</title>
+  <title>Privacy Policy – ShipBridge: BD Courier Sync</title>
   <style>
-    body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 20px; color: #222; }
-    h1 { font-size: 28px; } h2 { font-size: 20px; margin-top: 32px; }
+    body { font: 16px/1.6 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 20px; color: #303030; }
+    h1 { font-size: 28px; line-height: 1.25; } h2 { font-size: 20px; margin-top: 32px; }
+    a { color: #005bd3; } li { margin: 4px 0; }
   </style>
 </head>
 <body>
-  <h1>Privacy Policy – ShipBridge for Pathao</h1>
-  <p><em>Last updated: [DATE]</em></p>
+  <h1>Privacy Policy – ShipBridge: BD Courier Sync</h1>
+  <p><em>Last updated: 5 November 2026</em></p>
 
-  <p>ShipBridge for Pathao ("the App") is provided by [YOUR COMPANY NAME] ("we", "us"). This policy explains what
-  data the App accesses when a Shopify merchant installs it, and how that data is used.</p>
+  <p>ShipBridge: BD Courier Sync ("ShipBridge", "the app") is provided by AutoCourier BD ("we", "us").
+  ShipBridge sends a Shopify store's orders to the delivery couriers the merchant chooses (Pathao and Steadfast)
+  and keeps the Shopify orders up to date with each parcel's status. This policy explains what data the app uses,
+  what it keeps, who it is shared with, and how it is deleted.</p>
 
-  <h2>Data we access</h2>
+  <h2>Data the app reads from Shopify</h2>
   <ul>
-    <li><b>Order data from your Shopify store</b>: order number, line items, weights, totals, outstanding balance,
-      order note and tags, and the shipping recipient's name, phone number and address.</li>
-    <li><b>Your Pathao Merchant API credentials</b>, which you enter in the App.</li>
+    <li>Order details: order number, date, products and quantities, weights, totals, outstanding balance, order note and tags.</li>
+    <li>The delivery recipient's name, phone number and shipping address.</li>
+    <li>The order's payment and fulfillment status, so the app can show it and update it.</li>
   </ul>
 
-  <h2>How we use it</h2>
-  <p>Order data is used only to create delivery orders in your own Pathao merchant account, on your instruction
-  (manually or via the auto-send setting you enable). It is sent directly to Pathao's Merchant API.</p>
-
-  <h2>What we store</h2>
+  <h2>How the data is used</h2>
   <ul>
-    <li>Shopify order IDs and order numbers, Pathao consignment IDs, delivery status, cash-to-collect amount and any error message.</li>
-    <li>Your settings and Pathao credentials, encrypted with AES-256-GCM.</li>
-    <li>Shopify access tokens, encrypted.</li>
+    <li>To create a delivery for an order in the merchant's own courier account, when the merchant sends it or turns on automatic sending.</li>
+    <li>To show each parcel's delivery status and update the Shopify order: fulfilled with tracking when sent, paid when delivered, unfulfilled if returned (each can be switched off).</li>
+    <li>To show a fraud check: Shopify's own risk assessment, the phone number's format, and that customer's past deliveries from the same store.</li>
   </ul>
-  <p>We do <b>not</b> store customer names, phone numbers, emails or addresses. They are read from Shopify at the
-  moment an order is sent and passed to Pathao.</p>
 
-  <h2>Sharing</h2>
-  <p>Data is shared only with Pathao Ltd. (to fulfil deliveries) and our hosting provider. We never sell data.</p>
+  <h2>Data we store</h2>
+  <ul>
+    <li>Shopify order IDs and order numbers.</li>
+    <li>For each parcel: the courier, parcel ID, tracking code, delivery status, the courier's tracking messages, cash to collect and the delivery fee.</li>
+    <li>The recipient's phone number for each parcel. It is used only to show that customer's delivery history in the fraud check for the same store, and is never shared with other stores.</li>
+    <li>Notes the merchant writes on orders inside the app (these are never sent to couriers).</li>
+    <li>The merchant's app settings.</li>
+    <li>Courier account details (Pathao login, Steadfast API key and secret key) and Shopify access tokens. Passwords, secret keys and tokens are encrypted with AES-256-GCM.</li>
+  </ul>
+  <p>We do not store customer names, email addresses or shipping addresses. They are read from Shopify when an order is sent and passed straight to the courier.</p>
+
+  <h2>Who the data is shared with</h2>
+  <ul>
+    <li>The courier the merchant chooses for an order (Pathao or Steadfast), only to deliver that order.</li>
+    <li>Our hosting provider, Railway, which runs the app and its database in Singapore.</li>
+    <li>Shopify, which handles all billing for paid plans. We never see card details.</li>
+  </ul>
+  <p>We never sell data or use it for advertising.</p>
 
   <h2>Retention and deletion</h2>
-  <p>When you uninstall the App, your Pathao credentials and Shopify tokens are deleted immediately, and all
-  remaining store data is deleted when Shopify sends the <code>shop/redact</code> request (48 hours after uninstall).
-  We honour Shopify's customer data and redaction requests.</p>
+  <ul>
+    <li>When a merchant uninstalls the app, their courier details and Shopify tokens are deleted immediately.</li>
+    <li>All other data for that store is deleted when Shopify sends its store data deletion request, 48 hours after uninstall.</li>
+    <li>We act on Shopify's customer data requests and customer redaction requests, which remove a customer's stored phone numbers and order records.</li>
+  </ul>
 
   <h2>Contact</h2>
-  <p>Questions or data requests: [SUPPORT EMAIL]</p>
+  <p>Questions or data requests: {{CONTACT}}</p>
 </body>
 </html>

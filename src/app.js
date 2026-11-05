@@ -68,7 +68,15 @@ function createApp({ config, pool, fetchImpl: rawFetch = fetch, log = console, d
       else if (/[\\/]couriers[\\/]/.test(file)) res.set('Cache-Control', 'no-cache');
     },
   }));
-  app.get('/privacy', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'privacy.html')));
+  // Privacy policy: the contact line comes from SUPPORT_EMAIL / SUPPORT_WHATSAPP.
+  const privacyHtml = fs.readFileSync(path.join(PUBLIC_DIR, 'privacy.html'), 'utf8');
+  app.get('/privacy', (req, res) => {
+    const e = (v) => String(v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const parts = [];
+    if (config.supportEmail) parts.push(`<a href="mailto:${e(config.supportEmail)}">${e(config.supportEmail)}</a>`);
+    if (config.supportWhatsapp) parts.push(`WhatsApp <a href="https://wa.me/${e(String(config.supportWhatsapp).replace(/\D/g, ''))}">${e(config.supportWhatsapp)}</a>`);
+    res.type('html').set('Cache-Control', 'public, max-age=3600').send(privacyHtml.replace('{{CONTACT}}', parts.join(' or ') || 'through the app listing'));
+  });
   // Install is managed by Shopify (shopify.app.toml), so the OAuth callback just
   // sends the merchant into the embedded app.
   app.get('/auth/callback', (req, res) => {

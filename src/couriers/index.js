@@ -8,8 +8,8 @@
 const AVAILABLE = ['pathao', 'steadfast'];
 
 const CATALOG = [
-  { key: 'pathao', name: 'Pathao', color: '#E8202A', tagline: 'On-demand logistics and delivery across Bangladesh', region: 'Bangladesh' },
-  { key: 'steadfast', name: 'Steadfast', color: '#13A538', tagline: 'Fast and reliable delivery across Bangladesh', region: 'Bangladesh' },
+  { key: 'pathao', name: 'Pathao', color: '#E8202A', tagline: 'Delivery across Bangladesh', region: 'Bangladesh' },
+  { key: 'steadfast', name: 'Steadfast', color: '#13A538', tagline: 'Delivery across Bangladesh', region: 'Bangladesh' },
   { key: 'redx', name: 'RedX', color: '#D7263D', tagline: 'Nationwide courier', region: 'Bangladesh' },
   { key: 'paperfly', name: 'Paperfly', color: '#1E88E5', tagline: 'E-commerce delivery', region: 'Bangladesh' },
   { key: 'carrybee', name: 'Carrybee', color: '#F5A300', tagline: 'Parcel delivery', region: 'Bangladesh' },
@@ -25,7 +25,7 @@ function listCouriers(settings, { pathao }) {
       const connected = pathao.hasCredentials(settings);
       status = connected && settings.pathao_store_id ? 'connected' : connected ? 'needs_store' : 'not_connected';
       detail = connected
-        ? `${settings.pathao_store_name || 'Store #' + settings.pathao_store_id || ''}${settings.pathao_env === 'sandbox' ? ' · Sandbox' : ''}`
+        ? `${settings.pathao_store_name || 'Pickup store #' + settings.pathao_store_id || ''}${settings.pathao_env === 'sandbox' ? ' · Sandbox' : ''}`
         : null;
     }
     if (available && c.key === 'steadfast') {

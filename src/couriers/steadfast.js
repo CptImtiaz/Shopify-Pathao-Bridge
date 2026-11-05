@@ -128,12 +128,12 @@ function buildSteadfastOrder(order, settings = {}) {
   }
   if (!phone.valid) {
     errors.push(candidates.length
-      ? `Phone "${candidates[0]}" is not a valid Bangladesh mobile number (needs 01XXXXXXXXX)`
+      ? `Phone "${candidates[0]}" isn't a Bangladesh mobile number. It should look like 01712345678.`
       : 'Order has no phone number');
   }
 
   const address = clean([s.address1, s.address2, s.city, s.province, s.zip].filter(Boolean).join(', '));
-  if (address.length < 10) errors.push('Shipping address is missing or shorter than 10 characters');
+  if (address.length < 10) errors.push('Address is too short for the courier. Add the area and city in Shopify.');
 
   let cod = order.outstanding != null ? order.outstanding : order.paid ? 0 : order.total;
   cod = Math.max(0, Math.round(cod));

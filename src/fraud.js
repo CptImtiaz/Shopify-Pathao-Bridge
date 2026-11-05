@@ -68,7 +68,7 @@ function assessOrder(order, ctx = {}) {
   const candidates = [order.shipping?.phone, ...(order.fallbackPhones || [])].filter(Boolean);
   const phone = candidates.map(normalizePhone).find((p) => p.valid) || null;
   if (!candidates.length) bump('high', 'No phone number on the order');
-  else if (!phone) bump('high', `Phone "${candidates[0]}" is not a valid Bangladesh mobile number`);
+  else if (!phone) bump('high', `Phone "${candidates[0]}" isn't a Bangladesh mobile number`);
 
   // 3. Address
   const s = order.shipping || {};

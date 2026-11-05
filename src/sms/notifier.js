@@ -48,7 +48,7 @@ function makeNotifier({ db, cipher, smsClient, log = console }) {
 
     const { phone, text, rawPhone } = buildOrderSms(order, s.sms_template);
     if (!phone) {
-      const msg = rawPhone ? `Phone "${rawPhone}" is not a valid Bangladesh mobile number` : 'Order has no phone number';
+      const msg = rawPhone ? `Phone "${rawPhone}" isn't a Bangladesh mobile number` : 'Order has no phone number';
       await db.finishSms(shop, order.id, 'failed', msg);
       return { sent: false, reason: msg };
     }

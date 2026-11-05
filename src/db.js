@@ -175,10 +175,11 @@ function makeDb(pool) {
          WHERE shop = $1`,
         [shop]
       );
-      // Drop merchant's Pathao credentials immediately on uninstall.
+      // Drop merchant's courier credentials (Pathao and Steadfast) immediately on uninstall.
       await q(
         `UPDATE settings SET pathao_client_secret_enc = NULL, pathao_password_enc = NULL,
            pathao_token_enc = NULL, pathao_refresh_enc = NULL, auto_send = FALSE,
+           steadfast_api_key = NULL, steadfast_secret_enc = NULL,
            sms_token_enc = NULL, sms_enabled = FALSE WHERE shop = $1`,
         [shop]
       );

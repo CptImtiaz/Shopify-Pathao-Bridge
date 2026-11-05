@@ -19,7 +19,7 @@ const PLANS = {
     trialDays: 7,
     monthlyOrderLimit: 300,
     tagline: 'For growing stores',
-    features: ['300 orders a month', 'Every feature in Free', 'Email support'],
+    features: ['300 orders a month', 'Every feature in Free', 'WhatsApp support'],
   },
   pro: {
     key: 'pro',

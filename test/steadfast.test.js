@@ -40,7 +40,7 @@ test('steadfast payload: clean phone, stripped characters, COD, unique invoice',
   assert.equal(payload.note, 'Call first');
   assert.equal(payload.item_description, 'Panjabi x 2');
   assert.equal(buildSteadfastOrder(order({ paid: true, outstanding: 0 })).payload.cod_amount, 0);
-  assert.match(buildSteadfastOrder(order({ shipping: { phone: '123' }, fallbackPhones: [] })).errors.join(' '), /not a valid/);
+  assert.match(buildSteadfastOrder(order({ shipping: { phone: '123' }, fallbackPhones: [] })).errors.join(' '), /isn't a Bangladesh mobile number/);
   assert.equal(invoiceFor({ id: '77', name: '' }), '77');
 });
 

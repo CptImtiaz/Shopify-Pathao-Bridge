@@ -163,7 +163,7 @@ function makeFulfillmentSync({ admin, db, log = console }) {
     const r = d.orderMarkAsPaid;
     // Already paid (e.g. prepaid, or marked by hand) is fine: nothing is owed.
     if (r.userErrors.length && !r.userErrors.some((e) => /already (been )?(marked as )?paid|fully paid|no outstanding|nothing to pay/i.test(e.message))) {
-      throw new Error(`Could not mark as paid: ${r.userErrors.map((e) => e.message).join('; ')}`);
+      throw new Error(`Couldn't mark this order Paid in Shopify (${r.userErrors.map((e) => e.message).join('; ')}). Mark it by hand in the order.`);
     }
   }
 

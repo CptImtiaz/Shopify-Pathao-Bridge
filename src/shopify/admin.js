@@ -13,7 +13,7 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
     const body = await res.json().catch(() => ({}));
     if (!res.ok || body.errors) {
       const msg = body.errors ? JSON.stringify(body.errors).slice(0, 300) : `HTTP ${res.status}`;
-      const err = new Error(`Shopify GraphQL error: ${msg}`);
+      const err = new Error(`Shopify didn't answer as expected (${msg}). Try again in a minute.`);
       err.status = res.status === 401 ? 401 : 502;
       throw err;
     }
@@ -190,7 +190,7 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
 
   async function createSubscription(shop, planKey, opts, interval = 'monthly') {
     const plan = PLANS[planKey];
-    if (!plan || plan.price <= 0) throw new Error('Unknown paid plan');
+    if (!plan || plan.price <= 0) throw new Error("That plan isn't available. Reload the page and pick again.");
     const storeHandle = shop.replace('.myshopify.com', '');
     const returnUrl = `https://admin.shopify.com/store/${storeHandle}/apps/${config.appHandle}`;
     const data = await graphql(

@@ -1,4 +1,4 @@
-# ShipBridge for Pathao — project notes for Claude
+# ShipBridge: BD Courier Sync — project notes for Claude
 
 ## Goal
 Shopify app that sends Shopify orders to Pathao Courier (Bangladesh). The owner wants to
@@ -127,6 +127,13 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   fits "Sent to Steadfast" 141px) | fraud minmax(140,1.35fr) | courier 136px.
 - Before changing the order table, re-run the overlap check (widths 1060–1600): the app
   area inside Shopify admin on a 1366px laptop is ~1060px wide.
+
+## Content (content report 2026-11-05)
+- App name "ShipBridge: BD Courier Sync" (shopify.app.toml; needs `shopify app deploy` to reach Shopify), provider
+  "AutoCourier BD" (privacy policy). Privacy contact comes from SUPPORT_EMAIL / SUPPORT_WHATSAPP (default WhatsApp).
+- Messages say what happened + what to do, no tech words ("Shopify didn't answer as expected... Try again in a minute").
+- Status pills stay short (fit 141px); longer meaning goes in the hover title (Waiting to confirm, Lost or damaged,
+  Returned · fee paid, Refused by <Courier>). Uninstall also deletes Steadfast keys.
 
 ## Design rules (design review 2026-11-05)
 - LOOK = Shopify Polaris (owner's choice 2026-11-05): "Polaris theme" block at the end of app.css overrides the

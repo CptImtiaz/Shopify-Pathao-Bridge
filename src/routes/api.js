@@ -258,7 +258,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
     if (b.default_note !== undefined) {
       const n = String(b.default_note).trim();
       if (n.length > 200) throw Object.assign(new Error('Default note is too long (max 200 characters)'), { status: 400 });
-      if (/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(n)) throw Object.assign(new Error('Default note cannot contain emoji'), { status: 400 });
+      if (/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(n)) throw Object.assign(new Error("Couriers can't print emoji. Remove them from the note."), { status: 400 });
       f.default_note = n || null;
     }
 
@@ -457,7 +457,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
 
   // Merchant's own note on an order (shown on hold orders). Empty text removes it.
   router.post('/orders/:id/note', wrap(async (req) => {
-    if (!/^\d+$/.test(req.params.id)) throw Object.assign(new Error('Unknown order'), { status: 400 });
+    if (!/^\d+$/.test(req.params.id)) throw Object.assign(new Error("That order isn't valid. Reload the page."), { status: 400 });
     const note = String(req.body?.note || '').trim();
     if (note.length > 500) throw Object.assign(new Error('Note is too long (max 500 characters)'), { status: 400 });
     await db.setNote(req.shop, req.params.id, note || null);
@@ -466,7 +466,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
 
   router.post('/orders/:id/refresh', wrap(async (req) => {
     const s = await db.getShipment(req.shop, req.params.id);
-    if (!s || !s.consignment_id) throw Object.assign(new Error('Order has not been sent to a courier'), { status: 404 });
+    if (!s || !s.consignment_id) throw Object.assign(new Error('Send this order to a courier first.'), { status: 404 });
     const status = await tracker.refreshShipment(req.shop, s, await db.getSettings(req.shop));
     admin.forgetOrders(req.shop);
     return { pathaoStatus: status };
@@ -513,7 +513,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
   router.post('/billing/subscribe', wrap(async (req) => {
     const plan = req.body?.plan;
     const interval = req.body?.interval === 'yearly' ? 'yearly' : 'monthly';
-    if (!PLANS[plan] || PLANS[plan].price <= 0) throw Object.assign(new Error('Unknown plan'), { status: 400 });
+    if (!PLANS[plan] || PLANS[plan].price <= 0) throw Object.assign(new Error("That plan isn't available. Reload the page and pick again."), { status: 400 });
     admin.forgetPlan(req.shop); // merchant comes back from Shopify's approve page: re-check the plan
     return { confirmationUrl: await admin.createSubscription(req.shop, plan, req.opts, interval) };
   }));

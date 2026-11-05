@@ -109,12 +109,12 @@ function buildPathaoOrder(order, settings) {
   }
   if (!phone.valid) {
     errors.push(candidates.length
-      ? `Phone "${candidates[0]}" is not a valid Bangladesh mobile number (needs 01XXXXXXXXX)`
+      ? `Phone "${candidates[0]}" isn't a Bangladesh mobile number. It should look like 01712345678.`
       : 'Order has no phone number');
   }
 
   const address = [s.address1, s.address2, s.city, s.province, s.zip].filter(Boolean).join(', ');
-  if (address.length < 10) errors.push('Shipping address is missing or shorter than 10 characters');
+  if (address.length < 10) errors.push('Address is too short for the courier. Add the area and city in Shopify.');
 
   const quantity = order.items.reduce((t, i) => t + i.quantity, 0) || 1;
   // Product weights from Shopify; the order's total weight when line items don't carry it.
@@ -129,7 +129,7 @@ function buildPathaoOrder(order, settings) {
   let cod = order.outstanding != null ? order.outstanding : order.paid ? 0 : order.total;
   cod = Math.max(0, Math.round(cod));
 
-  if (!settings.pathao_store_id) errors.push('No Pathao store selected in app settings');
+  if (!settings.pathao_store_id) errors.push('Choose a Pathao pickup store in Couriers.');
 
   const payload = {
     store_id: Number(settings.pathao_store_id),

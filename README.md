@@ -1,18 +1,18 @@
-# ShipBridge for Pathao: Shopify App
+# ShipBridge: BD Courier Sync (Shopify app)
 
-A public Shopify app that sends Shopify orders to **Pathao Courier** (Bangladesh): automatically when an order is placed, or in bulk from a dashboard inside Shopify admin. Built from the original `Shopify-Pathao-Bridge` single-store script.
+A public Shopify app by AutoCourier BD that sends Shopify orders to Bangladeshi couriers (**Pathao** and **Steadfast**; RedX, Paperfly, Carrybee and Bahok planned): automatically when an order is placed, or in bulk from a dashboard inside Shopify admin. It tracks every parcel live and keeps the Shopify order in step (fulfilled with tracking, paid on delivery, unfulfilled if returned), with a fraud check on every order. Built from the original `Shopify-Pathao-Bridge` single-store script.
 
 ## What changed from the original bridge
 
 | Original script | This app |
 |---|---|
 | One hard-coded store (`SHOP=wellessia`) | Any merchant can install it from the App Store |
-| Your Pathao login in env vars | Each merchant enters **their own** Pathao credentials (encrypted, AES-256-GCM) |
+| Your Pathao login in env vars | Each merchant enters **their own** Pathao or Steadfast credentials (encrypted, AES-256-GCM) |
 | Duplicate protection in memory (lost on restart) | Database lock per order, safe across restarts and multiple servers |
 | "Server start" cutoff for old orders | "Auto-send since" date per merchant, so redeploys never resend orders |
 | `/shopify/orders`, `/shopify/customers` open to anyone with the URL | Every API call needs a signed Shopify session token |
 | No UI | Embedded dashboard: orders list, send/retry, settings, plans |
-| No billing | Free (50 orders/month) + Pro ($9.99/month, 7-day trial) via Shopify Billing API |
+| No billing | Free (50 orders/month), Starter ($4.99, 300 orders) and Pro ($9.99, unlimited); yearly saves 17%; 7-day trial; via Shopify Billing API |
 
 It also fixes the main complaints in reviews of Pathao's own Shopify app (rated about 2 stars):
 - Phone numbers like `+880 880 17…` or `+880 017…` are cleaned up automatically.

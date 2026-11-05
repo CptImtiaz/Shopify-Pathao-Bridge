@@ -2,7 +2,7 @@
 # Hosted on Railway (Singapore).
 
 client_id = "3b858aa1ec536fea2e3c1086e4470115"
-name = "ShipBridge for Pathao Courier"
+name = "ShipBridge: BD Courier Sync"
 application_url = "https://shipbridge-production-7b96.up.railway.app"
 embedded = true
 

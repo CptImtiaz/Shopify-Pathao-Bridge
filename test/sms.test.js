@@ -78,7 +78,7 @@ test('SMS off, old orders, bad phone, provider failure; Pathao still books when 
   await a.webhook('/webhooks/orders/create', order(702, { shipping_address: { name: 'X', phone: '123', address1: 'House 1, Road 2, Banani' } }), 'orders/create');
   await a.settle();
   assert.equal(a.fake.state.sms.length, 0);
-  assert.match((await a.db.smsForOrders(SHOP, ['702']))[0].error, /not a valid Bangladesh mobile/);
+  assert.match((await a.db.smsForOrders(SHOP, ['702']))[0].error, /isn't a Bangladesh mobile number/);
 
   // Pathao connected + auto-send, SMS provider down
   await a.api('/settings', { method: 'POST', body: { pathao_client_id: 'c', pathao_client_secret: 's', pathao_username: 'u', pathao_password: 'p', pathao_store_id: 77, auto_send: true } });

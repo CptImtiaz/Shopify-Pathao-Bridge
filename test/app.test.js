@@ -140,7 +140,7 @@ test('manual send from dashboard, failure then retry after merchant fixes the or
   const byId = Object.fromEntries(r.data.results.map((x) => [x.id, x]));
   assert.equal(byId['701'].ok, true);
   assert.equal(byId['700'].ok, false);
-  assert.match(byId['700'].error, /not a valid Bangladesh mobile/);
+  assert.match(byId['700'].error, /isn't a Bangladesh mobile number/);
 
   const sent = JSON.parse(a.fake.calls.filter((c) => c.url.endsWith('/aladdin/api/v1/orders'))[0].body);
   const q = a.fake.calls.find((c) => c.body && c.body.includes('OneOrder')).body;
@@ -542,4 +542,15 @@ test('Pathao status spellings are stored in one form and pickup-cancelled counts
   assert.ok(DONE.test('pickup-cancelled'));
   assert.ok(DONE.test('partial-delivery'));
   assert.ok(!DONE.test('in-transit'));
+});
+
+test('privacy policy: no blanks, names Steadfast, shows the support contact', async (t) => {
+  const { startApp } = require('./helpers');
+  const a = await startApp();
+  t.after(() => a.close());
+  const html = await (await fetch(`${a.base}/privacy`)).text();
+  assert.doesNotMatch(html, /\[(DATE|YOUR COMPANY NAME|SUPPORT EMAIL)\]|\{\{CONTACT\}\}/);
+  assert.match(html, /Steadfast/);
+  assert.match(html, /AutoCourier BD/);
+  assert.match(html, /Questions or data requests: \S/);
 });
