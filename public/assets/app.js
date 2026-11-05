@@ -809,7 +809,7 @@
       <div class="hero-facts"><div><span>Balance</span><b>${state.sfBalance != null ? esc(taka(state.sfBalance)) : '—'}</b></div>
         <div><span>Default</span><b>${defKey() === 'steadfast' ? 'Yes' : 'No'}</b></div>
         <div><span>Auto-send</span><b>${s.auto_send && defKey() === 'steadfast' ? 'On' : 'Off'}</b></div>
-        <div><span>Updates</span><b title="${webhookLive('steadfast') ? 'Steadfast sends updates the moment a parcel moves' : 'Until Steadfast sends its first update, ShipBridge checks every minute'}">${webhookLive('steadfast') ? 'Live' : 'Auto · every min'}</b></div></div>`;
+        <div><span>Delivery type</span><b>${Number(s.sf_delivery_type) === 1 ? 'Point delivery' : 'Home delivery'}</b></div></div>`;
 
     const firstOpen = (steps.find((x) => !x.done) || {}).key || null;
     const open = state.section === undefined || state.section === 'auto' ? firstOpen : state.section;

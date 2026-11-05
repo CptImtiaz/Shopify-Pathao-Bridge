@@ -87,6 +87,8 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 - Webhook Save = step done (`*_webhook_saved_at`), summary "Saved", next step (Delivery settings)
   opens. No waiting / "not live" notes (owner's request). Summary turns "Live" by itself when the
   courier sends anything (pushed via /api/events). Only the wrong-token warning is shown.
+- Hero facts: Pathao = Pickup store, Default, Auto-send, Delivery type; Steadfast = Balance, Default,
+  Auto-send, Delivery type (Home/Point). No "Updates" tile (owner's request); Live is the pill in the title.
 - Auto-send and the default courier require a *connected* courier (Pathao: account + pickup
   store; Steadfast: keys, not paused). Orders auto-sent while the default isn't connected are
   skipped with "Auto-send: <Courier> (your default courier) is not connected".
