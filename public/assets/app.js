@@ -787,13 +787,32 @@
   }
   // What we really know about a courier's webhook. ShipBridge can't read the courier's portal,
   // so "Live" only comes from the courier actually calling; a call with the wrong secret is shown.
+  // After Save, wait up to 5 minutes for the courier's own test call (it can't be triggered from here).
+  const WAIT_MS = 5 * 60 * 1000;
+  state.whWait = state.whWait || {};
   function webhookState(wh, name, secretWord, portal) {
+    const key = name.toLowerCase(), since = state.whWait[key];
+    const after = (t) => Boolean(t && since && new Date(t).getTime() >= since - 2000);
+    if (since && after(wh.lastAt)) {
+      delete state.whWait[key];
+      toast(`${name} webhook connected · Live`);
+      return '';
+    }
     if (wh.refusedAt && (!wh.lastAt || new Date(wh.refusedAt) > new Date(wh.lastAt))) {
+      if (since && after(wh.refusedAt)) delete state.whWait[key];
       return `<span class="bad-line"><b>${name} is calling ShipBridge with a different ${secretWord}.</b> Make the ${secretWord} here and in the ${portal} the same, then save both.</span>`;
+    }
+    if (since && Date.now() - since < WAIT_MS) {
+      return `<span class="wait-line"><span class="spin" aria-hidden="true"></span><b>Waiting for ${name}'s test…</b> Now save the webhook in the ${portal}. This turns Live the moment ${name}'s test arrives.</span>`;
+    }
+    if (since) {
+      return `<span class="bad-line"><b>No test from ${name} in 5 minutes.</b> Check that the Callback URL saved in the ${portal} is exactly the one above (and the ${secretWord} matches), then save it there again.</span>`;
     }
     if (wh.live) return '';
     return `<span class="wait-line">Not live yet. Save the webhook in the ${portal}: ${name} sends a test, and this turns Live when it arrives.</span>`;
   }
+  // While waiting, re-check every 10 s (the courier's test also arrives instantly through live updates).
+  setInterval(() => { if (Object.keys(state.whWait || {}).length && state.page === 'couriers') refreshBoot().catch(() => {}); }, 10000);
   async function saveSteadfast() {
     const key = $('sf_api_key').value.trim(), secret = $('sf_secret_key').value.trim();
     if (!key) throw new Error('Enter your Steadfast API key');
@@ -1040,8 +1059,9 @@
         const field = courier === 'pathao' ? 'webhook_secret' : 'steadfast_webhook_token';
         const value = $(courier === 'pathao' ? 'wh_secret' : 'sf_wh_token').value.trim();
         apply(await api('/settings', { method: 'POST', body: { [field]: value } }));
+        state.whWait[courier] = Date.now();
         await refreshBoot();
-        toast('Saved');
+        toast(`Saved · now save it in the ${courier === 'pathao' ? 'Pathao Merchant Panel' : 'Steadfast portal'}`);
       });
       if (b.dataset.plan) return await busy(b, async () => { const r = await api('/billing/subscribe', { method: 'POST', body: { plan: b.dataset.plan, interval: state.period } }); window.open(r.confirmationUrl, '_top'); });
       if (b.dataset.downgrade !== undefined) {

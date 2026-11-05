@@ -76,6 +76,9 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   from real courier calls. A courier call with the wrong secret/token is refused (401) AND recorded
   (`pathao_webhook_error_at` / `steadfast_webhook_error_at`) -> red warning on the page; cleared
   when the secret/token is changed or a good call arrives.
+- Save on a webhook step starts a 5-minute wait for the courier's own test call (browser state
+  `whWait`): spinner line -> Live + toast when it arrives (pushed via /api/events), red warning
+  on a token mismatch, or a 'no test in 5 minutes, check the Callback URL' message.
 - Auto-send and the default courier require a *connected* courier (Pathao: account + pickup
   store; Steadfast: keys, not paused). Orders auto-sent while the default isn't connected are
   skipped with "Auto-send: <Courier> (your default courier) is not connected".
