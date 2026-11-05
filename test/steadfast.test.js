@@ -272,14 +272,14 @@ test('steadfast cancel_request: raised = message only, approved = cancelled; oth
   assert.equal(o.shipment.pathaoStatus, 'cancelled');
 });
 
-test('main Refresh asks couriers for active parcels only, and picks up a cancellation', async (t) => {
+test('the tracker asks couriers for active parcels only, and picks up a cancellation', async (t) => {
   const a = await steadfastShop(t);
   for (const id of [840, 841]) a.fake.state.orders[id] = gqlOrder(id);
   await a.api('/orders/send', { method: 'POST', body: { ids: ['840', '841'], courier: 'steadfast' } });
   await a.db.finishShipment(SHOP, '841', { pathao_status: 'delivered' });
   a.fake.state.steadfastStatus['5001'] = 'cancelled';
   const before = a.fake.calls.filter((c) => c.url.includes('/status_by_cid/')).length;
-  const r = await a.api('/orders/refresh-active', { method: 'POST' });
+  const r = { data: await a.tracker.refreshActive(SHOP, { limit: 20 }) };
   assert.deepEqual(r.data, { checked: 1, changed: 1, failed: 0 });
   assert.equal(a.fake.calls.filter((c) => c.url.includes('/status_by_cid/')).length - before, 1, 'delivered parcel not checked');
   assert.equal((await a.db.getShipment(SHOP, '840')).pathao_status, 'cancelled');
@@ -292,7 +292,7 @@ test('parcel removed in Steadfast (unknown while in review) goes back to Not sen
   let s = await a.db.getShipment(SHOP, '850');
   assert.ok(s.shopify_fulfillment_id, 'fulfilled when sent');
   a.fake.state.steadfastStatus['5001'] = 'unknown';
-  const r = await a.api('/orders/refresh-active', { method: 'POST' });
+  const r = { data: await a.tracker.refreshActive(SHOP, { limit: 20 }) };
   assert.equal(r.data.changed, 1);
   s = await a.db.getShipment(SHOP, '850');
   assert.equal(s.status, 'skipped');

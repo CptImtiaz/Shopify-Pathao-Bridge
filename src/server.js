@@ -5,6 +5,10 @@ const { makePool } = require('./pool');
 
 async function main() {
   const config = load();
+  if (!config.pathaoIntegrationSecret) {
+    console.warn('Warning: PATHAO_WEBHOOK_INTEGRATION_SECRET is not set. Saving the webhook in the Pathao panel may fail until it is.');
+  }
+  if (!config.adminPassword) console.warn('Note: ADMIN_PASSWORD is not set, so the owner page /admin is switched off.');
   const pool = makePool(config.databaseUrl);
   const { app, db, tracker } = createApp({ config, pool });
   await db.migrate();

@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const express = require('express');
 const { verifySessionToken, AuthError } = require('../shopify/auth');
 const { fromGraphql, normalizePhone } = require('../pathao/mapper');
+const { publicError } = require('../errors');
 const { assessOrder } = require('../fraud');
 const { summarise, RANGES } = require('../stats');
 const { PLANS, intervalFromSubscriptionName } = require('../plans');
@@ -32,7 +33,9 @@ function makeApiRouter({ redact = (t) => String(t), config, db, tokens, admin, p
       const status = e instanceof AuthError ? e.status : 500;
       // Tell App Bridge to fetch a fresh session token and retry.
       if (status === 401) res.set('X-Shopify-Retry-Invalid-Session-Request', '1');
-      res.status(status).json({ error: redact(e.message) });
+      const out = publicError(e instanceof AuthError ? e : Object.assign(e, { status }), redact);
+      log.error(`[ref ${out.ref}] auth ${req.method} ${req.path}:`, e);
+      res.status(status).json(out.body);
     }
   });
 
@@ -59,8 +62,10 @@ function makeApiRouter({ redact = (t) => String(t), config, db, tokens, admin, p
     try {
       res.json(await fn(req, res));
     } catch (e) {
-      log.error(`[${req.shop}] ${req.method} ${req.path}: ${e.message}`);
-      res.status(e.status && e.status < 600 ? e.status : 500).json({ error: redact(e.message) });
+      const out = publicError(e, redact);
+      // Full detail (stack included) stays in the server log only, under the same reference code.
+      log.error(`[ref ${out.ref}] [${req.shop}] ${req.method} ${req.path}:`, e);
+      res.status(out.status).json(out.body);
     }
   };
 
@@ -501,12 +506,6 @@ function makeApiRouter({ redact = (t) => String(t), config, db, tokens, admin, p
   }));
 
   // Check the latest status of parcels still on the way (also runs on its own every few minutes).
-  router.post('/orders/refresh-active', wrap(async (req) => {
-    const r = await tracker.refreshActive(req.shop, { limit: 20 });
-    admin.forgetOrders(req.shop);
-    return r;
-  }));
-
   // ---- SMS log ----
   router.get('/sms/log', wrap(async (req) => ({
     items: (await db.listSms(req.shop, 50)).map((r) => ({

@@ -263,7 +263,10 @@ test('embedded shell: CSP frame-ancestors, API key injected, bounce when opened 
   t.after(() => a.close());
   let res = await fetch(`${a.base}/?shop=${SHOP}&host=abc&embedded=1`);
   assert.equal(res.status, 200);
-  assert.equal(res.headers.get('content-security-policy'), `frame-ancestors https://${SHOP} https://admin.shopify.com;`);
+  const appCsp = res.headers.get('content-security-policy');
+  assert.match(appCsp, new RegExp(`frame-ancestors https://${SHOP.replace(/\./g, '\\.')} https://admin\\.shopify\\.com$`));
+  assert.match(appCsp, /script-src 'self' https:\/\/cdn\.shopify\.com;/);
+  assert.equal(res.headers.get('x-frame-options'), null, 'the app page must be frameable by Shopify admin');
   const html = await res.text();
   assert.match(html, /content="test_api_key"/);
   res = await fetch(`${a.base}/?shop=${SHOP}`, { redirect: 'manual' });
@@ -590,4 +593,46 @@ test('bad JSON body: 400 and the body is not written to the log', async (t) => {
   const res = await fetch(a.base + '/webhooks/steadfast/' + SHOP, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"phone":"01712345678",' });
   assert.ok(res.status >= 400 && res.status < 500);
   assert.ok(a.logs.every((l) => !String(l).includes('01712345678')), a.logs.join('\n'));
+});
+
+test('security headers on every response; only the app page may be framed (by Shopify admin)', async (t) => {
+  const a = await startApp();
+  t.after(() => a.close());
+  for (const p of ['/health', '/privacy', '/api/orders', '/assets/app.css']) {
+    const r = await fetch(a.base + p);
+    assert.equal(r.headers.get('x-content-type-options'), 'nosniff', p);
+    assert.equal(r.headers.get('x-frame-options'), 'DENY', p);
+    assert.match(r.headers.get('strict-transport-security'), /max-age=31536000/, p);
+    assert.match(r.headers.get('content-security-policy'), /frame-ancestors 'none'/, p);
+    assert.equal(r.headers.get('access-control-allow-origin'), null, p);
+  }
+});
+
+test('errors: internal details are hidden behind a reference code; merchant messages stay', async (t) => {
+  const { publicError } = require('../src/errors');
+  const db = Object.assign(new Error('relation "shipments" does not exist'), { code: '42P01', severity: 'ERROR', routine: 'x' });
+  const out = publicError(db);
+  assert.equal(out.status, 500);
+  assert.doesNotMatch(out.body.error, /relation|shipments/);
+  assert.match(out.body.error, new RegExp(out.ref));
+  assert.match(out.ref, /^[0-9A-F]{8}$/);
+  assert.match(publicError(new TypeError("Cannot read properties of undefined (reading 'x')")).body.error, /Something went wrong/);
+  assert.match(publicError(new Error('connect ECONNREFUSED 10.0.0.5:5432')).body.error, /Something went wrong/);
+  assert.match(publicError(Object.assign(new Error('x'), { name: 'TimeoutError' })).body.error, /took too long/);
+  const ok = publicError(Object.assign(new Error('Pathao refused: invalid phone'), { status: 400 }));
+  assert.equal(ok.body.error, 'Pathao refused: invalid phone');
+  assert.ok(ok.body.ref);
+  const a = await startApp();
+  t.after(() => a.close());
+  const r = await a.api('/orders/send', { method: 'POST', body: { ids: 'not-a-list' } });
+  assert.ok(r.data.ref || r.status < 500);
+});
+
+test('owner page: at most 5 password attempts per minute per IP', async (t) => {
+  const a = await startApp({ adminPassword: 'pw-123456' });
+  t.after(() => a.close());
+  const go = (pw, ip) => fetch(a.base + '/admin', { headers: { Authorization: 'Basic ' + Buffer.from('x:' + pw).toString('base64'), 'X-Forwarded-For': ip } });
+  for (let i = 0; i < 5; i += 1) assert.equal((await go('wrong', '1.2.3.4')).status, 401);
+  assert.equal((await go('pw-123456', '1.2.3.4')).status, 429, 'locked for the rest of the minute, even with the right password');
+  assert.equal((await go('pw-123456', '5.6.7.8')).status, 200, 'other addresses are not affected');
 });

@@ -7,6 +7,24 @@ const { makeOwnerRouter } = require('./routes/owner');
 const express = require('express');
 const compression = require('compression');
 const { makeRedactor, secretsOf, redactingLog } = require('./redact');
+const helmet = require('helmet');
+const { publicError } = require('./errors');
+
+// Content-Security-Policy: scripts only from this app and Shopify (App Bridge); product images from
+// Shopify's CDN; no plugins; forms post only here. frameAncestors decides who may frame the page.
+const csp = (frameAncestors) => [
+  "default-src 'self'",
+  "script-src 'self' https://cdn.shopify.com",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: https://cdn.shopify.com",
+  "font-src 'self'",
+  "connect-src 'self' https://*.shopify.com https://*.shopifysvc.com https://*.myshopify.com",
+  "frame-src 'self' https://*.shopify.com",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self' https://*.shopify.com",
+  `frame-ancestors ${frameAncestors}`,
+].join('; ');
 const crypto = require('crypto');
 const { makeCipher } = require('./crypto');
 const { makeDb } = require('./db');
@@ -55,6 +73,19 @@ function createApp({ config, pool, fetchImpl: rawFetch = fetch, log = console, d
 
   const app = express();
   app.disable('x-powered-by');
+  // Security headers on every response. Scripts only from this app and Shopify's App Bridge CDN.
+  // Nothing may frame these pages (X-Frame-Options DENY) except the app page itself, which only
+  // the merchant's Shopify admin may frame (set in the app route below).
+  app.use(helmet({
+    contentSecurityPolicy: false, // set below, so the app page can use its own frame-ancestors
+    frameguard: { action: 'deny' },
+    strictTransportSecurity: { maxAge: 31536000, includeSubDomains: true },
+    crossOriginOpenerPolicy: false, // Shopify billing / App Bridge open admin windows
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: 'same-site' },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  }));
+  app.use((req, res, next) => { res.set('Content-Security-Policy', csp("'none'")); next(); });
   app.set('trust proxy', true);
   // Gzip JSON, HTML, JS and CSS. The order list and app.js shrink ~5-8x.
   app.use(compression());
@@ -114,7 +145,8 @@ function createApp({ config, pool, fetchImpl: rawFetch = fetch, log = console, d
     const shop = String(req.query.shop || '');
     // Required for embedded apps: only Shopify admin may frame this page.
     const ancestors = isValidShop(shop) ? `https://${shop} https://admin.shopify.com` : 'https://admin.shopify.com';
-    res.set('Content-Security-Policy', `frame-ancestors ${ancestors};`);
+    res.set('Content-Security-Policy', csp(ancestors));
+    res.removeHeader('X-Frame-Options'); // the app page lives inside Shopify admin; CSP frame-ancestors decides who may frame it
 
     // Opened outside the admin (e.g. straight from the install link): bounce into the admin.
     if (isValidShop(shop) && req.query.embedded !== '1' && !req.query.host) {
@@ -131,8 +163,9 @@ function createApp({ config, pool, fetchImpl: rawFetch = fetch, log = console, d
       log.warn(`Rejected request body (${err.type}) on ${req.method} ${req.path}`);
       return res.status(err.status || 400).json({ error: 'The request could not be read. Try again.' });
     }
-    log.error(`Unhandled error on ${req.method} ${req.path}:`, err); // redacted: secrets + personal data
-    return res.status(500).json({ error: 'Internal server error' });
+    const out = publicError(err, redact);
+    log.error(`[ref ${out.ref}] Unhandled error on ${req.method} ${req.path}:`, err); // redacted: secrets + personal data
+    return res.status(out.status).json(out.body);
   });
 
   return { app, db, tracker, bus };

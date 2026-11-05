@@ -19,10 +19,29 @@ function safeEqual(a, b) {
 function makeOwnerRouter({ config, db }) {
   const router = express.Router();
 
+  // At most 5 password attempts per minute per IP address (wrong or right), then 429 for the rest of the minute.
+  const LOGIN_PER_MIN = 5;
+  const tries = new Map(); // ip -> { start, n }
+  const clientIp = (req) => {
+    const xff = String(req.headers['x-forwarded-for'] || '').split(',').map((x) => x.trim()).filter(Boolean);
+    return xff.length ? xff.at(-1) : req.socket.remoteAddress || 'unknown'; // last hop = what Railway's edge saw
+  };
+
   router.use((req, res, next) => {
     if (!config.adminPassword) return res.status(404).send('Not found');
     const [scheme, encoded] = String(req.headers.authorization || '').split(' ');
     const pass = scheme === 'Basic' && encoded ? Buffer.from(encoded, 'base64').toString().split(':').slice(1).join(':') : null;
+    if (pass) {
+      const now = Date.now(), ip = clientIp(req);
+      let t = tries.get(ip);
+      if (!t || now - t.start >= 60000) { t = { start: now, n: 0 }; tries.set(ip, t); }
+      if (tries.size > 5000) for (const [k, v] of tries) if (now - v.start >= 60000) tries.delete(k);
+      t.n += 1;
+      if (t.n > LOGIN_PER_MIN) {
+        res.set('Retry-After', String(Math.ceil((t.start + 60000 - now) / 1000)));
+        return res.status(429).send('Too many attempts. Wait a minute and try again.');
+      }
+    }
     if (pass && safeEqual(pass, config.adminPassword)) return next();
     res.set('WWW-Authenticate', 'Basic realm="ShipBridge owner", charset="UTF-8"');
     return res.status(401).send('Login required');

@@ -205,3 +205,14 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   uninstall (shop/redact) and Shopify customer redaction only.
 - Pathao password is encrypted (AES-256-GCM), not hashed, because it must be sent to Pathao; the app has no user
   passwords of its own (Shopify session tokens). Steadfast Api-Key is plaintext in DB (useless without the encrypted secret).
+
+## Launch checks (2026-11-05)
+- helmet on every response: nosniff, X-Frame-Options DENY, HSTS 1 year, CSP from `csp()` in app.js (scripts: self +
+  cdn.shopify.com only; images self + cdn.shopify.com). The app page route replaces CSP with frame-ancestors =
+  shop + admin.shopify.com and removes X-Frame-Options (embedded app). Inline <script> is not allowed: keep JS in app.js.
+- Errors go through src/errors.js `publicError`: merchant-facing messages shown; internal ones (DB/network/
+  programming errors, SQL, file paths) become a generic message. Every error carries `ref` (8 hex), logged as `[ref X]`.
+- /admin: 5 password attempts per minute per IP (last X-Forwarded-For hop), then 429.
+- Start-up warns if PATHAO_WEBHOOK_INTEGRATION_SECRET or ADMIN_PASSWORD is missing; required vars still stop start-up.
+- `POST /api/orders/refresh-active` removed (unused). No CORS headers sent (same-origin only). Postgres has no public
+  port/domain on Railway (private network only).
