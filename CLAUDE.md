@@ -68,10 +68,11 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   delivery type, parcel weight, note; Steadfast: delivery type home/hub (`delivery_type` 1 only sent
   for hub), product list (`item_description`, on by default), item count (`total_lot`), second phone
   (`alternative_phone`), note). The note for rider is one shared setting. Webhook status shows just "Live".
-- Webhook configuration has an editable secret (Pathao) / auth token (Steadfast) and **Save & test**:
-  `POST /api/webhooks/test` makes ShipBridge call its own callback URL signed like the courier
-  (`X-ShipBridge-Test: 1`). That proves address + secret; it never turns on "Live" (only real
-  courier traffic does).
+- Webhook configuration: editable secret (Pathao) / auth token (Steadfast) + Save. No self-test
+  (removed: ShipBridge can't read the courier's portal, so a self-test proved nothing). "Live" only
+  from real courier calls. A courier call with the wrong secret/token is refused (401) AND recorded
+  (`pathao_webhook_error_at` / `steadfast_webhook_error_at`) -> red warning on the page; cleared
+  when the secret/token is changed or a good call arrives.
 - Auto-send and the default courier require a *connected* courier (Pathao: account + pickup
   store; Steadfast: keys, not paused). Orders auto-sent while the default isn't connected are
   skipped with "Auto-send: <Courier> (your default courier) is not connected".

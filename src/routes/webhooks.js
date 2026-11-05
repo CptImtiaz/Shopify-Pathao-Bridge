@@ -140,13 +140,17 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
     if (!isValidShop(shop)) return res.status(404).send('Unknown shop');
     const settings = await db.getSettings(shop);
     const sig = req.get('X-PATHAO-Signature') || '';
-    if (!settings.webhook_secret || !safeEqual(sig, settings.webhook_secret)) return res.status(401).send('Bad signature');
+    if (!settings.webhook_secret || !safeEqual(sig, settings.webhook_secret)) {
+      // Pathao reached this store's address with a different secret: show it on the Couriers page.
+      log.warn(`[${shop}] pathao webhook refused: secret does not match`);
+      await db.updateSettings(shop, { pathao_webhook_error_at: new Date() }).catch(() => {});
+      if (admin.forgetOrders) admin.forgetOrders(shop, 'courier');
+      return res.status(401).send('Bad signature');
+    }
 
     const body = req.body || {};
     const event = String(body.event || '');
-    // A ShipBridge self-test proves the address and secret; "Live" waits for Pathao itself.
-    if (req.get('X-ShipBridge-Test') === '1') return res.status(202).send('OK');
-    await db.updateSettings(shop, { pathao_webhook_at: new Date() }).catch(() => {});
+    await db.updateSettings(shop, { pathao_webhook_at: new Date(), pathao_webhook_error_at: null }).catch(() => {});
     if (event === 'webhook_integration' || !body.consignment_id) { if (admin.forgetOrders) admin.forgetOrders(shop, 'courier'); return res.status(202).send('OK'); }
 
     const shipment = await db.findShipmentByConsignment(shop, body.consignment_id);
@@ -183,12 +187,17 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
     const sigOk = Boolean(token && sig && safeEqual(sig.toLowerCase(), expected));
     const bearerOk = Boolean(token && bearer && safeEqual(bearer, token));
     // A signature, when sent, must match; otherwise the bearer token must.
-    if (!token || (sig ? !sigOk : !bearerOk)) return res.status(401).json({ status: 'error', message: 'Bad signature' });
+    if (!token || (sig ? !sigOk : !bearerOk)) {
+      // Steadfast reached this store's address with a different auth token: show it on the Couriers page.
+      log.warn(`[${shop}] steadfast webhook refused: auth token does not match`);
+      await db.updateSettings(shop, { steadfast_webhook_error_at: new Date() }).catch(() => {});
+      if (admin.forgetOrders) admin.forgetOrders(shop, 'courier');
+      return res.status(401).json({ status: 'error', message: 'Bad signature' });
+    }
 
     let body;
     try { body = JSON.parse(raw.toString('utf8') || '{}'); } catch { return res.status(400).json({ status: 'error', message: 'Invalid JSON' }); }
-    if (req.get('X-ShipBridge-Test') === '1') return res.json({ status: 'success', test: true }); // self-test only
-    await db.updateSettings(shop, { steadfast_webhook_at: new Date() }).catch(() => {});
+    await db.updateSettings(shop, { steadfast_webhook_at: new Date(), steadfast_webhook_error_at: null }).catch(() => {});
 
     // Every event is logged (no customer data), so a missing update can always be traced.
     const type = String(body.notification_type || 'unknown');

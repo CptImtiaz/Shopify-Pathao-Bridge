@@ -702,8 +702,7 @@
       : 'Pickup store, delivery type, parcel weight, note for rider';
     document.querySelector('[data-step="webhook"] [data-summary]').innerHTML = webhookLive() ? '<span class="live" style="margin:0"><i></i>Live</span>' : 'Pathao tells ShipBridge the moment a parcel moves';
     const wh = state.boot.pathaoWebhook || {};
-    $('wh-state').innerHTML = wh.live ? ''
-      : wh.secret ? '<span class="wait-line">Secret saved. Waiting for the first update from Pathao.</span>' : '';
+    $('wh-state').innerHTML = webhookState(wh, 'Pathao', 'secret key', 'Pathao Merchant Panel');
 
     const miss = (state.boot.permissions && state.boot.permissions.missing) || [];
     const sync = s.sync_fulfillment !== false;
@@ -784,8 +783,16 @@
     $('sf_secret_key').placeholder = sf.has_secret ? '•••••••• saved' : '';
     setVal('sf_wh_url', wh.url); if (document.activeElement !== $('sf_wh_token')) setVal('sf_wh_token', wh.token);
     show($('sf-disconnect'), sfConnected() || sfRejected());
-    $('sf-wh-state').innerHTML = wh.live ? ''
-      : sfConnected() ? '<span class="wait-line">Waiting for the first update from Steadfast.</span>' : '';
+    $('sf-wh-state').innerHTML = webhookState(wh, 'Steadfast', 'auth token', 'Steadfast portal');
+  }
+  // What we really know about a courier's webhook. ShipBridge can't read the courier's portal,
+  // so "Live" only comes from the courier actually calling; a call with the wrong secret is shown.
+  function webhookState(wh, name, secretWord, portal) {
+    if (wh.refusedAt && (!wh.lastAt || new Date(wh.refusedAt) > new Date(wh.lastAt))) {
+      return `<span class="bad-line"><b>${name} is calling ShipBridge with a different ${secretWord}.</b> Make the ${secretWord} here and in the ${portal} the same, then save both.</span>`;
+    }
+    if (wh.live) return '';
+    return `<span class="wait-line">Not live yet: waiting for ${name}'s first update. It arrives when a parcel changes status (e.g. when ${name} approves it).</span>`;
   }
   async function saveSteadfast() {
     const key = $('sf_api_key').value.trim(), secret = $('sf_secret_key').value.trim();
@@ -1029,15 +1036,12 @@
         return await busy(b, async () => { apply(await api('/settings', { method: 'POST', body: { steadfast_disconnect: true } })); state.sfBalance = null; toast('Steadfast disconnected'); renderAll(); });
       }
       if (b.id === 'save-webhook' || b.id === 'sf-save-webhook') return await busy(b, async () => {
-        // Save the secret / auth token, then ShipBridge sends itself a test exactly like the courier would.
         const courier = b.id === 'save-webhook' ? 'pathao' : 'steadfast';
         const field = courier === 'pathao' ? 'webhook_secret' : 'steadfast_webhook_token';
         const value = $(courier === 'pathao' ? 'wh_secret' : 'sf_wh_token').value.trim();
         apply(await api('/settings', { method: 'POST', body: { [field]: value } }));
-        if (courier === 'pathao') state.boot.pathaoWebhook.secret = value; else state.boot.steadfastWebhook.token = value;
-        const r = await api('/webhooks/test', { method: 'POST', body: { courier } });
-        toast(r.ok ? `Saved · webhook test passed` : `Saved, but the test failed: ${r.error}`, !r.ok);
-        renderCouriers();
+        await refreshBoot();
+        toast('Saved');
       });
       if (b.dataset.plan) return await busy(b, async () => { const r = await api('/billing/subscribe', { method: 'POST', body: { plan: b.dataset.plan, interval: state.period } }); window.open(r.confirmationUrl, '_top'); });
       if (b.dataset.downgrade !== undefined) {

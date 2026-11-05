@@ -176,8 +176,8 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
       stats,
       couriers: listCouriers(settings, { pathao }),
       plans: Object.values(PLANS),
-      pathaoWebhook: { url: `${config.appUrl}/pathao/webhook/${req.shop}`, secret: settings.webhook_secret, lastAt: settings.pathao_webhook_at || null, live: Boolean(settings.webhook_secret && settings.pathao_webhook_at) },
-      steadfastWebhook: { url: `${config.appUrl}/steadfast/webhook/${req.shop}`, token: settings.steadfast_webhook_token, lastAt: settings.steadfast_webhook_at || null, live: Boolean(settings.steadfast_webhook_at) },
+      pathaoWebhook: { refusedAt: settings.pathao_webhook_error_at || null, url: `${config.appUrl}/pathao/webhook/${req.shop}`, secret: settings.webhook_secret, lastAt: settings.pathao_webhook_at || null, live: Boolean(settings.webhook_secret && settings.pathao_webhook_at) },
+      steadfastWebhook: { refusedAt: settings.steadfast_webhook_error_at || null, url: `${config.appUrl}/steadfast/webhook/${req.shop}`, token: settings.steadfast_webhook_token, lastAt: settings.steadfast_webhook_at || null, live: Boolean(settings.steadfast_webhook_at) },
       webhooks,
       permissions,
     };
@@ -211,6 +211,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
       const w = String(b.steadfast_webhook_token).trim();
       if (w.length < 16 || w.length > 200 || /\s/.test(w)) throw Object.assign(new Error('Auth token must be 16–200 characters, without spaces'), { status: 400 });
       f.steadfast_webhook_token = w;
+      if (w !== current.steadfast_webhook_token) f.steadfast_webhook_error_at = null;
     }
 
     if (b.default_courier !== undefined) {
@@ -242,6 +243,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
       const w = String(b.webhook_secret).trim();
       if (w.length < 8 || w.length > 100 || /\s/.test(w)) throw Object.assign(new Error('Secret key must be 8–100 characters, without spaces'), { status: 400 });
       f.webhook_secret = w;
+      if (w !== current.webhook_secret) f.pathao_webhook_error_at = null;
     }
     if (b.default_note !== undefined) {
       const n = String(b.default_note).trim();
@@ -306,30 +308,6 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
     } catch (e) {
       return { ok: false, error: e.message };
     }
-  }));
-
-  // ---- Webhook test: ShipBridge calls its own callback URL exactly like the courier would
-  // (same address, same secret/token, same signature). Proves the address and secret work;
-  // "Live" only turns on when the courier itself sends an update.
-  router.post('/webhooks/test', wrap(async (req) => {
-    const courier = req.body?.courier === 'steadfast' ? 'steadfast' : 'pathao';
-    const s = await db.getSettings(req.shop);
-    const base = (config.selfTestBase || config.appUrl).replace(/\/$/, '');
-    const url = `${base}/${courier}/webhook/${req.shop}`;
-    const body = courier === 'steadfast'
-      ? JSON.stringify({ notification_type: 'webhook_test', message: 'ShipBridge webhook test' })
-      : JSON.stringify({ event: 'webhook_integration' });
-    const headers = { 'Content-Type': 'application/json', 'X-ShipBridge-Test': '1' };
-    if (courier === 'steadfast') {
-      headers.Authorization = `Bearer ${s.steadfast_webhook_token}`;
-      headers['X-Signature'] = crypto.createHmac('sha256', String(s.steadfast_webhook_token || '')).update(body).digest('hex');
-    } else headers['X-PATHAO-Signature'] = s.webhook_secret || '';
-    let status = 0;
-    try { status = (await fetch(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(8000) })).status; }
-    catch (e) { return { ok: false, error: `Could not reach ${url}: ${e.message}` }; }
-    const ok = status >= 200 && status < 300;
-    log.info(`[${req.shop}] ${courier} webhook test: ${status}`);
-    return ok ? { ok: true } : { ok: false, error: status === 401 ? 'The secret / auth token was refused' : `The callback URL answered ${status}` };
   }));
 
   // ---- Steadfast: check keys with Steadfast first, save only if they work ----

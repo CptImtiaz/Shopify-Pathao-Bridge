@@ -399,23 +399,28 @@ test('tracker skips a courier that is not connected (no error spam)', async (t) 
   assert.equal(a.logs.some((l) => /status check #910 failed/.test(l)), false);
 });
 
-test('webhook Save & test: both couriers pass with the right secret, fail with a wrong one, and Live is not faked', async (t) => {
+test('webhook: a call with the wrong token is recorded and shown; changing the token clears it; only real calls make it Live', async (t) => {
   const a = await steadfastShop(t);
-  let r = await a.api('/settings', { method: 'POST', body: { steadfast_webhook_token: 'my-own-token-1234567890' } });
-  assert.equal(r.status, 200);
-  assert.deepEqual((await a.api('/webhooks/test', { method: 'POST', body: { courier: 'steadfast' } })).data, { ok: true });
-  await a.api('/settings', { method: 'POST', body: { webhook_secret: 'pathao-secret-123' } });
-  assert.deepEqual((await a.api('/webhooks/test', { method: 'POST', body: { courier: 'pathao' } })).data, { ok: true });
-  const boot = (await a.api('/bootstrap')).data;
-  assert.equal(boot.steadfastWebhook.live, false, 'a self-test does not turn on Live');
-  assert.equal(boot.pathaoWebhook.live, false);
-  assert.equal(boot.steadfastWebhook.token, 'my-own-token-1234567890');
-  // a real Steadfast event signed with the new token is accepted and turns on Live
-  const ok = await sfHook(a, { notification_type: 'tracking_update', consignment_id: 1, tracking_message: 'x' }, { token: 'my-own-token-1234567890' });
+  assert.equal((await a.api('/settings', { method: 'POST', body: { steadfast_webhook_token: 'my-own-token-1234567890' } })).status, 200);
+  let boot = (await a.api('/bootstrap')).data;
+  assert.equal(boot.steadfastWebhook.live, false);
+  assert.equal(boot.steadfastWebhook.refusedAt, null);
+  // Steadfast portal still has another token
+  const bad = await sfHook(a, { notification_type: 'tracking_update', consignment_id: 1, tracking_message: 'x' }, { token: 'old-token-from-the-portal-xyz' });
+  assert.equal(bad.status, 401);
+  boot = (await a.api('/bootstrap')).data;
+  assert.ok(boot.steadfastWebhook.refusedAt, 'refused call recorded');
+  assert.equal(boot.steadfastWebhook.live, false);
+  assert.ok(a.logs.some((l) => /steadfast webhook refused/.test(l)));
+  // merchant pastes the portal's token here -> warning cleared; next real call -> Live
+  await a.api('/settings', { method: 'POST', body: { steadfast_webhook_token: 'old-token-from-the-portal-xyz' } });
+  assert.equal((await a.api('/bootstrap')).data.steadfastWebhook.refusedAt, null);
+  const ok = await sfHook(a, { notification_type: 'tracking_update', consignment_id: 1, tracking_message: 'x' }, { token: 'old-token-from-the-portal-xyz' });
   assert.equal(ok.status, 200);
   assert.equal((await a.api('/bootstrap')).data.steadfastWebhook.live, true);
-  // too short / with spaces is refused
   assert.equal((await a.api('/settings', { method: 'POST', body: { steadfast_webhook_token: 'short' } })).status, 400);
+  // the old self-test is gone
+  assert.equal((await a.api('/webhooks/test', { method: 'POST', body: { courier: 'steadfast' } })).status, 404);
 });
 
 test('auto-send needs a connected default courier; otherwise the order says why', async (t) => {

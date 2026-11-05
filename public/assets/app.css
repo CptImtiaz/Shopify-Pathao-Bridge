@@ -640,3 +640,5 @@ button.kpi.k-fraud:hover { box-shadow: 0 0 0 2px #fecaca, var(--shadow); }
 .step-body .pref { margin-top: 14px; }
 .perm-box, .perm-box li, .perm-box code { overflow-wrap: anywhere; word-break: break-word; }
 .cx-rules .perm-box ol { padding-left: 18px; }
+.bad-line { display: block; padding: 10px 12px; border-radius: 10px; background: #fdecec; color: #991b1b; font-size: 13px; line-height: 1.45; }
+.bad-line b { color: #7f1d1d; }
