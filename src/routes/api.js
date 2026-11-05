@@ -94,6 +94,8 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
       sync_fulfillment: s.sync_fulfillment !== false,
       fulfill_when: s.fulfill_when || 'booked',
       notify_customer: Boolean(s.notify_customer),
+      mark_paid_on_delivery: s.mark_paid_on_delivery !== false,
+      undo_on_return: s.undo_on_return !== false,
       default_note: s.default_note || '',
       default_courier: s.default_courier || 'pathao',
       connected: pathao.hasCredentials(s),
@@ -244,6 +246,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
     if (b.sync_fulfillment !== undefined) f.sync_fulfillment = Boolean(b.sync_fulfillment);
     if (b.fulfill_when !== undefined) f.fulfill_when = b.fulfill_when === 'picked' ? 'picked' : 'booked';
     if (b.notify_customer !== undefined) f.notify_customer = Boolean(b.notify_customer);
+    for (const k of ['mark_paid_on_delivery', 'undo_on_return']) if (b[k] !== undefined) f[k] = Boolean(b[k]);
     // ---- Pathao webhook secret (merchant can set their own) ----
     if (b.webhook_secret !== undefined) {
       const w = String(b.webhook_secret).trim();

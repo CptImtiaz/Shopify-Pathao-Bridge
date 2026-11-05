@@ -222,6 +222,8 @@
               <div class="pref"><b>Mark the Shopify order fulfilled</b>
                 <div class="seg" role="radiogroup" aria-label="Mark fulfilled" id="when-seg"><button role="radio" data-when="booked">When sent</button><button role="radio" data-when="picked">When picked up</button></div></div>
               <label class="switch-row"><span><b>Email the customer a tracking link</b><small>Shopify sends its shipping confirmation</small></span><input type="checkbox" role="switch" id="notify_customer" /><i aria-hidden="true"></i></label>
+              <label class="switch-row"><span><b>Mark paid when delivered</b><small>Cash on delivery: Payment pending turns Paid once the courier confirms delivery</small></span><input type="checkbox" role="switch" id="mark_paid_on_delivery" /><i aria-hidden="true"></i></label>
+              <label class="switch-row"><span><b>Unfulfil returned parcels</b><small>A returned or cancelled parcel puts the order back to Unfulfilled</small></span><input type="checkbox" role="switch" id="undo_on_return" /><i aria-hidden="true"></i></label>
         </aside>
       </div>
     </main>

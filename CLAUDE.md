@@ -63,6 +63,12 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   server.js; `pollStatuses:false` in tests) and when the dashboard loads. Steadfast `unknown`
   for a parcel that was `in_review`/`pending`/`unknown` = removed in the Steadfast panel ->
   shipment back to skipped "Removed in Steadfast", Shopify fulfillment cancelled, not counted.
+- Shopify order status follows Shopify's COD standard (2026-11-05, src/shopify/fulfillment.js `sync`):
+  sent/picked up = Fulfilled + Payment pending; delivered = `orderMarkAsPaid` once (`shipments.shopify_paid_at`,
+  setting `mark_paid_on_delivery`, default on; partial delivery is NOT marked paid); Pathao `pickup-cancelled`
+  = fulfillment cancelled + shipment back to skipped "Pickup cancelled by Pathao · send again" (always);
+  returned / paid-return (Pathao) or cancelled (Steadfast) = fulfillment cancelled -> Unfulfilled
+  (setting `undo_on_return`, default on). "Partially fulfilled" only when some items really weren't shipped.
 - Shopify fulfillment is created per fulfillment order (gift cards can't be fulfilled together
   with other items).
 - `shipments.courier` says which courier booked an order; `shipments.pathao_status` holds the
@@ -95,7 +101,8 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 - Pathao weight: product weights (REST `grams`), else Shopify `Order.totalWeight`, else the
   "Parcel weight" setting. Steadfast's API has no weight field.
 - Right column "Sending rules": default courier, auto-send, hold high-risk, and "Update orders
-  inside Shopify" (permissions box, sync toggle, when to fulfil, email customer).
+  inside Shopify" (permissions box, sync toggle, when to fulfil, email customer, mark paid when delivered,
+  unfulfil returned parcels).
 
 ## Dashboard tabs
 - All = every order (errors and cancelled included), newest first; other tabs filter.

@@ -760,6 +760,8 @@
 
     $('sync_fulfillment').checked = sync;
     $('notify_customer').checked = Boolean(s.notify_customer); $('notify_customer').disabled = !sync;
+    $('mark_paid_on_delivery').checked = s.mark_paid_on_delivery !== false;
+    $('undo_on_return').checked = s.undo_on_return !== false; $('undo_on_return').disabled = !sync;
     $$('#when-seg button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.when === (s.fulfill_when || 'booked'))));
   }
   // Sending rules (right column): same for every courier view.
@@ -1116,7 +1118,7 @@
       renderRows(); return;
     }
     if (el.id === 'check-all') { visible().filter(canSend).forEach((o) => { if (el.checked) state.selected.add(o.id); else state.selected.delete(o.id); }); renderRows(); return; }
-    if (['auto_send', 'hold_risky', 'sync_fulfillment', 'notify_customer'].includes(el.id)) { savePrefs({ [el.id]: el.checked }); return; }
+    if (['auto_send', 'hold_risky', 'sync_fulfillment', 'notify_customer', 'mark_paid_on_delivery', 'undo_on_return'].includes(el.id)) { savePrefs({ [el.id]: el.checked }); return; }
     if (el.name === 'pathao-speed') { savePrefs({ delivery_type: Number(el.value) }); return; }
     if (el.name === 'sf-type') { savePrefs({ sf_delivery_type: Number(el.value) }); return; }
     if (el.dataset && el.dataset.defbox) {

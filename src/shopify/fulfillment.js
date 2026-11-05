@@ -66,6 +66,20 @@ function readyToFulfil(when, raw, courier = 'pathao') {
   return ['CARRIER_PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'ATTEMPTED_DELIVERY', 'DELIVERED', 'DELAYED'].includes(ev);
 }
 
+// The parcel never left: Pathao cancelled the pickup. The order goes back to "Not sent".
+const pickupCancelled = (raw, courier) => courier !== 'steadfast' && /^(order\.)?pickup[-_ ]cancell?ed$/i.test(String(raw || '').trim());
+// The parcel came back to the merchant (final status, not a delivery attempt).
+function cameBack(raw, courier) {
+  const s = String(raw || '').trim().toLowerCase().replace(/^order\./, '');
+  if (courier === 'steadfast') return /^cancelled(_return_received)?$/.test(s);
+  return /^(returned|paid[-_ ]return)$/.test(s);
+}
+// Fully delivered (a partial delivery collects only part of the cash, so it isn't marked paid).
+function fullyDelivered(raw, courier) {
+  const s = String(raw || '').trim().toLowerCase().replace(/^order\./, '');
+  return courier === 'steadfast' ? s === 'delivered' : /^delivered$/.test(s.replace(/_/g, '-'));
+}
+
 const FO_FIELDS = `id status fulfillmentHolds { id reason } fulfillments(first: 10) { nodes { id status } }`;
 
 function makeFulfillmentSync({ admin, db, log = console }) {
@@ -142,17 +156,63 @@ function makeFulfillmentSync({ admin, db, log = console }) {
     return fulfillmentId;
   }
 
-  // Called after booking and on every Pathao status webhook. Never throws:
+  // COD: once the courier confirms delivery, record the cash in Shopify (Payment pending -> Paid).
+  async function markPaid(shop, orderId) {
+    const d = await gql(shop, `mutation Paid($input: OrderMarkAsPaidInput!) { orderMarkAsPaid(input: $input) { order { id displayFinancialStatus } userErrors { message } } }`,
+      { input: { id: `gid://shopify/Order/${orderId}` } });
+    const r = d.orderMarkAsPaid;
+    // Already paid (e.g. prepaid, or marked by hand) is fine: nothing is owed.
+    if (r.userErrors.length && !r.userErrors.some((e) => /already (been )?(marked as )?paid|fully paid|no outstanding|nothing to pay/i.test(e.message))) {
+      throw new Error(`Could not mark as paid: ${r.userErrors.map((e) => e.message).join('; ')}`);
+    }
+  }
+
+  // Called after booking and on every courier status (webhook or check). Never throws:
   // problems are saved on the shipment so the dashboard can show them.
   async function sync(shop, orderId, { status } = {}) {
     try {
       const settings = await db.getSettings(shop);
-      if (!settings.sync_fulfillment) return { skipped: 'off' };
       let shipment = await db.getShipment(shop, orderId);
       if (!shipment || shipment.status !== 'sent' || !shipment.consignment_id) return { skipped: 'not sent' };
       const raw = status || shipment.pathao_status;
       const courier = shipment.courier || 'pathao';
+      const name = COURIER_NAMES[courier] || 'Courier';
+
+      // Pickup cancelled: the parcel never left, so undo the fulfillment and let the order be sent again.
+      if (pickupCancelled(raw, courier)) {
+        if (shipment.shopify_fulfillment_id) {
+          await cancelFulfillment(shop, shipment.shopify_fulfillment_id)
+            .catch((e) => log.warn(`[${shop}] ${shipment.order_name}: could not undo the Shopify fulfillment: ${e.message}`));
+        }
+        await db.finishShipment(shop, orderId, {
+          status: 'skipped', error: `Pickup cancelled by ${name} · send again when ready`, counted: false,
+          consignment_id: null, tracking_code: null, pathao_status: null, delivery_fee: null,
+          courier_message: null, courier_message_at: null, shopify_fulfillment_id: null, shopify_event: null, sync_error: null,
+        });
+        log.info(`[${shop}] ${shipment.order_name}: pickup cancelled by ${name}, back to Not sent`);
+        return { ok: true, undone: 'pickup cancelled' };
+      }
+
+      // Delivered: COD is collected, so the Shopify order is paid (independent of fulfillment sync).
+      if (settings.mark_paid_on_delivery !== false && fullyDelivered(raw, courier) && !shipment.shopify_paid_at) {
+        await markPaid(shop, orderId);
+        await db.finishShipment(shop, orderId, { shopify_paid_at: new Date() });
+        log.info(`[${shop}] ${shipment.order_name} marked paid in Shopify (delivered by ${name})`);
+      }
+
+      if (!settings.sync_fulfillment) return { skipped: 'off' };
       const ev = shopifyEventFor(raw, courier);
+
+      // Returned to the merchant: undo the fulfillment so the order is Unfulfilled again.
+      if (cameBack(raw, courier)) {
+        if (shipment.shopify_fulfillment_id && settings.undo_on_return !== false) {
+          await cancelFulfillment(shop, shipment.shopify_fulfillment_id);
+          await db.finishShipment(shop, orderId, { shopify_fulfillment_id: null, shopify_event: null, sync_error: null });
+          log.info(`[${shop}] ${shipment.order_name} came back from ${name}: Shopify fulfillment undone`);
+          return { ok: true, undone: 'returned' };
+        }
+        if (!shipment.shopify_fulfillment_id) return { skipped: 'returned before fulfilment' };
+      }
 
       if (!shipment.shopify_fulfillment_id) {
         if (/cancel/.test(String(raw).toLowerCase())) return { skipped: 'cancelled before fulfilment' };
@@ -161,7 +221,7 @@ function makeFulfillmentSync({ admin, db, log = console }) {
         shipment = await db.getShipment(shop, orderId);
       }
       if (ev && ev !== shipment.shopify_event) {
-        await addEvent(shop, shipment.shopify_fulfillment_id, ev, `${COURIER_NAMES[courier] || 'Courier'}: ${String(raw).replace(/^order\./, '').replace(/[-_]/g, ' ')}`);
+        await addEvent(shop, shipment.shopify_fulfillment_id, ev, `${name}: ${String(raw).replace(/^order\./, '').replace(/[-_]/g, ' ')}`);
         await db.finishShipment(shop, orderId, { shopify_event: ev, sync_error: null });
       }
       return { ok: true, event: ev };
@@ -185,4 +245,4 @@ function makeFulfillmentSync({ admin, db, log = console }) {
   return { sync, ensureFulfilled, cancelFulfillment };
 }
 
-module.exports = { makeFulfillmentSync, shopifyEventFor, readyToFulfil, trackingUrl, trackingFor, TRACKING_COMPANY };
+module.exports = { makeFulfillmentSync, shopifyEventFor, readyToFulfil, pickupCancelled, cameBack, fullyDelivered, trackingUrl, trackingFor, TRACKING_COMPANY };

@@ -115,6 +115,8 @@ function fakeFetch() {
       }
       if (query.includes('fulfillmentTrackingInfoUpdate')) { state.trackingUpdates.push(variables); return json(200, { data: { fulfillmentTrackingInfoUpdate: { fulfillment: { id: variables.id }, userErrors: [] } } }); }
       if (query.includes('fulfillmentEventCreate')) { state.events.push(variables.e); return json(200, { data: { fulfillmentEventCreate: { fulfillmentEvent: { id: 'e', status: variables.e.status }, userErrors: [] } } }); }
+      if (query.includes('orderMarkAsPaid')) { state.paid = state.paid || []; state.paid.push(variables.input.id.split('/').pop()); return json(200, { data: { orderMarkAsPaid: { order: { id: variables.input.id, displayFinancialStatus: 'PAID' }, userErrors: [] } } }); }
+      if (query.includes('fulfillmentCancel')) { state.cancelledFulfillments = state.cancelledFulfillments || []; state.cancelledFulfillments.push(variables.id); return json(200, { data: { fulfillmentCancel: { fulfillment: { id: variables.id, status: 'CANCELLED' }, userErrors: [] } } }); }
       if (query.includes('tagsAdd')) return json(200, { data: { tagsAdd: { userErrors: [] } } });
       if (query.includes('metafieldsSet')) return json(200, { data: { metafieldsSet: { userErrors: [] } } });
       if (query.includes('appSubscriptionCreate')) {

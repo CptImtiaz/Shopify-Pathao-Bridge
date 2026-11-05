@@ -114,3 +114,79 @@ test('orders that failed for missing permission are caught up once access is gra
   assert.equal(o.shipment.shopifySynced, true);
   assert.equal(o.shipment.syncError, null);
 });
+
+test('COD standard: delivered marks the Shopify order paid once; partial delivery does not', async (t) => {
+  const a = await ready(t);
+  a.fake.state.orders['710'] = gqlOrder(710);
+  a.fake.state.orders['711'] = gqlOrder(711);
+  const [r1, r2] = (await a.api('/orders/send', { method: 'POST', body: { ids: ['710', '711'] } })).data.results;
+  assert.deepEqual(a.fake.state.paid || [], [], 'sent but not delivered: payment stays pending');
+  await pathaoHook(a, { event: 'order.delivered', consignment_id: r1.consignmentId });
+  await pathaoHook(a, { event: 'order.delivered', consignment_id: r1.consignmentId }); // repeat
+  await pathaoHook(a, { event: 'order.partial-delivery', consignment_id: r2.consignmentId });
+  assert.deepEqual(a.fake.state.paid, ['710']);
+  assert.ok((await a.db.getShipment(SHOP, '710')).shopify_paid_at);
+});
+
+test('mark paid can be switched off', async (t) => {
+  const a = await ready(t, { mark_paid_on_delivery: false });
+  a.fake.state.orders['712'] = gqlOrder(712);
+  const r = (await a.api('/orders/send', { method: 'POST', body: { ids: ['712'] } })).data.results[0];
+  await pathaoHook(a, { event: 'order.delivered', consignment_id: r.consignmentId });
+  assert.deepEqual(a.fake.state.paid || [], []);
+  assert.equal((await a.api('/bootstrap')).data.settings.mark_paid_on_delivery, false);
+});
+
+test('Pathao pickup cancelled after fulfilment: fulfillment undone, order back to Not sent and can be sent again', async (t) => {
+  const a = await ready(t);
+  a.fake.state.orders['713'] = gqlOrder(713);
+  const r = (await a.api('/orders/send', { method: 'POST', body: { ids: ['713'] } })).data.results[0];
+  assert.equal(a.fake.state.fulfillments.length, 1);
+  await pathaoHook(a, { event: 'order.pickup-cancelled', consignment_id: r.consignmentId });
+  assert.deepEqual(a.fake.state.cancelledFulfillments, [a.fake.state.fulfillments[0].id]);
+  const s = await a.db.getShipment(SHOP, '713');
+  assert.equal(s.status, 'skipped');
+  assert.match(s.error, /Pickup cancelled by Pathao/);
+  assert.equal(s.shopify_fulfillment_id, null);
+  delete a.fake.state.fo['713'];
+  const again = (await a.api('/orders/send', { method: 'POST', body: { ids: ['713'] } })).data.results[0];
+  assert.equal(again.ok, true);
+});
+
+test('returned parcel: fulfillment undone (Unfulfilled again); switch off keeps it fulfilled', async (t) => {
+  const a = await ready(t);
+  a.fake.state.orders['714'] = gqlOrder(714);
+  const r = (await a.api('/orders/send', { method: 'POST', body: { ids: ['714'] } })).data.results[0];
+  await pathaoHook(a, { event: 'order.delivery-failed', consignment_id: r.consignmentId });
+  assert.deepEqual(a.fake.state.cancelledFulfillments || [], [], 'a failed attempt is not a return');
+  await pathaoHook(a, { event: 'order.returned', consignment_id: r.consignmentId });
+  assert.equal(a.fake.state.cancelledFulfillments.length, 1);
+  const s = await a.db.getShipment(SHOP, '714');
+  assert.equal(s.status, 'sent');
+  assert.equal(s.pathao_status, 'returned');
+  assert.equal(s.shopify_fulfillment_id, null);
+  assert.deepEqual(a.fake.state.paid || [], []);
+
+  await a.api('/settings', { method: 'POST', body: { undo_on_return: false } });
+  a.fake.state.orders['715'] = gqlOrder(715);
+  const r2 = (await a.api('/orders/send', { method: 'POST', body: { ids: ['715'] } })).data.results[0];
+  await pathaoHook(a, { event: 'order.returned', consignment_id: r2.consignmentId });
+  assert.equal(a.fake.state.cancelledFulfillments.length, 1);
+  assert.ok((await a.db.getShipment(SHOP, '715')).shopify_fulfillment_id);
+});
+
+test('status helpers: pickup cancelled, came back, fully delivered', () => {
+  const { pickupCancelled, cameBack, fullyDelivered } = require('../src/shopify/fulfillment');
+  assert.equal(pickupCancelled('Pickup_Cancelled', 'pathao'), true);
+  assert.equal(pickupCancelled('pickup-cancelled', 'pathao'), true);
+  assert.equal(pickupCancelled('cancelled', 'steadfast'), false);
+  assert.equal(cameBack('order.returned', 'pathao'), true);
+  assert.equal(cameBack('paid-return', 'pathao'), true);
+  assert.equal(cameBack('delivery-failed', 'pathao'), false);
+  assert.equal(cameBack('cancelled', 'steadfast'), true);
+  assert.equal(cameBack('cancelled_approval_pending', 'steadfast'), false);
+  assert.equal(fullyDelivered('delivered', 'steadfast'), true);
+  assert.equal(fullyDelivered('delivered_approval_pending', 'steadfast'), false);
+  assert.equal(fullyDelivered('partial_delivered', 'steadfast'), false);
+  assert.equal(fullyDelivered('order.delivered', 'pathao'), true);
+});

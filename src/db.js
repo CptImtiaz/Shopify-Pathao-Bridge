@@ -124,6 +124,10 @@ const SCHEMA = [
   `ALTER TABLE settings ADD COLUMN IF NOT EXISTS sf_item_desc BOOLEAN NOT NULL DEFAULT TRUE`,
   `ALTER TABLE settings ADD COLUMN IF NOT EXISTS sf_total_lot BOOLEAN NOT NULL DEFAULT FALSE`,
   `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS courier_message_at TIMESTAMPTZ`,
+  // COD standard: mark the Shopify order paid when delivered; undo the fulfillment when the parcel comes back.
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS mark_paid_on_delivery BOOLEAN NOT NULL DEFAULT TRUE`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS undo_on_return BOOLEAN NOT NULL DEFAULT TRUE`,
+  `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS shopify_paid_at TIMESTAMPTZ`,
   // Merchant's own note on an order (e.g. why it is on hold). Never sent to couriers.
   `CREATE TABLE IF NOT EXISTS order_notes (
     shop TEXT NOT NULL,
