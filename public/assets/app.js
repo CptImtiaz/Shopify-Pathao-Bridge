@@ -474,7 +474,8 @@
       return `<i class="${on ? 'on' : ''}${cur ? ' cur' : ''}${st.bad && i === Math.max(st.step, 1) ? ' x' : ''}"></i>`;
     }).join('');
     const label = stageLabel(o);
-    return `<span class="st st-${tone}" title="${esc(label)}"><svg viewBox="0 0 24 24" aria-hidden="true">${ST_ICON[tone]}</svg><span class="st-t">${esc(label)}</span></span><span class="dots dots-${tone}">${dots}</span>`;
+    const why = errorReason(o) || waitReason(o) || (o.shipment && o.shipment.status !== 'sent' && o.shipment.error) || label;
+    return `<span class="st st-${tone}" title="${esc(why)}"><svg viewBox="0 0 24 24" aria-hidden="true">${ST_ICON[tone]}</svg><span class="st-t">${esc(label)}</span></span><span class="dots dots-${tone}">${dots}</span>`;
   }
   // Fraud check: mini ring gauge with the score, label and delivery history.
   function fraudCell(o) {
@@ -491,12 +492,6 @@
     const st = stageOf(o), sel = state.selected.has(o.id), f = o.fraud, h = (f && f.history) || {};
     const first = (o.products && o.products[0]) || null;
     const more = (o.products || []).length > 1 ? `+${o.products.length - 1} more · ` : '';
-    const er = errorReason(o), hr = waitReason(o);
-    const err = er ? `<span class="err" title="${esc(er)}">${esc(er)}</span>`
-      : hr ? `<span class="hold-why" title="${esc(hr)}">${esc(hr)}</span>`
-      : o.shipment && o.shipment.status !== 'sent' && o.shipment.error ? `<span class="err" title="${esc(o.shipment.error)}">${esc(o.shipment.error)}</span>` : '';
-    const note = o.note ? `<button class="note-line" data-open="${esc(o.id)}" title="${esc(o.note)}"><span>Note:</span> ${esc(o.note)}</button>`
-      : er ? `<button class="link-btn note-add" data-open="${esc(o.id)}">+ Add note</button>` : '';
     const synced = o.shipment && o.shipment.status === 'sent' && o.shipment.consignmentId ? `<span class="cn mono" title="Pathao consignment">${esc(o.shipment.consignmentId)}</span>` : '';
     return `<div class="row${sel ? ' sel' : ''}" data-row="${esc(o.id)}">
       <span>${canSend(o) ? `<input type="checkbox" data-select="${esc(o.id)}" ${sel ? 'checked' : ''} aria-label="Select ${esc(o.name)}" />` : ''}</span>
@@ -505,7 +500,7 @@
       <div style="min-width:0"><b class="ellip">${esc(o.customer || '—')}</b><span class="sub">${esc(o.phone || o.city || '')}</span></div>
       <div>${payCell(o)}</div>
       <div>${fulfillBadge(o)}</div>
-      <div>${statusCell(o, st)}${synced}${err}${note}</div>
+      <div>${statusCell(o, st)}${synced}</div>
       <div>${fraudCell(o)}</div>
       <div>${courierCell(o)}</div>
     </div>`;
@@ -563,7 +558,7 @@
     const st = stageOf(o);
     const colors = { high: ['#ef4444', '#fde2e2'], medium: ['#f59e0b', '#fdeccb'], low: ['#3b82f6', '#dbe7fb'], pending: ['#9ca3af', '#e5e7eb'], safe: ['#22c55e', '#d3f3df'] }[f.level];
     const title = { high: 'High risk — review first', medium: 'Check before sending', low: 'Looks fine', pending: 'Shopify is still checking', safe: 'Trusted customer' }[f.level];
-    const steps = [`Sent to ${cname((o.shipment && o.shipment.courier) || defKey())}`, 'Picked up by rider', 'In transit', 'Out for delivery', 'Delivered'];
+    const steps = [`Sent to ${cname(o.shipment && o.shipment.status === 'sent' ? o.shipment.courier : defKey())}`, 'Picked up by rider', 'In transit', 'Out for delivery', 'Delivered'];
     const sent = o.shipment && o.shipment.status === 'sent';
     const tl = steps.map((label, i) => {
       const n = i + 1; let cls = '';
