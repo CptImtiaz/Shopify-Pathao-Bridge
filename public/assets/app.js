@@ -451,8 +451,8 @@
   }
   function payCell(o) {
     const f = String(o.financial || '').toUpperCase();
-    const badge = f === 'PAID' ? '<span class="badge green">Paid</span>' : f === 'PARTIALLY_PAID' ? '<span class="badge yellow">Partially paid</span>' : /REFUND/.test(f) ? '<span class="badge">Refunded</span>' : (o.cod > 0 ? '<span class="badge" title="Cash on delivery · collected by the rider">COD</span>' : '<span class="badge yellow">Pending</span>');
-    return `<span class="amount">${esc(taka(o.total))}</span><span class="sub">${badge}</span>`;
+    const badge = f === 'PAID' ? '<span class="badge green">Paid</span>' : f === 'PARTIALLY_PAID' ? '<span class="badge yellow">Partially paid</span>' : /REFUND/.test(f) ? '<span class="badge">Refunded</span>' : '<span class="badge yellow">Pending</span>';
+    return `<span class="amount">${esc(taka(o.total))}</span><span class="sub">${badge}</span>${o.cod > 0 && f !== 'PAID' ? `<span class="sub nowrap">COD ${esc(taka(o.cod))}</span>` : ''}`;
   }
   function courierCell(o) {
     const s = o.shipment;
@@ -511,7 +511,7 @@
     return `<div class="row${sel ? ' sel' : ''}" data-row="${esc(o.id)}">
       <span class="c-chk">${canSend(o) ? `<input type="checkbox" data-select="${esc(o.id)}" ${sel ? 'checked' : ''} aria-label="Select ${esc(o.name)}" />` : ''}</span>
       <div class="c-order"><span class="o-name">${esc(o.name)}</span><span class="sub">${esc(when(o.createdAt))}</span></div>
-      <div class="prod c-prod"><span class="thumbs">${thumbs(o)}</span><div class="prod-t"><span class="ellip" title="${esc(o.items)}">${esc(first ? `${first.title}${first.quantity > 1 ? ` ×${first.quantity}` : ''}` : (o.items || '—'))}</span><span class="sub">${more}${o.itemCount} item${o.itemCount === 1 ? '' : 's'}</span></div></div>
+      <div class="prod c-prod"><span class="thumbs">${thumbs(o)}</span><div class="prod-t"><span class="ellip" title="${esc(o.items)}">${esc(first ? `${first.title}${first.quantity > 1 ? ` ×${first.quantity}` : ''}` : (o.items || '—'))}</span><span class="sub">${more ? `+${o.products.length - 1} more` : `${o.itemCount} item${o.itemCount === 1 ? '' : 's'}`}</span></div></div>
       <div class="c-cust" style="min-width:0"><b class="ellip">${esc(o.customer || '—')}</b><span class="sub nowrap">${esc(localPhone(o.phone) || o.city || '')}</span></div>
       <div class="c-pay">${payCell(o)}</div>
       <div class="c-ful">${fulfillBadge(o)}</div>

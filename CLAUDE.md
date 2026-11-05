@@ -122,6 +122,9 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 - Errors = must be fixed first: bad phone, missing name/address, courier refused, plan limit.
 - Returned = failed delivery / returned. Cancelled = cancelled in Shopify (not sent).
 - Merchant notes per order live in `order_notes` (never sent to couriers).
+- Order table columns (2026-11-05): 24px | order 70px | products minmax(118,1.2fr) | customer minmax(110,1fr) |
+  payment 84px | fulfillment 92px | status 152px, content and header centred in the column (owner's request;
+  fits "Sent to Steadfast" 141px) | fraud minmax(140,1.35fr) | courier 136px.
 - Before changing the order table, re-run the overlap check (widths 1060–1600): the app
   area inside Shopify admin on a 1366px laptop is ~1060px wide.
 
@@ -129,9 +132,12 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 - All text >= 4.5:1 contrast (`--muted` #5f6673; table headers #545b66). Re-measure after colour changes.
 - Overview cards are neutral (no coloured stripes); colour only where it means something.
 - Fraud: traffic light — low/safe green, medium amber, high red; score shown as x/100.
-- COD orders show a grey "COD" payment badge (turns green "Paid" on delivery) (normal for COD); yellow only for real attention.
+- Payment cell (owner's choice): amount, yellow "Pending" badge (green "Paid" once delivered), then
+  "COD ৳<amount>" line while unpaid.
 - Row actions share one button shape (`.assign`; `.assign.warn` red for fixes). To-do step dots are grey.
-- Phones (<=640px): each order row is a card (grid areas c-chk/c-order/...); keep every column's class.
+- Phones (<=640px, owner-approved 2026-11-05): each order row is a card, grid areas
+  "chk order pay" / "chk cust pay" / "chk st ful" / "chk prod prod" / "chk fr cr" (status left-aligned with dots and
+  parcel no. under the pill; payment = amount, badge, COD line). Header buttons share one row, live pill hidden.
 - Phone numbers shown in local format 01XXX-XXXXXX on one line. Header: Billing, WhatsApp (outline,
   green icon), Couriers.
 
