@@ -200,6 +200,7 @@ async function startApp({ smsFeature = true, adminPassword = '' } = {}) {
   await db.migrate();
   const server = await new Promise((r) => { const s = app.listen(0, () => r(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
+  config.selfTestBase = base; // webhook self-test calls this server
 
   const api = async (path, { method = 'GET', body, token = sessionToken() } = {}) => {
     const res = await fetch(base + '/api' + path, {

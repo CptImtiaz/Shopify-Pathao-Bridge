@@ -68,6 +68,15 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   delivery type, parcel weight, note; Steadfast: delivery type home/hub (`delivery_type` 1 only sent
   for hub), product list (`item_description`, on by default), item count (`total_lot`), second phone
   (`alternative_phone`), note). The note for rider is one shared setting. Webhook status shows just "Live".
+- Webhook configuration has an editable secret (Pathao) / auth token (Steadfast) and **Save & test**:
+  `POST /api/webhooks/test` makes ShipBridge call its own callback URL signed like the courier
+  (`X-ShipBridge-Test: 1`). That proves address + secret; it never turns on "Live" (only real
+  courier traffic does).
+- Auto-send and the default courier require a *connected* courier (Pathao: account + pickup
+  store; Steadfast: keys, not paused). Orders auto-sent while the default isn't connected are
+  skipped with "Auto-send: <Courier> (your default courier) is not connected".
+- Pathao weight: product weights (REST `grams`), else Shopify `Order.totalWeight`, else the
+  "Parcel weight" setting. Steadfast's API has no weight field.
 - Right column "Sending rules": default courier, auto-send, hold high-risk, and "Update orders
   inside Shopify" (permissions box, sync toggle, when to fulfil, email customer).
 

@@ -68,6 +68,12 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
     return p;
   }
 
+  // Can this courier book orders right now?
+  function courierReady(s, key) {
+    if (key === 'steadfast') return Boolean(s.steadfast_api_key && s.steadfast_secret_enc && !s.steadfast_auth_error);
+    return Boolean(pathao.hasCredentials(s) && s.pathao_store_id);
+  }
+
   function publicSettings(s) {
     return {
       pathao_env: s.pathao_env,
@@ -277,12 +283,12 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
     {
       const next = { ...current, ...f };
       const def = next.default_courier || 'pathao';
-      if (def === 'steadfast' && !(next.steadfast_api_key && next.steadfast_secret_enc)) {
-        if (b.default_courier !== undefined) throw Object.assign(new Error('Connect Steadfast before making it your default courier'), { status: 400 });
-        if (f.auto_send) throw Object.assign(new Error('Connect Steadfast before turning on auto-send'), { status: 400 });
+      const ready = courierReady(next, def);
+      if (!ready && b.default_courier !== undefined && !b.steadfast_disconnect) {
+        throw Object.assign(new Error(`Connect ${def === 'steadfast' ? 'Steadfast' : 'Pathao (account and pickup store)'} before making it your default courier`), { status: 400 });
       }
-      if (def === 'pathao' && f.auto_send && !next.pathao_store_id) {
-        throw Object.assign(new Error('Choose a Pathao store before turning on auto-send'), { status: 400 });
+      if (!ready && f.auto_send) {
+        throw Object.assign(new Error(`Auto-send uses your default courier: connect ${def === 'steadfast' ? 'Steadfast' : 'Pathao (account and pickup store)'} first, or pick a connected courier as default`), { status: 400 });
       }
     }
 
@@ -300,6 +306,30 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
     } catch (e) {
       return { ok: false, error: e.message };
     }
+  }));
+
+  // ---- Webhook test: ShipBridge calls its own callback URL exactly like the courier would
+  // (same address, same secret/token, same signature). Proves the address and secret work;
+  // "Live" only turns on when the courier itself sends an update.
+  router.post('/webhooks/test', wrap(async (req) => {
+    const courier = req.body?.courier === 'steadfast' ? 'steadfast' : 'pathao';
+    const s = await db.getSettings(req.shop);
+    const base = (config.selfTestBase || config.appUrl).replace(/\/$/, '');
+    const url = `${base}/${courier}/webhook/${req.shop}`;
+    const body = courier === 'steadfast'
+      ? JSON.stringify({ notification_type: 'webhook_test', message: 'ShipBridge webhook test' })
+      : JSON.stringify({ event: 'webhook_integration' });
+    const headers = { 'Content-Type': 'application/json', 'X-ShipBridge-Test': '1' };
+    if (courier === 'steadfast') {
+      headers.Authorization = `Bearer ${s.steadfast_webhook_token}`;
+      headers['X-Signature'] = crypto.createHmac('sha256', String(s.steadfast_webhook_token || '')).update(body).digest('hex');
+    } else headers['X-PATHAO-Signature'] = s.webhook_secret || '';
+    let status = 0;
+    try { status = (await fetch(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(8000) })).status; }
+    catch (e) { return { ok: false, error: `Could not reach ${url}: ${e.message}` }; }
+    const ok = status >= 200 && status < 300;
+    log.info(`[${req.shop}] ${courier} webhook test: ${status}`);
+    return ok ? { ok: true } : { ok: false, error: status === 401 ? 'The secret / auth token was refused' : `The callback URL answered ${status}` };
   }));
 
   // ---- Steadfast: check keys with Steadfast first, save only if they work ----

@@ -398,3 +398,51 @@ test('tracker skips a courier that is not connected (no error spam)', async (t) 
   assert.equal(r.failed, 0);
   assert.equal(a.logs.some((l) => /status check #910 failed/.test(l)), false);
 });
+
+test('webhook Save & test: both couriers pass with the right secret, fail with a wrong one, and Live is not faked', async (t) => {
+  const a = await steadfastShop(t);
+  let r = await a.api('/settings', { method: 'POST', body: { steadfast_webhook_token: 'my-own-token-1234567890' } });
+  assert.equal(r.status, 200);
+  assert.deepEqual((await a.api('/webhooks/test', { method: 'POST', body: { courier: 'steadfast' } })).data, { ok: true });
+  await a.api('/settings', { method: 'POST', body: { webhook_secret: 'pathao-secret-123' } });
+  assert.deepEqual((await a.api('/webhooks/test', { method: 'POST', body: { courier: 'pathao' } })).data, { ok: true });
+  const boot = (await a.api('/bootstrap')).data;
+  assert.equal(boot.steadfastWebhook.live, false, 'a self-test does not turn on Live');
+  assert.equal(boot.pathaoWebhook.live, false);
+  assert.equal(boot.steadfastWebhook.token, 'my-own-token-1234567890');
+  // a real Steadfast event signed with the new token is accepted and turns on Live
+  const ok = await sfHook(a, { notification_type: 'tracking_update', consignment_id: 1, tracking_message: 'x' }, { token: 'my-own-token-1234567890' });
+  assert.equal(ok.status, 200);
+  assert.equal((await a.api('/bootstrap')).data.steadfastWebhook.live, true);
+  // too short / with spaces is refused
+  assert.equal((await a.api('/settings', { method: 'POST', body: { steadfast_webhook_token: 'short' } })).status, 400);
+});
+
+test('auto-send needs a connected default courier; otherwise the order says why', async (t) => {
+  const a = await steadfastShop(t);
+  // Pathao is not connected: it can't be default, and auto-send can't run on it
+  assert.equal((await a.api('/settings', { method: 'POST', body: { auto_send: true } })).status, 400);
+  assert.equal((await a.api('/settings', { method: 'POST', body: { default_courier: 'pathao' } })).status, 400);
+  const r = await a.api('/settings', { method: 'POST', body: { default_courier: 'steadfast', auto_send: true, hold_risky: false } });
+  assert.equal(r.status, 200, r.data.error);
+  await new Promise((res) => setTimeout(res, 20));
+  const payload = { id: 920, name: '#920', created_at: new Date(Date.now() + 1000).toISOString(), financial_status: 'pending', total_price: '500', total_outstanding: '500', tags: '',
+    total_weight: 1500, shipping_address: { name: 'Mim', phone: '01812345678', address1: 'Road 2, Mirpur 10', city: 'Dhaka' }, line_items: [{ title: 'Shirt', quantity: 1, grams: 0 }] };
+  await a.webhook('/webhooks/orders/create', payload, 'orders/create');
+  await a.settle();
+  assert.equal((await a.db.getShipment(SHOP, '920')).courier, 'steadfast', 'auto-sent with Steadfast');
+  // an old bad state (default = Pathao, not connected, auto-send on) explains itself
+  await a.db.updateSettings(SHOP, { default_courier: 'pathao' });
+  await a.webhook('/webhooks/orders/create', { ...payload, id: 921, name: '#921' }, 'orders/create');
+  await a.settle();
+  assert.match((await a.db.getShipment(SHOP, '921')).error, /Pathao \(your default courier\) is not connected/);
+});
+
+test('Pathao weight uses Shopify product weights, or the order total weight', () => {
+  const { buildPathaoOrder } = require('../src/pathao/mapper');
+  const o = order({ items: [{ title: 'Shirt', quantity: 2, grams: 0 }], totalGrams: 1800 });
+  assert.equal(buildPathaoOrder(o, { pathao_store_id: 1 }).payload.item_weight, 1.8);
+  const o2 = order({ items: [{ title: 'Shirt', quantity: 2, grams: 700 }], totalGrams: 0 });
+  assert.equal(buildPathaoOrder(o2, { pathao_store_id: 1 }).payload.item_weight, 1.4);
+  assert.equal(buildPathaoOrder(order({ items: [{ title: 'x', quantity: 1, grams: 0 }] }), { pathao_store_id: 1, default_weight: 0.5 }).payload.item_weight, 0.5);
+});

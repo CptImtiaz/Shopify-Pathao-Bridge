@@ -36,6 +36,7 @@ function fromWebhook(o) {
     createdAt: o.created_at,
     cancelled: Boolean(o.cancelled_at),
     source: o.source_name || null,
+    totalGrams: num(o.total_weight),
     note: o.note || '',
     tags: String(o.tags || '').split(',').map((t) => t.trim()).filter(Boolean),
     paid: o.financial_status === 'paid',
@@ -59,6 +60,7 @@ function fromGraphql(o) {
     createdAt: o.createdAt,
     cancelled: Boolean(o.cancelledAt),
     source: o.sourceName || null,
+    totalGrams: num(o.totalWeight), // Shopify's order weight in grams (product weights x quantities)
     note: o.note || '',
     tags: o.tags || [],
     paid: o.displayFinancialStatus === 'PAID',
@@ -115,7 +117,8 @@ function buildPathaoOrder(order, settings) {
   if (address.length < 10) errors.push('Shipping address is missing or shorter than 10 characters');
 
   const quantity = order.items.reduce((t, i) => t + i.quantity, 0) || 1;
-  const grams = order.items.reduce((t, i) => t + i.grams * i.quantity, 0);
+  // Product weights from Shopify; the order's total weight when line items don't carry it.
+  const grams = order.items.reduce((t, i) => t + i.grams * i.quantity, 0) || Number(order.totalGrams) || 0;
   const fallbackKg = Math.max(Number(settings.default_weight) || 0.5, 0.5);
   const weight = grams > 0 ? Math.min(Math.max(grams / 1000, 0.5), 10) : fallbackKg;
 

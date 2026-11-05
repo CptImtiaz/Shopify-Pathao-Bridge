@@ -57,7 +57,8 @@ test('hold high-risk orders: a customer with repeated returns is held, not auto-
   const a = await startApp();
   t.after(() => a.close());
   await a.api('/bootstrap');
-  await a.db.updateSettings(SHOP, { auto_send: true, auto_send_since: new Date(Date.now() - 60000), pathao_store_id: 77, pathao_client_id: 'c', pathao_username: 'u' });
+  await a.api('/settings', { method: 'POST', body: { pathao_client_id: 'c', pathao_client_secret: 's', pathao_username: 'u', pathao_password: 'p', pathao_store_id: 77 } });
+  await a.db.updateSettings(SHOP, { auto_send: true, auto_send_since: new Date(Date.now() - 60000) });
   // two past returns from the same phone
   for (const id of ['801', '802']) {
     await a.db.claimShipment(SHOP, id, `#${id}`);

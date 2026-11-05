@@ -57,7 +57,14 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
     const pathaoJob = (async () => {
       const settings = await db.getSettings(shop);
       const order = fromWebhook(payload);
-      const reason = autoSendSkipReason(order, settings);
+      let reason = autoSendSkipReason(order, settings);
+      if (!reason) {
+        const def = settings.default_courier || 'pathao';
+        const ready = def === 'steadfast'
+          ? Boolean(settings.steadfast_api_key && settings.steadfast_secret_enc && !settings.steadfast_auth_error)
+          : Boolean(settings.pathao_client_id && settings.pathao_client_secret_enc && settings.pathao_username && settings.pathao_password_enc && settings.pathao_store_id);
+        if (!ready) reason = `Auto-send: ${def === 'steadfast' ? 'Steadfast' : 'Pathao'} (your default courier) is not connected`;
+      }
       if (reason) {
         if (settings.auto_send && reason !== 'Order was created before auto-send was turned on') {
           // ("Held: ..." reasons put the order in the dashboard's Hold tab.)
@@ -137,6 +144,8 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
 
     const body = req.body || {};
     const event = String(body.event || '');
+    // A ShipBridge self-test proves the address and secret; "Live" waits for Pathao itself.
+    if (req.get('X-ShipBridge-Test') === '1') return res.status(202).send('OK');
     await db.updateSettings(shop, { pathao_webhook_at: new Date() }).catch(() => {});
     if (event === 'webhook_integration' || !body.consignment_id) { if (admin.forgetOrders) admin.forgetOrders(shop, 'courier'); return res.status(202).send('OK'); }
 
@@ -178,6 +187,7 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
 
     let body;
     try { body = JSON.parse(raw.toString('utf8') || '{}'); } catch { return res.status(400).json({ status: 'error', message: 'Invalid JSON' }); }
+    if (req.get('X-ShipBridge-Test') === '1') return res.json({ status: 'success', test: true }); // self-test only
     await db.updateSettings(shop, { steadfast_webhook_at: new Date() }).catch(() => {});
 
     // Every event is logged (no customer data), so a missing update can always be traced.
