@@ -38,7 +38,8 @@ function makeTracker({ db, pathao, steadfast, fulfillment = null, admin = null, 
     if (s.courier === 'steadfast') {
       if (!steadfast || settings.steadfast_auth_error) return s.pathao_status; // paused: don't burn login attempts
       status = (await steadfast.statusByCid(settings, s.consignment_id)).status || s.pathao_status;
-      if (status === 'unknown' && /^(in_review|pending)$/.test(String(s.pathao_status || ''))) return markRemoved(shop, s);
+      // (also catches parcels already saved as "unknown" by an earlier check)
+      if (status === 'unknown' && /^(in_review|pending|unknown)$/.test(String(s.pathao_status || ''))) return markRemoved(shop, s);
     } else {
       const info = await pathao.orderInfo(settings, s.consignment_id);
       status = info.order_status_slug || info.order_status || s.pathao_status;

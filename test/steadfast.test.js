@@ -315,3 +315,13 @@ test('tracker checks every shop with parcels on the way', async (t) => {
   await a.tracker.pollAll();
   assert.equal((await a.db.getShipment(SHOP, '860')).pathao_status, 'delivered');
 });
+
+test('a parcel already saved as unknown is also treated as removed', async (t) => {
+  const a = await steadfastShop(t);
+  a.fake.state.orders['870'] = gqlOrder(870);
+  await a.api('/orders/send', { method: 'POST', body: { ids: ['870'], courier: 'steadfast' } });
+  await a.db.finishShipment(SHOP, '870', { pathao_status: 'unknown' });
+  a.fake.state.steadfastStatus['5001'] = 'unknown';
+  await a.tracker.pollAll();
+  assert.equal((await a.db.getShipment(SHOP, '870')).status, 'skipped');
+});
