@@ -712,7 +712,7 @@
       ? `<div class="perm-box"><b>Shopify needs your OK once.</b> Bookings keep working meanwhile.
           <ol><li>Dev Dashboard → ShipBridge → <b>Versions</b> → <b>Create version</b>, add <code>${miss.map(esc).join('</code> <code>')}</code> (and the matching <code>read_</code> scopes), then <b>Release</b>.</li>
           <li>Reopen ShipBridge, click <b>Update</b> when Shopify asks, then press Check again.</li></ol><button class="btn sm" data-perm>Check again</button></div>`
-      : '<span class="ok-line"><span class="live" style="margin:0"><i></i></span>Allowed — orders are fulfilled and updated in Shopify automatically.</span>';
+      : ''; // allowed: nothing to show
 
     $('sync_fulfillment').checked = sync;
     $('notify_customer').checked = Boolean(s.notify_customer); $('notify_customer').disabled = !sync;
