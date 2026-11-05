@@ -193,17 +193,26 @@
   }
 
   // ---------------- orders page ----------------
+  // Dashboard checklist: covers every available courier, not only the default one.
   function setupSteps() {
     const s = S();
-    if (defKey() === 'steadfast') {
-      return [
-        { key: 'sf-account', done: sfConnected(), html: 'Connect your Steadfast account', btn: ['sf-account', 'Add Steadfast'] },
-        { key: 'sf-webhook', done: webhookLive('steadfast'), html: 'Connect the Steadfast webhook so delivery status updates live', btn: ['sf-webhook', 'Set up webhook'] },
-        { key: 'shopify', done: s.sync_fulfillment === false || !permMissing(), html: 'Allow ShipBridge to update orders inside Shopify', btn: ['shopify', 'Allow access'] },
-        { key: 'auto', done: Boolean(s.auto_send), html: 'Send new orders to Steadfast automatically', btn: ['defaults', 'Turn on auto-send'] },
-      ];
-    }
-    return pathaoSteps();
+    const all = (state.boot.couriers || []).filter((c) => c.available);
+    const ready = all.filter((c) => courierReady(c.key));
+    const notLive = ready.filter((c) => !webhookLive(c.key));
+    const prefix = (k) => (k === 'steadfast' ? 'sf-' : '');
+    const firstUnready = all.find((c) => !courierReady(c.key));
+    return [
+      { key: 'courier', done: ready.length > 0,
+        html: ready.length ? `Couriers connected: ${ready.map((c) => c.name).join(', ')}` : `Connect a courier (${all.map((c) => c.name).join(' or ')})`,
+        btn: [firstUnready ? (firstUnready.key === 'pathao' && s.connected ? 'delivery' : `${prefix(firstUnready.key)}account`) : 'account', 'Connect a courier'] },
+      { key: 'live', done: ready.length > 0 && notLive.length === 0,
+        html: notLive.length ? `Turn on live delivery updates for ${notLive.map((c) => c.name).join(' and ')}` : 'Live delivery updates for your couriers',
+        btn: [notLive.length ? `${prefix(notLive[0].key)}webhook` : 'webhook', 'Set up webhook'] },
+      { key: 'shopify', done: s.sync_fulfillment === false || !permMissing(), html: 'Allow ShipBridge to update orders inside Shopify', btn: ['shopify', 'Allow access'] },
+      { key: 'auto', done: Boolean(s.auto_send) && courierReady(defKey()),
+        html: !courierReady(defKey()) && ready.length ? `Make ${ready[0].name} your default courier, then turn on auto-send` : `Send new orders to ${cname(defKey())} automatically`,
+        btn: ['defaults', !courierReady(defKey()) && ready.length ? 'Choose default' : 'Turn on auto-send'] },
+    ];
   }
   function pathaoSteps() {
     const s = S();
