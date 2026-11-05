@@ -414,10 +414,8 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, sh
     return { note: note || null };
   }));
 
-  router.post('/orders/:id/refresh', wrap(async (req) => {
-    const s = await db.getShipment(req.shop, req.params.id);
-    if (!s || !s.consignment_id) throw Object.assign(new Error('Order has not been sent to a courier'), { status: 404 });
-    const settings = await db.getSettings(req.shop);
+  // Ask the courier for a parcel's current status and save it.
+  async function refreshShipment(shop, s, settings) {
     let status;
     if (s.courier === 'steadfast') {
       status = (await steadfast.statusByCid(settings, s.consignment_id)).status || s.pathao_status;
@@ -425,10 +423,34 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, sh
       const info = await pathao.orderInfo(settings, s.consignment_id);
       status = info.order_status_slug || info.order_status || s.pathao_status;
     }
-    await db.finishShipment(req.shop, req.params.id, { pathao_status: status });
-    if (fulfillment) await fulfillment.sync(req.shop, req.params.id, { status });
+    if (status !== s.pathao_status) {
+      await db.finishShipment(shop, s.shopify_order_id, { pathao_status: status });
+      log.info(`[${shop}] ${s.order_name} ${s.courier} status ${s.pathao_status || '-'} -> ${status} (checked)`);
+    }
+    if (fulfillment) await fulfillment.sync(shop, s.shopify_order_id, { status });
+    return status;
+  }
+
+  router.post('/orders/:id/refresh', wrap(async (req) => {
+    const s = await db.getShipment(req.shop, req.params.id);
+    if (!s || !s.consignment_id) throw Object.assign(new Error('Order has not been sent to a courier'), { status: 404 });
+    const status = await refreshShipment(req.shop, s, await db.getSettings(req.shop));
     admin.forgetOrders(req.shop);
     return { pathaoStatus: status };
+  }));
+
+  // Main Refresh button: check the latest status of up to 20 parcels still on the way.
+  router.post('/orders/refresh-active', wrap(async (req) => {
+    const settings = await db.getSettings(req.shop);
+    const list = await db.activeShipments(req.shop, 20);
+    let changed = 0, failed = 0;
+    for (const s of list) {
+      if (s.courier === 'steadfast' && settings.steadfast_auth_error) continue; // paused: don't burn login attempts
+      try { if ((await refreshShipment(req.shop, s, settings)) !== s.pathao_status) changed += 1; }
+      catch (e) { failed += 1; log.warn(`[${req.shop}] status check ${s.order_name} failed: ${e.message}`); }
+    }
+    admin.forgetOrders(req.shop);
+    return { checked: list.length, changed, failed };
   }));
 
   // ---- SMS log ----

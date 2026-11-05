@@ -45,6 +45,9 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   Every Steadfast webhook is logged (`steadfast webhook: <type> cid=… status=… order=…`). Any event
   with a status updates the order; `tracking_message` is saved in `shipments.courier_message` and
   shown in the order panel. Events without `consignment_id` are matched by `invoice`.
+  Only real delivery statuses (their list) change an order; `cancel_request` only sets a message
+  until approved (then `cancelled`). "Refresh status" is always shown; the main Refresh calls
+  `POST /api/orders/refresh-active` (up to 20 parcels still on the way, skipped while keys are paused).
 - `shipments.courier` says which courier booked an order; `shipments.pathao_status` holds the
   courier's status text for every courier (name predates multi-courier).
 - `settings.default_courier` drives Send buttons and auto-send.

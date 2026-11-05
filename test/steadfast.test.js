@@ -245,3 +245,41 @@ test('steadfast webhook: tracking updates save the message; events are logged; i
   assert.equal(r.status, 200);
   assert.ok(a.logs.some((l) => /cid=999 .*order=not found/.test(l)));
 });
+
+test('steadfast cancel_request: raised = message only, approved = cancelled; other events never set a fake status', async (t) => {
+  const a = await steadfastShop(t);
+  a.fake.state.orders['830'] = gqlOrder(830);
+  await a.api('/orders/send', { method: 'POST', body: { ids: ['830'], courier: 'steadfast' } });
+  const token = (await a.api('/bootstrap')).data.steadfastWebhook.token;
+
+  await sfHook(a, { notification_type: 'cancel_request', consignment_id: 5001, status: 'pending' }, { token });
+  await a.settle();
+  let s = await a.db.getShipment(SHOP, '830');
+  assert.equal(s.pathao_status, 'in_review', '"pending" of a cancel request is not a parcel status');
+  assert.match(s.courier_message, /Cancellation requested/);
+
+  await sfHook(a, { notification_type: 'pickup_request', consignment_id: 5001, status: 'approved' }, { token });
+  await a.settle();
+  assert.equal((await a.db.getShipment(SHOP, '830')).pathao_status, 'in_review');
+
+  await sfHook(a, { notification_type: 'cancel_request', consignment_id: 5001, status: 'approved' }, { token });
+  await a.settle();
+  s = await a.db.getShipment(SHOP, '830');
+  assert.equal(s.pathao_status, 'cancelled');
+  assert.match(s.courier_message, /Cancellation approved/);
+  const o = (await a.api('/orders?fresh=1')).data.orders.find((x) => x.id === '830');
+  assert.equal(o.shipment.pathaoStatus, 'cancelled');
+});
+
+test('main Refresh asks couriers for active parcels only, and picks up a cancellation', async (t) => {
+  const a = await steadfastShop(t);
+  for (const id of [840, 841]) a.fake.state.orders[id] = gqlOrder(id);
+  await a.api('/orders/send', { method: 'POST', body: { ids: ['840', '841'], courier: 'steadfast' } });
+  await a.db.finishShipment(SHOP, '841', { pathao_status: 'delivered' });
+  a.fake.state.steadfastStatus['5001'] = 'cancelled';
+  const before = a.fake.calls.filter((c) => c.url.includes('/status_by_cid/')).length;
+  const r = await a.api('/orders/refresh-active', { method: 'POST' });
+  assert.deepEqual(r.data, { checked: 1, changed: 1, failed: 0 });
+  assert.equal(a.fake.calls.filter((c) => c.url.includes('/status_by_cid/')).length - before, 1, 'delivered parcel not checked');
+  assert.equal((await a.db.getShipment(SHOP, '840')).pathao_status, 'cancelled');
+});

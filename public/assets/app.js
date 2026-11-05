@@ -448,7 +448,7 @@
     const s = o.shipment;
     if (s && s.status === 'sent') {
       const c = courier(s.courier || 'pathao');
-      return `<span class="courier-chip">${cmono(c)}${esc(c.name)}</span>${webhookLive(c.key) ? '<span class="live" title="Webhook connected — status updates instantly"><i></i>Live</span>' : `<button class="link-btn" data-track="${esc(o.id)}">Refresh status</button>`}`;
+      return `<span class="courier-chip">${cmono(c)}${esc(c.name)}</span>${webhookLive(c.key) ? '<span class="live" title="Webhook connected — status updates instantly"><i></i>Live</span>' : ''}<button class="link-btn" data-track="${esc(o.id)}">Refresh status</button>`;
     }
     if (s && s.status === 'processing') return '<span class="sub">Sending…</span>';
     if (o.cancelled && !s) return '<span class="sub">—</span>';
@@ -594,7 +594,7 @@
         <ul class="tl">${tl}</ul>
         ${sent && o.shipment.courierMessage ? `<div class="courier-msg"><b>Latest from ${esc(cname(o.shipment.courier))}</b>${esc(o.shipment.courierMessage)}${o.shipment.courierMessageAt ? `<span class="sub">${esc(time(o.shipment.courierMessageAt))}</span>` : ''}</div>` : ''}
         ${sent && o.shipment.shopifySynced ? '<div class="synced"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Shopify order updated automatically</div>' : ''}
-        ${sent && webhookLive() ? '<span class="live"><i></i>Live — updates instantly</span>' : sent ? `<button class="btn sm" data-track="${esc(o.id)}">Refresh status</button>` : ''}
+        ${sent ? `<div class="d-refresh">${webhookLive(o.shipment.courier || 'pathao') ? '<span class="live"><i></i>Live — updates instantly</span>' : ''}<button class="btn sm" data-track="${esc(o.id)}">Refresh status</button></div>` : ''}
       </div>
       <div class="d-money">
         <div class="d-items">${(o.products || []).map((p) => `<div class="it">${p.image ? `<img class="thumb" src="${esc(p.image)}" alt="" />` : `<span class="thumb">${esc((p.title || '?').charAt(0))}</span>`}<span class="ellip" style="flex:1">${esc(p.title)}</span><span class="sub">× ${p.quantity}</span></div>`).join('')}</div>
@@ -1010,7 +1010,12 @@
         return await busy(b, () => sendOrders(ids, S().default_courier || 'pathao'));
       }
       if (b.id === 'bulk-default') return await busy(b, () => sendOrders([...state.selected], S().default_courier || 'pathao'));
-      if (b.id === 'reload-orders') return await busy(b, async () => { await Promise.all([refreshBoot(true), loadOrders(null, { fresh: true })]); });
+      if (b.id === 'reload-orders') return await busy(b, async () => {
+        // Ask the couriers for the latest status of parcels on the way, then reload.
+        const r = await api('/orders/refresh-active', { method: 'POST' }).catch(() => null);
+        await Promise.all([refreshBoot(true), loadOrders(null, { fresh: true })]);
+        if (r && r.changed) toast(`${r.changed} parcel status${r.changed > 1 ? 'es' : ''} updated`);
+      });
       if (b.id === 'save-connection') return await busy(b, saveConnection);
       if (b.id === 'sf-save') return await busy(b, saveSteadfast);
       if (b.id === 'sf-make-default') return await busy(b, () => savePrefs({ default_courier: 'steadfast' }));

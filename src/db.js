@@ -321,6 +321,15 @@ function makeDb(pool) {
     findShipmentByInvoice: (shop, invoice) =>
       one(`SELECT * FROM shipments WHERE shop = $1 AND courier = 'steadfast' AND order_name IN ($2, $3) ORDER BY updated_at DESC LIMIT 1`,
         [shop, String(invoice), `#${String(invoice).replace(/^#/, '')}`]),
+    // Sent parcels that may still change (most recent first).
+    async activeShipments(shop, limit = 20) {
+      const done = /^(order\.)?(delivered|partial_delivered|cancelled|returned|paid_return|cancelled_return_received|partial_delivered_return_received)$/i;
+      const rows = (await q(
+        `SELECT * FROM shipments WHERE shop = $1 AND status = 'sent' AND consignment_id IS NOT NULL ORDER BY updated_at DESC LIMIT 200`,
+        [shop]
+      )).rows;
+      return rows.filter((r) => !done.test(String(r.pathao_status || '').replace(/-/g, '_'))).slice(0, limit);
+    },
     findShipmentByConsignment: (shop, consignmentId) =>
       one('SELECT * FROM shipments WHERE shop = $1 AND consignment_id = $2', [shop, String(consignmentId)]),
 

@@ -15,6 +15,16 @@ const PATHAO_INTEGRATION_HEADER = 'X-Pathao-Merchant-Webhook-Integration-Secret'
 
 // `defer` lets background work run after the response is sent. On an
 // always-on server it just lets the promise run.
+// Steadfast delivery statuses (their guide). Other events (cancel_request, pickup_request...)
+// have their own "status" values that must not be mistaken for a parcel status.
+const STEADFAST_DELIVERY_STATUSES = new Set([
+  'pending', 'in_review', 'hold', 'delivered_approval_pending', 'partial_delivered_approval_pending',
+  'cancelled_approval_pending', 'unknown_approval_pending', 'delivered', 'partial_delivered', 'cancelled',
+  'exceptional', 'unknown',
+  'partial_delivered_return_proccessing', 'partial_delivered_return_rider_assigned', 'partial_delivered_return_received',
+  'cancelled_return_proccessing', 'cancelled_return_rider_assigned', 'cancelled_return_received',
+]);
+
 function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, steadfast = null, notifier, log = console, defer = (p) => p }) {
   const router = express.Router();
   const raw = express.raw({ type: '*/*', limit: '2mb' });
@@ -169,9 +179,17 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
     const cid = body.consignment_id != null ? String(body.consignment_id) : '';
     const shipment = cid ? await db.findShipmentByConsignment(shop, cid)
       : body.invoice ? await db.findShipmentByInvoice(shop, body.invoice) : null;
-    const status = body.status != null && body.status !== '' ? String(body.status).toLowerCase() : null;
-    const message = String(body.tracking_message || body.message || '').trim().slice(0, 300) || null;
-    log.info(`[${shop}] steadfast webhook: ${type} cid=${cid || '-'} invoice=${body.invoice || '-'} status=${status || '-'} order=${shipment ? shipment.order_name : 'not found'}`);
+    const given = body.status != null && body.status !== '' ? String(body.status).toLowerCase().trim() : null;
+    let status = given && STEADFAST_DELIVERY_STATUSES.has(given) && type !== 'cancel_request' ? given : null;
+    let message = String(body.tracking_message || body.message || '').trim().slice(0, 300) || null;
+    if (type === 'cancel_request') {
+      // Raised: Steadfast is reviewing it. Approved: the parcel is cancelled (and comes back).
+      const decided = /approv|accept|confirm|done|complete|cancelled/.test(given || '');
+      const refused = /reject|declin|denied/.test(given || '');
+      if (decided) status = 'cancelled';
+      message = message || (decided ? 'Cancellation approved by Steadfast' : refused ? 'Cancellation request rejected by Steadfast' : 'Cancellation requested · waiting for Steadfast');
+    }
+    log.info(`[${shop}] steadfast webhook: ${type} cid=${cid || '-'} invoice=${body.invoice || '-'} status=${given || '-'}${status && status !== given ? `->${status}` : ''} order=${shipment ? shipment.order_name : 'not found'}`);
     // Parcel events (delivery_status, tracking_update, consignment_update...) carry a status and/or a message.
     if (!shipment || (!status && !message)) return res.json({ status: 'success' });
 
