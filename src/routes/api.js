@@ -176,8 +176,8 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
       stats,
       couriers: listCouriers(settings, { pathao }),
       plans: Object.values(PLANS),
-      pathaoWebhook: { refusedAt: settings.pathao_webhook_error_at || null, url: `${config.appUrl}/pathao/webhook/${req.shop}`, secret: settings.webhook_secret, lastAt: settings.pathao_webhook_at || null, live: Boolean(settings.webhook_secret && settings.pathao_webhook_at) },
-      steadfastWebhook: { refusedAt: settings.steadfast_webhook_error_at || null, url: `${config.appUrl}/steadfast/webhook/${req.shop}`, token: settings.steadfast_webhook_token, lastAt: settings.steadfast_webhook_at || null, live: Boolean(settings.steadfast_webhook_at) },
+      pathaoWebhook: { saved: Boolean(settings.pathao_webhook_saved_at), refusedAt: settings.pathao_webhook_error_at || null, url: `${config.appUrl}/pathao/webhook/${req.shop}`, secret: settings.webhook_secret, lastAt: settings.pathao_webhook_at || null, live: Boolean(settings.webhook_secret && settings.pathao_webhook_at) },
+      steadfastWebhook: { saved: Boolean(settings.steadfast_webhook_saved_at), refusedAt: settings.steadfast_webhook_error_at || null, url: `${config.appUrl}/steadfast/webhook/${req.shop}`, token: settings.steadfast_webhook_token, lastAt: settings.steadfast_webhook_at || null, live: Boolean(settings.steadfast_webhook_at) },
       webhooks,
       permissions,
     };
@@ -211,6 +211,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
       const w = String(b.steadfast_webhook_token).trim();
       if (w.length < 16 || w.length > 200 || /\s/.test(w)) throw Object.assign(new Error('Auth token must be 16–200 characters, without spaces'), { status: 400 });
       f.steadfast_webhook_token = w;
+      f.steadfast_webhook_saved_at = new Date();
       if (w !== current.steadfast_webhook_token) f.steadfast_webhook_error_at = null;
     }
 
@@ -243,6 +244,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
       const w = String(b.webhook_secret).trim();
       if (w.length < 8 || w.length > 100 || /\s/.test(w)) throw Object.assign(new Error('Secret key must be 8–100 characters, without spaces'), { status: 400 });
       f.webhook_secret = w;
+      f.pathao_webhook_saved_at = new Date();
       if (w !== current.webhook_secret) f.pathao_webhook_error_at = null;
     }
     if (b.default_note !== undefined) {

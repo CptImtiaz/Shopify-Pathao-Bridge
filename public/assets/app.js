@@ -48,6 +48,7 @@
   const LOGO_V = (document.querySelector('meta[name="logo-version"]') || {}).content || '1';
   const LOGOS = { pathao: `/assets/couriers/pathao-mark.png?v=${LOGO_V}`, steadfast: `/assets/couriers/steadfast-mark.png?v=${LOGO_V}` };
   const cmono = (c, cls = '') => (LOGOS[c.key] ? `<img class="cmono logo-img ${cls}" src="${LOGOS[c.key]}" alt="${esc(c.name)}" />` : `<span class="cmono ${cls}" style="background:${esc(c.color)}">${esc(c.name.charAt(0))}</span>`);
+  const webhookSaved = (key = 'pathao') => Boolean(state.boot && (key === 'steadfast' ? state.boot.steadfastWebhook : state.boot.pathaoWebhook)?.saved) || webhookLive(key);
   const webhookLive = (key = 'pathao') => Boolean(state.boot && (key === 'steadfast' ? state.boot.steadfastWebhook : state.boot.pathaoWebhook)?.live);
   const defKey = () => (state.boot && state.boot.settings && state.boot.settings.default_courier) || 'pathao';
   const cname = (key) => courier(key || 'pathao').name;
@@ -198,7 +199,7 @@
     const s = S();
     const all = (state.boot.couriers || []).filter((c) => c.available);
     const ready = all.filter((c) => courierReady(c.key));
-    const notLive = ready.filter((c) => !webhookLive(c.key));
+    const notLive = ready.filter((c) => !webhookSaved(c.key));
     const prefix = (k) => (k === 'steadfast' ? 'sf-' : '');
     const firstUnready = all.find((c) => !courierReady(c.key));
     return [
@@ -206,7 +207,7 @@
         html: ready.length ? `Couriers connected: ${ready.map((c) => c.name).join(', ')}` : `Connect a courier (${all.map((c) => c.name).join(' or ')})`,
         btn: [firstUnready ? (firstUnready.key === 'pathao' && s.connected ? 'delivery' : `${prefix(firstUnready.key)}account`) : 'account', 'Connect a courier'] },
       { key: 'live', done: ready.length > 0 && notLive.length === 0,
-        html: notLive.length ? `Turn on live delivery updates for ${notLive.map((c) => c.name).join(' and ')}` : 'Live delivery updates for your couriers',
+        html: notLive.length ? `Set up the webhook for ${notLive.map((c) => c.name).join(' and ')}` : 'Webhooks set up',
         btn: [notLive.length ? `${prefix(notLive[0].key)}webhook` : 'webhook', 'Set up webhook'] },
       // (No "allow Shopify access" step: the app asks for it when it is installed.)
       { key: 'auto', done: Boolean(s.auto_send) && courierReady(defKey()),
@@ -219,7 +220,7 @@
     return [
       { key: 'account', done: Boolean(s.connected), html: 'Connect your Pathao account', btn: ['account', 'Add Pathao'] },
       { key: 'delivery', done: Boolean(s.pathao_store_id), html: 'Choose the Pathao store parcels are picked up from', btn: ['delivery', 'Choose store'] },
-      { key: 'webhook', done: webhookLive(), html: 'Connect the Pathao webhook so delivery status updates live', btn: ['webhook', 'Set up webhook'] },
+      { key: 'webhook', done: webhookSaved('pathao'), html: 'Connect the Pathao webhook so delivery status updates live', btn: ['webhook', 'Set up webhook'] },
       { key: 'shopify', done: s.sync_fulfillment === false || !permMissing(), html: 'Allow ShipBridge to update orders inside Shopify', btn: ['shopify', 'Allow access'] },
       { key: 'auto', done: Boolean(s.auto_send), html: 'Send new orders to Pathao automatically', btn: ['defaults', 'Turn on auto-send'] },
     ];
@@ -653,20 +654,7 @@
   function closeMenu() { show($('courier-menu'), false); show($('fraud-pop'), false); state.menuFor = null; }
 
   // ---------------- couriers page ----------------
-  // A webhook we were waiting for has gone Live: say so and move on to the next step (Delivery settings).
-  function settleWebhookWaits() {
-    for (const [key, since] of Object.entries(state.whWait || {})) {
-      const wh = key === 'pathao' ? state.boot.pathaoWebhook : state.boot.steadfastWebhook;
-      if (wh && wh.lastAt && new Date(wh.lastAt).getTime() >= since - 2000) {
-        delete state.whWait[key];
-        toast(`${cname(key)} webhook connected · Live`);
-        state.courierView = key;
-        state.section = key === 'pathao' ? 'delivery' : 'sf-delivery';
-      }
-    }
-  }
   function renderCouriers() {
-    settleWebhookWaits();
     const s = S();
     const soon = (state.boot.couriers || []).filter((c) => !c.available);
     const p = courier('pathao'), sf = courier('steadfast');
@@ -713,7 +701,7 @@
     document.querySelector('[data-step="delivery"] [data-summary]').textContent = s.pathao_store_id
       ? `${s.pathao_store_name || 'Store #' + s.pathao_store_id} · ${String(s.delivery_type) === '12' ? 'Express' : 'Regular'} · ${Number(s.default_weight) || 0.5} kg`
       : 'Pickup store, delivery type, parcel weight, note for rider';
-    document.querySelector('[data-step="webhook"] [data-summary]').innerHTML = webhookLive() ? '<span class="live" style="margin:0"><i></i>Live</span>' : 'Pathao tells ShipBridge the moment a parcel moves';
+    document.querySelector('[data-step="webhook"] [data-summary]').innerHTML = webhookLive() ? '<span class="live" style="margin:0"><i></i>Live</span>' : webhookSaved('pathao') ? 'Saved' : 'Pathao tells ShipBridge the moment a parcel moves';
     const wh = state.boot.pathaoWebhook || {};
     $('wh-state').innerHTML = webhookState(wh, 'Pathao', 'secret key', 'Pathao Merchant Panel');
 
@@ -750,7 +738,7 @@
     const wh = state.boot.steadfastWebhook || {};
     const steps = [
       { key: 'sf-account', done: sfConnected() },
-      { key: 'sf-webhook', done: webhookLive('steadfast') },
+      { key: 'sf-webhook', done: webhookSaved('steadfast') },
       { key: 'sf-delivery', done: sfConnected() },
     ];
     const done = steps.filter((x) => x.done).length, pct = Math.round((done / steps.length) * 100);
@@ -783,7 +771,7 @@
       : sfRejected() ? 'Steadfast refused the connection, see below' : 'API key and secret key';
     $('sf-auth-error').innerHTML = sfRejected() ? `<b>Steadfast bookings are paused.</b> ${esc(sf.auth_error)}. ShipBridge stopped calling Steadfast so your key doesn't get locked out. When it's fixed, click Save &amp; connect.` : '';
     show($('sf-auth-error'), sfRejected());
-    document.querySelector('[data-step="sf-webhook"] [data-summary]').innerHTML = webhookLive('steadfast') ? '<span class="live" style="margin:0"><i></i>Live</span>' : 'Steadfast tells ShipBridge the moment a parcel moves';
+    document.querySelector('[data-step="sf-webhook"] [data-summary]').innerHTML = webhookLive('steadfast') ? '<span class="live" style="margin:0"><i></i>Live</span>' : webhookSaved('steadfast') ? 'Saved' : 'Steadfast tells ShipBridge the moment a parcel moves';
     document.querySelector('[data-step="sf-delivery"] [data-summary]').textContent = [
       sf.delivery_type === 1 ? 'Hub pick-up' : 'Home delivery',
       sf.item_desc !== false ? 'product list' : null, sf.total_lot ? 'item count' : null, sf.alt_phone ? '2nd phone' : null,
@@ -798,32 +786,13 @@
     show($('sf-disconnect'), sfConnected() || sfRejected());
     $('sf-wh-state').innerHTML = webhookState(wh, 'Steadfast', 'auth token', 'Steadfast portal');
   }
-  // What we really know about a courier's webhook. ShipBridge can't read the courier's portal,
-  // so "Live" only comes from the courier actually calling; a call with the wrong secret is shown.
-  // After Save, wait up to 5 minutes for the courier's own test call (it can't be triggered from here).
-  const WAIT_MS = 5 * 60 * 1000;
-  state.whWait = state.whWait || {};
+  // Only a real problem is shown under the webhook: the courier calling with a different secret/token.
   function webhookState(wh, name, secretWord, portal) {
-    const key = name.toLowerCase(), since = state.whWait[key];
-    const after = (t) => Boolean(t && since && new Date(t).getTime() >= since - 2000);
     if (wh.refusedAt && (!wh.lastAt || new Date(wh.refusedAt) > new Date(wh.lastAt))) {
-      if (since && after(wh.refusedAt)) delete state.whWait[key];
       return `<span class="bad-line"><b>${name} is calling ShipBridge with a different ${secretWord}.</b> Make the ${secretWord} here and in the ${portal} the same, then save both.</span>`;
     }
-    if (since && Date.now() - since < WAIT_MS) {
-      return `<span class="wait-line"><span class="spin" aria-hidden="true"></span><b>Waiting for ${name}'s test…</b> Now save the webhook in the ${portal}. This turns Live the moment ${name}'s test arrives.</span>`;
-    }
-    if (since) {
-      return `<span class="bad-line"><b>No test from ${name} in 5 minutes.</b> Check that the Callback URL saved in the ${portal} is exactly the one above (and the ${secretWord} matches), then save it there again.</span>`;
-    }
-    if (wh.live) return '';
-    if (key === 'steadfast') {
-      return `<span class="wait-line">Not live yet. Steadfast doesn't send a test when you save; it connects with its first parcel update (e.g. when it approves a parcel). Live appears then.</span>`;
-    }
-    return `<span class="wait-line">Not live yet. Save the webhook in the ${portal}: ${name} sends a test, and this turns Live when it arrives.</span>`;
+    return '';
   }
-  // While waiting, re-check every 10 s (the courier's test also arrives instantly through live updates).
-  setInterval(() => { if (Object.keys(state.whWait || {}).length && state.page === 'couriers') refreshBoot().catch(() => {}); }, 10000);
   async function saveSteadfast() {
     const key = $('sf_api_key').value.trim(), secret = $('sf_secret_key').value.trim();
     if (!key) throw new Error('Enter your Steadfast API key');
@@ -1070,15 +1039,9 @@
         const field = courier === 'pathao' ? 'webhook_secret' : 'steadfast_webhook_token';
         const value = $(courier === 'pathao' ? 'wh_secret' : 'sf_wh_token').value.trim();
         apply(await api('/settings', { method: 'POST', body: { [field]: value } }));
-        if (courier === 'pathao') {
-          state.whWait.pathao = Date.now();
-          await refreshBoot();
-          toast('Saved · now save it in the Pathao Merchant Panel');
-        } else {
-          state.courierView = 'steadfast'; state.section = 'sf-delivery';
-          await refreshBoot();
-          toast('Saved · Live turns on with Steadfast\'s first parcel update');
-        }
+        state.courierView = courier; state.section = courier === 'pathao' ? 'delivery' : 'sf-delivery';
+        await refreshBoot();
+        toast('Saved');
       });
       if (b.dataset.plan) return await busy(b, async () => { const r = await api('/billing/subscribe', { method: 'POST', body: { plan: b.dataset.plan, interval: state.period } }); window.open(r.confirmationUrl, '_top'); });
       if (b.dataset.downgrade !== undefined) {

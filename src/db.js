@@ -114,6 +114,8 @@ const SCHEMA = [
   // Latest tracking text from the courier (e.g. Steadfast's tracking_message).
   `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS courier_message TEXT`,
   `ALTER TABLE settings ADD COLUMN IF NOT EXISTS pathao_webhook_error_at TIMESTAMPTZ`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS pathao_webhook_saved_at TIMESTAMPTZ`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS steadfast_webhook_saved_at TIMESTAMPTZ`,
   `ALTER TABLE settings ADD COLUMN IF NOT EXISTS steadfast_webhook_error_at TIMESTAMPTZ`,
   // Steadfast delivery settings (optional create_order fields; each is only sent when switched on).
   `ALTER TABLE settings ADD COLUMN IF NOT EXISTS sf_delivery_type INTEGER NOT NULL DEFAULT 0`,

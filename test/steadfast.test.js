@@ -472,3 +472,15 @@ test('once a webhook is live, parcels are not polled (except Steadfast parcels s
   await a.tracker.refreshActive(SHOP);
   assert.deepEqual(calls().slice(before), ['5001'], 'only the in-review parcel is still checked (removal)');
 });
+
+test('saving a webhook marks it set up; Live still comes only from the courier', async (t) => {
+  const a = await steadfastShop(t);
+  let boot = (await a.api('/bootstrap')).data;
+  assert.equal(boot.steadfastWebhook.saved, false);
+  await a.api('/settings', { method: 'POST', body: { steadfast_webhook_token: boot.steadfastWebhook.token } });
+  await a.api('/settings', { method: 'POST', body: { webhook_secret: 'pathao-secret-123' } });
+  boot = (await a.api('/bootstrap')).data;
+  assert.equal(boot.steadfastWebhook.saved, true);
+  assert.equal(boot.pathaoWebhook.saved, true);
+  assert.equal(boot.steadfastWebhook.live, false);
+});
