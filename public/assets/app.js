@@ -1002,7 +1002,7 @@
     const per = t.closest('[data-period]');
     if (per) { state.period = per.dataset.period; renderBilling(); return; }
 
-    const b = t.closest('#send-new,#bulk-default,#reload-orders,#save-connection,#save-webhook,#sf-save,#sf-disconnect,#sf-make-default,[data-plan],[data-downgrade]');
+    const b = t.closest('#send-new,#bulk-default,#save-connection,#save-webhook,#sf-save,#sf-disconnect,#sf-make-default,[data-plan],[data-downgrade]');
     if (!b) return;
     try {
       if (b.id === 'send-new') {
@@ -1011,12 +1011,6 @@
         return await busy(b, () => sendOrders(ids, S().default_courier || 'pathao'));
       }
       if (b.id === 'bulk-default') return await busy(b, () => sendOrders([...state.selected], S().default_courier || 'pathao'));
-      if (b.id === 'reload-orders') return await busy(b, async () => {
-        // Ask the couriers for the latest status of parcels on the way, then reload.
-        const r = await api('/orders/refresh-active', { method: 'POST' }).catch(() => null);
-        await Promise.all([refreshBoot(true), loadOrders(null, { fresh: true })]);
-        if (r && r.changed) toast(`${r.changed} parcel status${r.changed > 1 ? 'es' : ''} updated`);
-      });
       if (b.id === 'save-connection') return await busy(b, saveConnection);
       if (b.id === 'sf-save') return await busy(b, saveSteadfast);
       if (b.id === 'sf-make-default') return await busy(b, () => savePrefs({ default_courier: 'steadfast' }));
@@ -1066,10 +1060,47 @@
   }));
   $('search').addEventListener('input', (e) => { state.search = e.target.value; renderRows(); });
   window.addEventListener('resize', closeMenu);
+  // ---------------- live updates ----------------
+  // The server pushes an event whenever this shop's orders change (new order, Shopify edit,
+  // courier update, status check). Redraw straight away; reconnect if the stream drops.
+  let liveTimer = null, liveBoot = false;
+  function onLive(ev) {
+    if (ev && ev.type === 'courier') liveBoot = true;
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(async () => {
+      const boot = liveBoot; liveBoot = false;
+      try {
+        if (boot) await refreshBoot();
+        if (state.loaded) await loadOrders(); else if (state.page === 'orders') await loadOrders();
+      } catch (e) { /* next event or the fallback check will retry */ }
+    }, 300);
+  }
+  async function startLive() {
+    for (;;) {
+      try {
+        const res = await fetch('/api/events', { headers: { Authorization: `Bearer ${await shopify.idToken()}` } });
+        if (!res.ok || !res.body) throw new Error(`live updates unavailable (${res.status})`);
+        const reader = res.body.getReader(), dec = new TextDecoder();
+        let buf = '';
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          let i;
+          while ((i = buf.indexOf('\n\n')) >= 0) {
+            const line = buf.slice(0, i).split('\n').find((l) => l.startsWith('data:'));
+            buf = buf.slice(i + 2);
+            if (line) { try { onLive(JSON.parse(line.slice(5))); } catch (e) { /* ignore a bad event */ } }
+          }
+        }
+      } catch (e) { /* reconnect below */ }
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+  }
+  // Safety net if the live connection is down: quiet check every 2 minutes.
   setInterval(() => {
-    const busy = state.selected.size || state.focus || state.dp || !$('courier-menu').hidden;
-    if (document.visibilityState === 'visible' && state.page === 'orders' && state.loaded && !busy) loadOrders();
-  }, 60000);
+    if (document.visibilityState === 'visible' && state.loaded) loadOrders();
+  }, 120000);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (state.dp) { closePicker(); return; } closeMenu(); closeDetail(); } });
   // Typing a date in the Start / End boxes.
   ['dp-from', 'dp-to'].forEach((id) => $(id).addEventListener('change', () => {
@@ -1100,6 +1131,7 @@
     try { await refreshBoot(); fillAccount(); }
     catch (e) { $('banners').innerHTML = `<div class="banner bad"><b>Could not load ShipBridge.</b>&nbsp;${esc(e.message)}</div>`; return; }
     if (state.page === 'orders') loadOrders(ordersP);
+    startLive();
     if (state.page === 'billing') loadBilling();
   }
   start();

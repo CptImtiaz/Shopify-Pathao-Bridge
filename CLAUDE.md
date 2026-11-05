@@ -47,12 +47,15 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   shown in the order panel. Events without `consignment_id` are matched by `invoice`.
   Only real delivery statuses (their list) change an order; `cancel_request` only sets a message
   until approved (then `cancelled`).
-- Statuses update on their own (owner does not want refresh buttons): `src/tracking.js` polls
-  couriers every 3 min for parcels still on the way (started in server.js; `pollStatuses:false`
-  in tests) and when the dashboard loads (max once a minute per shop). The dashboard reloads
-  its list every 60 s. Steadfast `unknown` for a parcel that was `in_review`/`pending` = removed
-  in the Steadfast panel -> shipment back to skipped "Removed in Steadfast", Shopify
-  fulfillment cancelled, not counted toward the plan limit.
+- Everything updates on its own; NO refresh buttons anywhere (owner's request).
+  Live updates: `src/events.js` bus; `GET /api/events` is a streaming (SSE-format) response the
+  dashboard reads with fetch (session token header) and reconnects every 3 s if dropped. Any
+  `admin.forgetOrders(shop)` publishes an event (wrapped in app.js), so webhooks (orders/create,
+  orders/updated, Pathao, Steadfast), the tracker and bookings all redraw open dashboards.
+  `src/tracking.js` polls couriers every minute for parcels still on the way (started in
+  server.js; `pollStatuses:false` in tests) and when the dashboard loads. Steadfast `unknown`
+  for a parcel that was `in_review`/`pending`/`unknown` = removed in the Steadfast panel ->
+  shipment back to skipped "Removed in Steadfast", Shopify fulfillment cancelled, not counted.
 - Shopify fulfillment is created per fulfillment order (gift cards can't be fulfilled together
   with other items).
 - `shipments.courier` says which courier booked an order; `shipments.pathao_status` holds the

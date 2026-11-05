@@ -325,3 +325,25 @@ test('a parcel already saved as unknown is also treated as removed', async (t) =
   await a.tracker.pollAll();
   assert.equal((await a.db.getShipment(SHOP, '870')).status, 'skipped');
 });
+
+test('live updates: an open dashboard is told the moment a courier webhook changes an order', async (t) => {
+  const { sessionToken } = require('./helpers');
+  const a = await steadfastShop(t);
+  a.fake.state.orders['880'] = gqlOrder(880);
+  await a.api('/orders/send', { method: 'POST', body: { ids: ['880'], courier: 'steadfast' } });
+  const token = (await a.api('/bootstrap')).data.steadfastWebhook.token;
+
+  const ctrl = new AbortController();
+  const res = await fetch(`${a.base}/api/events`, { headers: { Authorization: `Bearer ${sessionToken()}` }, signal: ctrl.signal });
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /text\/event-stream/);
+  const reader = res.body.getReader(), dec = new TextDecoder();
+  let text = '';
+  const until = async (re) => { const end = Date.now() + 3000; while (!re.test(text) && Date.now() < end) { const { value } = await reader.read(); text += dec.decode(value || new Uint8Array(), { stream: true }); } return re.test(text); };
+  assert.ok(await until(/: connected/), 'stream opened');
+  await sfHook(a, { notification_type: 'delivery_status', consignment_id: 5001, status: 'delivered' }, { token });
+  assert.ok(await until(/data: \{"type":"orders"/), 'event pushed');
+  ctrl.abort();
+  await a.settle();
+  assert.equal(a.bus.count(SHOP), 0, 'listener removed when the dashboard closes');
+});

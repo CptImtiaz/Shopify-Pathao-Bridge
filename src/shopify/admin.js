@@ -119,6 +119,7 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
   // only missing or wrongly-addressed topics are (re)created.
   const APP_WEBHOOKS = [
     ['ORDERS_CREATE', '/webhooks/orders/create'],
+    ['ORDERS_UPDATED', '/webhooks/orders/updated'],
     ['APP_UNINSTALLED', '/webhooks/app/uninstalled'],
     ['APP_SUBSCRIPTIONS_UPDATE', '/webhooks/app_subscriptions/update'],
   ];

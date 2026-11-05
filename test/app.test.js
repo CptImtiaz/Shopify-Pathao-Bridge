@@ -293,6 +293,7 @@ test('opening the app registers order/uninstall/billing webhooks once, and fixes
     'APP_SUBSCRIPTIONS_UPDATE https://app.example.com/webhooks/app_subscriptions/update',
     'APP_UNINSTALLED https://app.example.com/webhooks/app/uninstalled',
     'ORDERS_CREATE https://app.example.com/webhooks/orders/create',
+    'ORDERS_UPDATED https://app.example.com/webhooks/orders/updated',
   ]);
   const before = a.fake.calls.filter((c) => c.body && c.body.includes('webhookSubscriptionCreate')).length;
   await a.api('/bootstrap');

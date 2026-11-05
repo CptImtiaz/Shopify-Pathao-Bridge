@@ -12,7 +12,7 @@ const { PLANS, intervalFromSubscriptionName } = require('../plans');
 const { DEFAULT_TEMPLATE, SOURCES } = require('../sms/sms');
 const { listCouriers, AVAILABLE } = require('../couriers');
 
-function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tracker = null, shipping, fulfillment = null, notifier, cipher, log = console }) {
+function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tracker = null, bus = null, shipping, fulfillment = null, notifier, cipher, log = console }) {
   const router = express.Router();
   router.use(express.json({ limit: '200kb' }));
   const webhooksChecked = new Set();
@@ -121,6 +121,23 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
       return { plan: (row && row.plan) || 'free', subscription: null };
     }
   }
+
+  // ---- live updates: the dashboard keeps this request open and redraws on each event ----
+  router.get('/events', (req, res) => {
+    if (!bus) return res.status(404).end();
+    res.set({
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform', // no-transform: compression must not buffer the stream
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.flushHeaders();
+    res.write(': connected\n\n');
+    const unsubscribe = bus.subscribe(req.shop, (type) => res.write(`data: ${JSON.stringify({ type, at: Date.now() })}\n\n`));
+    const ping = setInterval(() => res.write(': ping\n\n'), 25000);
+    req.on('close', () => { clearInterval(ping); unsubscribe(); });
+    return undefined;
+  });
 
   // ---- bootstrap: everything the UI needs on load ----
   router.get('/bootstrap', wrap(async (req) => {

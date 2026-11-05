@@ -84,6 +84,12 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
     const results = await Promise.allSettled([pathaoJob, smsJob]);
     results.filter((r) => r.status === 'rejected')
       .forEach((r) => log.error(`[${shop}] orders/create job failed: ${r.reason && r.reason.message}`));
+    if (admin.forgetOrders) admin.forgetOrders(shop); // auto-send result is in: redraw
+  }));
+
+  // Order changed in Shopify (paid, edited, cancelled...): redraw open dashboards.
+  router.post('/webhooks/orders/updated', ...shopifyWebhook(async ({ shop }) => {
+    if (admin.forgetOrders) admin.forgetOrders(shop);
   }));
 
   router.post('/webhooks/app/uninstalled', ...shopifyWebhook(async ({ shop }) => {
@@ -132,7 +138,7 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
     const body = req.body || {};
     const event = String(body.event || '');
     await db.updateSettings(shop, { pathao_webhook_at: new Date() }).catch(() => {});
-    if (event === 'webhook_integration' || !body.consignment_id) return res.status(202).send('OK');
+    if (event === 'webhook_integration' || !body.consignment_id) { if (admin.forgetOrders) admin.forgetOrders(shop, 'courier'); return res.status(202).send('OK'); }
 
     const shipment = await db.findShipmentByConsignment(shop, body.consignment_id);
     if (shipment) {
@@ -191,7 +197,7 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
     }
     log.info(`[${shop}] steadfast webhook: ${type} cid=${cid || '-'} invoice=${body.invoice || '-'} status=${given || '-'}${status && status !== given ? `->${status}` : ''} order=${shipment ? shipment.order_name : 'not found'}`);
     // Parcel events (delivery_status, tracking_update, consignment_update...) carry a status and/or a message.
-    if (!shipment || (!status && !message)) return res.json({ status: 'success' });
+    if (!shipment || (!status && !message)) { if (admin.forgetOrders) admin.forgetOrders(shop, 'courier'); return res.json({ status: 'success' }); }
 
     const fields = {};
     if (status) fields.pathao_status = status; // courier status column (see CLAUDE.md)

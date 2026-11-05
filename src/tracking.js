@@ -79,7 +79,7 @@ function makeTracker({ db, pathao, steadfast, fulfillment = null, admin = null, 
     }
   }
 
-  function start(everyMs = 3 * 60 * 1000) {
+  function start(everyMs = 60 * 1000) {
     const timer = setInterval(() => pollAll().catch((e) => log.warn(`status poll failed: ${e.message}`)), everyMs);
     if (timer.unref) timer.unref();
     return timer;

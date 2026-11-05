@@ -14,6 +14,7 @@ const { makeAdmin } = require('./shopify/admin');
 const { makePathao } = require('./pathao/client');
 const { makeSteadfast } = require('./couriers/steadfast');
 const { makeTracker } = require('./tracking');
+const { makeBus } = require('./events');
 const { makeShipping } = require('./shipping');
 const { makeFulfillmentSync } = require('./shopify/fulfillment');
 const { makeSmsClient } = require('./sms/sms');
@@ -29,6 +30,10 @@ function createApp({ config, pool, fetchImpl = fetch, log = console, defer = (p)
   const db = makeDb(pool);
   const tokens = makeTokenManager({ config, db, cipher, fetchImpl });
   const admin = makeAdmin({ config, tokens, fetchImpl });
+  // Every change to a shop's orders clears the order cache; also tell its open dashboards.
+  const bus = makeBus();
+  const forgetOrders = admin.forgetOrders;
+  admin.forgetOrders = (shop, type = 'orders') => { forgetOrders(shop); bus.publish(shop, type); };
   const pathao = makePathao({ config, db, cipher, fetchImpl });
   const fulfillment = makeFulfillmentSync({ admin, db, log });
   const steadfast = makeSteadfast({ config, cipher, db, fetchImpl });
@@ -47,7 +52,7 @@ function createApp({ config, pool, fetchImpl = fetch, log = console, defer = (p)
 
   // Webhooks need the raw body for HMAC, so mount before any JSON parser.
   app.use(makeWebhookRouter({ config, db, admin, shipping, fulfillment, steadfast, notifier: config.smsFeature ? notifier : null, log, defer }));
-  app.use('/api', makeApiRouter({ config, db, tokens, admin, pathao, steadfast, tracker, shipping, fulfillment, notifier, cipher, log }));
+  app.use('/api', makeApiRouter({ config, db, tokens, admin, pathao, steadfast, tracker, bus, shipping, fulfillment, notifier, cipher, log }));
 
   // Static assets (JS/CSS) and public pages (privacy policy).
   // app.js / app.css are referenced as ?v=<content hash>, so browsers can keep
@@ -103,7 +108,7 @@ function createApp({ config, pool, fetchImpl = fetch, log = console, defer = (p)
     res.status(500).json({ error: 'Internal server error' });
   });
 
-  return { app, db, tracker };
+  return { app, db, tracker, bus };
 }
 
 module.exports = { createApp };

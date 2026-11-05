@@ -7,7 +7,7 @@ async function main() {
   const config = load();
   const { app, db, tracker } = createApp({ config, pool: makePool(config.databaseUrl) });
   await db.migrate();
-  tracker.start(); // checks parcels still on the way every 3 minutes
+  tracker.start(); // checks parcels still on the way every minute
   app.listen(config.port, () => {
     console.log(`ShipBridge running on port ${config.port} (${config.appUrl})`);
   });
