@@ -25,7 +25,10 @@ const { makeApiRouter } = require('./routes/api');
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const VIEWS_DIR = path.join(__dirname, 'views');
 
-function createApp({ config, pool, fetchImpl = fetch, log = console, defer = (p) => p }) {
+function createApp({ config, pool, fetchImpl: rawFetch = fetch, log = console, defer = (p) => p }) {
+  // Every call to Shopify, Pathao, Steadfast or SMS gives up after 30 s, so a courier
+  // that stops answering can't leave an order stuck on "Sending".
+  const fetchImpl = (url, init = {}) => rawFetch(url, { ...init, signal: init.signal || AbortSignal.timeout(config.httpTimeoutMs || 30000) });
   const cipher = makeCipher(config.encryptionKey);
   const db = makeDb(pool);
   const tokens = makeTokenManager({ config, db, cipher, fetchImpl });

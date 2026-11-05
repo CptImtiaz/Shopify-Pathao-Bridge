@@ -25,6 +25,10 @@ const STEADFAST_DELIVERY_STATUSES = new Set([
   'cancelled_return_proccessing', 'cancelled_return_rider_assigned', 'cancelled_return_received',
 ]);
 
+// Pathao events that are not a parcel status: they must not overwrite it
+// (order.paid arrives after delivery, when Pathao pays out the cash).
+const PATHAO_INFO_EVENTS = { created: null, updated: null, paid: 'Cash paid out by Pathao' };
+
 function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, steadfast = null, notifier, log = console, defer = (p) => p }) {
   const router = express.Router();
   const raw = express.raw({ type: '*/*', limit: '2mb' });
@@ -138,6 +142,9 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
     const challenge = req.get(PATHAO_INTEGRATION_HEADER) || (req.body && req.body.integration_secret) || config.pathaoIntegrationSecret;
     res.set(PATHAO_INTEGRATION_HEADER, String(challenge));
     if (!isValidShop(shop)) return res.status(404).send('Unknown shop');
+    // Only stores that installed the app (don't create rows for made-up addresses).
+    const row = await db.getShop(shop);
+    if (!row || row.uninstalled_at) return res.status(404).send('Unknown shop');
     const settings = await db.getSettings(shop);
     const sig = req.get('X-PATHAO-Signature') || '';
     if (!settings.webhook_secret || !safeEqual(sig, settings.webhook_secret)) {
@@ -154,8 +161,17 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
     if (event === 'webhook_integration' || !body.consignment_id) { if (admin.forgetOrders) admin.forgetOrders(shop, 'courier'); return res.status(202).send('OK'); }
 
     const shipment = await db.findShipmentByConsignment(shop, body.consignment_id);
+    const kind = event.replace(/^order\./, '');
+    if (shipment && kind in PATHAO_INFO_EVENTS) {
+      // Not a delivery status: keep the current one, at most note what happened.
+      if (PATHAO_INFO_EVENTS[kind]) {
+        await db.finishShipment(shop, shipment.shopify_order_id, { courier_message: PATHAO_INFO_EVENTS[kind], courier_message_at: new Date() });
+        if (admin.forgetOrders) admin.forgetOrders(shop);
+      }
+      return res.status(202).send('OK');
+    }
     if (shipment) {
-      const status = event.replace(/^order\./, '') || 'updated';
+      const status = kind || 'updated';
       await db.finishShipment(shop, shipment.shopify_order_id, { pathao_status: status });
       res.status(202).send('OK');
       // Update Shopify after acknowledging Pathao.
@@ -178,6 +194,8 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
   router.post('/steadfast/webhook/:shop', express.raw({ type: '*/*', limit: '1mb' }), async (req, res) => {
     const shop = req.params.shop;
     if (!isValidShop(shop)) return res.status(404).json({ status: 'error', message: 'Unknown shop' });
+    const row = await db.getShop(shop);
+    if (!row || row.uninstalled_at) return res.status(404).json({ status: 'error', message: 'Unknown shop' });
     const settings = await db.getSettings(shop);
     const token = settings.steadfast_webhook_token;
     const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from('');

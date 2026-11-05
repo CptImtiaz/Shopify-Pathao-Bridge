@@ -464,3 +464,41 @@ test('courier logos: page carries a logo version, logos are re-checked on every 
     assert.equal(r.headers.get('cache-control'), 'no-cache', f);
   }
 });
+
+test('Pathao order.paid / order.updated never overwrite the delivery status', async (t) => {
+  const a = await connected(t);
+  await a.api('/settings', { method: 'POST', body: { pathao_store_id: 77 } });
+  a.fake.state.orders['310'] = gqlOrder(310);
+  await a.api('/orders/send', { method: 'POST', body: { ids: ['310'] } });
+  const sh = await a.db.getShipment(SHOP, 310);
+  const { secret, url } = (await a.api('/bootstrap')).data.pathaoWebhook;
+  const post = (body) => fetch(a.base + new URL(url).pathname, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-PATHAO-Signature': secret }, body: JSON.stringify(body) });
+  assert.equal((await post({ event: 'order.delivered', consignment_id: sh.consignment_id })).status, 202);
+  await a.settle();
+  assert.equal((await post({ event: 'order.paid', consignment_id: sh.consignment_id })).status, 202);
+  assert.equal((await post({ event: 'order.updated', consignment_id: sh.consignment_id })).status, 202);
+  await a.settle();
+  const after = await a.db.getShipment(SHOP, 310);
+  assert.equal(after.pathao_status, 'delivered');
+  assert.equal(after.courier_message, 'Cash paid out by Pathao');
+});
+
+test('courier webhooks for stores that never installed the app are refused without creating data', async (t) => {
+  const a = await startApp();
+  t.after(() => a.close());
+  const ghost = 'not-installed.myshopify.com';
+  const r1 = await fetch(`${a.base}/pathao/webhook/${ghost}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-PATHAO-Signature': 'x' }, body: '{}' });
+  const r2 = await fetch(`${a.base}/steadfast/webhook/${ghost}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer x' }, body: '{}' });
+  assert.equal(r1.status, 404);
+  assert.equal(r2.status, 404);
+  assert.equal(await a.db.getShop(ghost), null);
+  const { rows } = await a.db.pool.query('SELECT COUNT(*)::int AS n FROM settings WHERE shop = $1', [ghost]).catch(() => ({ rows: [{ n: 0 }] }));
+  assert.equal(rows[0].n, 0);
+});
+
+test('every outbound call carries a timeout signal', async (t) => {
+  const a = await connected(t);
+  const calls = a.fake.calls.filter((c) => /myshopify\.com|pathao|packzy/.test(c.url));
+  assert.ok(calls.length > 0);
+  assert.ok(calls.every((c) => c.signal instanceof AbortSignal));
+});

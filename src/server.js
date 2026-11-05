@@ -5,12 +5,28 @@ const { makePool } = require('./pool');
 
 async function main() {
   const config = load();
-  const { app, db, tracker } = createApp({ config, pool: makePool(config.databaseUrl) });
+  const pool = makePool(config.databaseUrl);
+  const { app, db, tracker } = createApp({ config, pool });
   await db.migrate();
-  tracker.start(); // checks parcels still on the way every minute
-  app.listen(config.port, () => {
+  const poller = tracker.start(); // checks parcels still on the way every minute
+  const server = app.listen(config.port, () => {
     console.log(`ShipBridge running on port ${config.port} (${config.appUrl})`);
   });
+
+  // Railway stops the old copy with SIGTERM on every deploy: finish open requests, then exit cleanly.
+  let stopping = false;
+  const stop = (signal) => {
+    if (stopping) return;
+    stopping = true;
+    console.log(`${signal} received: shutting down`);
+    clearInterval(poller);
+    server.close(() => pool.end().finally(() => process.exit(0)));
+    // Live-update streams never end on their own; don't wait for them.
+    if (server.closeAllConnections) setTimeout(() => server.closeAllConnections(), 5000).unref();
+    setTimeout(() => process.exit(0), 10000).unref();
+  };
+  process.on('SIGTERM', () => stop('SIGTERM'));
+  process.on('SIGINT', () => stop('SIGINT'));
 }
 
 main().catch((e) => {

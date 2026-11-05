@@ -63,7 +63,7 @@ function fakeFetch() {
   async function impl(url, init = {}) {
     url = String(url);
     const body = init.body;
-    calls.push({ url, method: init.method || 'GET', body, headers: init.headers || {} });
+    calls.push({ url, method: init.method || 'GET', body, headers: init.headers || {}, signal: init.signal });
 
     if (url.endsWith('/admin/oauth/access_token')) {
       const params = new URLSearchParams(body);
