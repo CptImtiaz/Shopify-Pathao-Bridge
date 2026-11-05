@@ -216,13 +216,6 @@ test('uninstall wipes tokens and Pathao secrets; shop/redact deletes everything;
 
   assert.equal(await a.webhook('/webhooks/compliance', { customer: { id: 1 }, orders_requested: [56] }, 'customers/data_request'), 200);
 
-  // customers/redact also removes rows found only by the customer's phone (fraud history).
-  await a.db.pool.query(`INSERT INTO shipments (shop, shopify_order_id, status, phone) VALUES ($1, '57', 'sent', '01712345678')`, [SHOP]);
-  await a.webhook('/webhooks/compliance', { customer: { id: 2, phone: '+8801712345678' }, orders_to_redact: [] }, 'customers/redact');
-  await a.settle();
-  assert.equal(await a.db.getShipment(SHOP, 57), null);
-  assert.ok(await a.db.getShipment(SHOP, 56));
-
   await a.webhook('/webhooks/app/uninstalled', { id: 1 }, 'app/uninstalled');
   await a.settle();
   const shop = await a.db.getShop(SHOP);

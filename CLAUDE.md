@@ -199,7 +199,8 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   owner page errors go through `redactPII`; bad JSON bodies are logged by type only.
 - Store search is `POST /api/orders/search` (body), never `?q=` in the URL (access logs).
 - Inter is self-hosted in public/assets/fonts (no Google Fonts). No support-ticket collection (`POST /support` removed).
-- customers/redact deletes by order IDs AND the customer's normalized phone; data_request logs a record count.
+- customers/redact deletes by order IDs only (phone-based deletion built then removed 2026-11-05 at the owner's
+  request); data_request logs a record count.
 - No merchant "delete customer data" button (built then removed 2026-11-05 at the owner's request); data goes on
   uninstall (shop/redact) and Shopify customer redaction only.
 - Pathao password is encrypted (AES-256-GCM), not hashed, because it must be sent to Pathao; the app has no user
