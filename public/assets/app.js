@@ -85,7 +85,6 @@
     return k === 'problems' ? 'returned' : k;
   }
   const courierReady = (key) => (key === 'steadfast' ? sfConnected() : Boolean(S().connected && S().pathao_store_id));
-  const permMissing = () => Boolean(state.boot && state.boot.permissions && state.boot.permissions.missing && state.boot.permissions.missing.length);
   const S = () => state.boot.settings;
   function apply(r) { if (r.settings) state.boot.settings = r.settings; if (r.couriers) state.boot.couriers = r.couriers; }
 
@@ -222,7 +221,6 @@
       { key: 'account', done: Boolean(s.connected), html: 'Connect your Pathao account', btn: ['account', 'Add Pathao'] },
       { key: 'delivery', done: Boolean(s.pathao_store_id), html: 'Choose the Pathao store parcels are picked up from', btn: ['delivery', 'Choose store'] },
       { key: 'webhook', done: webhookSaved('pathao'), html: 'Connect the Pathao webhook so delivery status updates live', btn: ['webhook', 'Set up webhook'] },
-      { key: 'shopify', done: s.sync_fulfillment === false || !permMissing(), html: 'Allow ShipBridge to update orders inside Shopify', btn: ['shopify', 'Allow access'] },
       { key: 'auto', done: Boolean(s.auto_send), html: 'Send new orders to Pathao automatically', btn: ['defaults', 'Turn on auto-send'] },
     ];
   }
@@ -758,11 +756,6 @@
     $('wh-state').innerHTML = webhookState(wh, 'Pathao', 'secret key', 'Pathao Merchant Panel');
 
     const sync = s.sync_fulfillment !== false;
-    $('perm-body').innerHTML = !sync ? '' : permMissing()
-      ? `<div class="perm-box"><b>Allow ShipBridge to update your Shopify orders.</b> Sending to couriers keeps working meanwhile.
-          <div><button class="btn primary sm" data-perm>Allow access</button></div></div>`
-      : ''; // allowed: nothing to show
-
     $('sync_fulfillment').checked = sync;
     $('notify_customer').checked = Boolean(s.notify_customer); $('notify_customer').disabled = !sync;
     $('mark_paid_on_delivery').checked = s.mark_paid_on_delivery !== false;
@@ -925,12 +918,6 @@
       renderAll();
     } catch (e) { $('prefs-state').textContent = 'Not saved'; toast(e.message, true); renderCouriers(); }
   }
-  async function requestPermissions() {
-    const missing = state.boot.permissions.missing;
-    if (window.shopify && shopify.scopes && shopify.scopes.request) { try { await shopify.scopes.request(missing); } catch (e) { /* not offered yet */ } }
-    await refreshBoot();
-    toast(permMissing() ? 'Not allowed yet. Approve the request from Shopify, then try again.' : 'Shopify access allowed');
-  }
 
   // ---------------- billing page ----------------
   async function loadBilling() {
@@ -993,7 +980,6 @@
     if (!t.closest('#courier-menu') && !t.closest('#fraud-pop') && !t.closest('#bulk-menu-btn') && !t.closest('[data-assign]') && !t.closest('[data-fraud]')) closeMenu();
     const link = t.closest('a[data-link]');
     if (link) { ev.preventDefault(); navigate(link.getAttribute('href')); return; }
-    if (t.closest('[data-perm]')) { ev.preventDefault(); const b = t.closest('button'); try { await (b ? busy(b, requestPermissions) : requestPermissions()); } catch (e) { toast(e.message, true); } return; }
 
     // dashboard
     const goto = t.closest('[data-goto]');

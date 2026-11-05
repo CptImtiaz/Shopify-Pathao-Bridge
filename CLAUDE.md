@@ -31,6 +31,8 @@ publish it on the **Shopify App Store as a paid app** and make money from it
 - Open: only after that, delete the old Vercel project and Neon database
   (ask the owner first — irreversible).
 - Rotate the Shopify client secret before launch (it was pasted in chat).
+- No permission box in the UI (removed 2026-11-05): scopes come from shopify.app.toml at install;
+  `/api/bootstrap` still refreshes the token if a stored scope is missing.
 
 ## Architecture decision
 One app service + one Postgres on Railway. New couriers (Steadfast, RedX, ...) are modules
@@ -101,7 +103,7 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 - Pathao weight: product weights (REST `grams`), else Shopify `Order.totalWeight`, else the
   "Parcel weight" setting. Steadfast's API has no weight field.
 - Right column "Sending rules": default courier, auto-send, hold high-risk, and "Update orders
-  inside Shopify" (permissions box, sync toggle, when to fulfil, email customer, mark paid when delivered,
+  inside Shopify" (sync toggle, when to fulfil, email customer, mark paid when delivered,
   unfulfil returned parcels).
 
 ## Dashboard tabs
