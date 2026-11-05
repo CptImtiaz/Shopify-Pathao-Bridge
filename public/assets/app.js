@@ -792,7 +792,7 @@
       return `<span class="bad-line"><b>${name} is calling ShipBridge with a different ${secretWord}.</b> Make the ${secretWord} here and in the ${portal} the same, then save both.</span>`;
     }
     if (wh.live) return '';
-    return `<span class="wait-line">Not live yet: waiting for ${name}'s first update. It arrives when a parcel changes status (e.g. when ${name} approves it).</span>`;
+    return `<span class="wait-line">Not live yet. Save the webhook in the ${portal}: ${name} sends a test, and this turns Live when it arrives.</span>`;
   }
   async function saveSteadfast() {
     const key = $('sf_api_key').value.trim(), secret = $('sf_secret_key').value.trim();

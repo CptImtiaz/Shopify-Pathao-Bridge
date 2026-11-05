@@ -451,3 +451,24 @@ test('Pathao weight uses Shopify product weights, or the order total weight', ()
   assert.equal(buildPathaoOrder(o2, { pathao_store_id: 1 }).payload.item_weight, 1.4);
   assert.equal(buildPathaoOrder(order({ items: [{ title: 'x', quantity: 1, grams: 0 }] }), { pathao_store_id: 1, default_weight: 0.5 }).payload.item_weight, 0.5);
 });
+
+test('once a webhook is live, parcels are not polled (except Steadfast parcels still in review)', async (t) => {
+  const a = await steadfastShop(t);
+  for (const id of ['930', '931']) a.fake.state.orders[id] = gqlOrder(Number(id));
+  await a.api('/orders/send', { method: 'POST', body: { ids: ['930', '931'], courier: 'steadfast' } });
+  await a.db.finishShipment(SHOP, '931', { pathao_status: 'pending' }); // approved: only the webhook updates it now
+  a.fake.state.steadfastStatus['5001'] = 'in_review'; // 930 still waiting for Steadfast's review
+  a.fake.state.steadfastStatus['5002'] = 'pending';
+  const calls = () => a.fake.calls.filter((c) => c.url.includes('/status_by_cid/')).map((c) => c.url.split('/').pop());
+  // not live yet: both checked
+  let before = calls().length;
+  await a.tracker.refreshActive(SHOP);
+  assert.equal(calls().length - before, 2);
+  // Steadfast's own test arrives -> Live
+  const token = (await a.api('/bootstrap')).data.steadfastWebhook.token;
+  assert.equal((await sfHook(a, { notification_type: 'webhook_test' }, { token })).status, 200);
+  assert.equal((await a.api('/bootstrap')).data.steadfastWebhook.live, true);
+  before = calls().length;
+  await a.tracker.refreshActive(SHOP);
+  assert.deepEqual(calls().slice(before), ['5001'], 'only the in-review parcel is still checked (removal)');
+});

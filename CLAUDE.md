@@ -52,6 +52,9 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   dashboard reads with fetch (session token header) and reconnects every 3 s if dropped. Any
   `admin.forgetOrders(shop)` publishes an event (wrapped in app.js), so webhooks (orders/create,
   orders/updated, Pathao, Steadfast), the tracker and bookings all redraw open dashboards.
+  Webhook first: Pathao and Steadfast both send a test when the webhook is saved in their panel;
+  any authenticated courier call sets `*_webhook_at` -> "Live". Once a courier is Live it is NOT
+  polled, except Steadfast parcels still `in_review`/`unknown` (removal sends no webhook).
   `src/tracking.js` polls couriers every minute for parcels still on the way (started in
   server.js; `pollStatuses:false` in tests) and when the dashboard loads. Steadfast `unknown`
   for a parcel that was `in_review`/`pending`/`unknown` = removed in the Steadfast panel ->

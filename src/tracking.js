@@ -57,7 +57,16 @@ function makeTracker({ db, pathao, steadfast, fulfillment = null, admin = null, 
   async function refreshActive(shop, { limit = 30 } = {}) {
     lastRun.set(shop, Date.now());
     const settings = await db.getSettings(shop);
-    const list = (await db.activeShipments(shop, 200)).filter((s) => !DONE.test(String(s.pathao_status || ''))).slice(0, limit);
+    // Once a courier's webhook is live, its updates come through the webhook and it is not asked.
+    // Exception: Steadfast sends nothing when a parcel is removed (only possible while it is still
+    // in review), so those few parcels are still checked.
+    const live = { pathao: Boolean(settings.pathao_webhook_at), steadfast: Boolean(settings.steadfast_webhook_at) };
+    const needsCheck = (s) => {
+      if (!live[s.courier || 'pathao']) return true;
+      return s.courier === 'steadfast' && /^(in_review|unknown)$/.test(String(s.pathao_status || ''));
+    };
+    const list = (await db.activeShipments(shop, 200))
+      .filter((s) => !DONE.test(String(s.pathao_status || '')) && needsCheck(s)).slice(0, limit);
     let changed = 0, failed = 0;
     for (const s of list) {
       try { if ((await refreshShipment(shop, s, settings)) !== s.pathao_status) changed += 1; }
