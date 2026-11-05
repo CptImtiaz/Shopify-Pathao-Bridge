@@ -653,7 +653,20 @@
   function closeMenu() { show($('courier-menu'), false); show($('fraud-pop'), false); state.menuFor = null; }
 
   // ---------------- couriers page ----------------
+  // A webhook we were waiting for has gone Live: say so and move on to the next step (Delivery settings).
+  function settleWebhookWaits() {
+    for (const [key, since] of Object.entries(state.whWait || {})) {
+      const wh = key === 'pathao' ? state.boot.pathaoWebhook : state.boot.steadfastWebhook;
+      if (wh && wh.lastAt && new Date(wh.lastAt).getTime() >= since - 2000) {
+        delete state.whWait[key];
+        toast(`${cname(key)} webhook connected · Live`);
+        state.courierView = key;
+        state.section = key === 'pathao' ? 'delivery' : 'sf-delivery';
+      }
+    }
+  }
   function renderCouriers() {
+    settleWebhookWaits();
     const s = S();
     const soon = (state.boot.couriers || []).filter((c) => !c.available);
     const p = courier('pathao'), sf = courier('steadfast');
@@ -793,11 +806,6 @@
   function webhookState(wh, name, secretWord, portal) {
     const key = name.toLowerCase(), since = state.whWait[key];
     const after = (t) => Boolean(t && since && new Date(t).getTime() >= since - 2000);
-    if (since && after(wh.lastAt)) {
-      delete state.whWait[key];
-      toast(`${name} webhook connected · Live`);
-      return '';
-    }
     if (wh.refusedAt && (!wh.lastAt || new Date(wh.refusedAt) > new Date(wh.lastAt))) {
       if (since && after(wh.refusedAt)) delete state.whWait[key];
       return `<span class="bad-line"><b>${name} is calling ShipBridge with a different ${secretWord}.</b> Make the ${secretWord} here and in the ${portal} the same, then save both.</span>`;

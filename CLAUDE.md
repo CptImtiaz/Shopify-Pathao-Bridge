@@ -79,6 +79,7 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 - Save on a webhook step starts a 5-minute wait for the courier's own test call (browser state
   `whWait`): spinner line -> Live + toast when it arrives (pushed via /api/events), red warning
   on a token mismatch, or a 'no test in 5 minutes, check the Callback URL' message.
+  When it goes Live the page moves on by itself to that courier's Delivery settings step.
 - Auto-send and the default courier require a *connected* courier (Pathao: account + pickup
   store; Steadfast: keys, not paused). Orders auto-sent while the default isn't connected are
   skipped with "Auto-send: <Courier> (your default courier) is not connected".
