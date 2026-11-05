@@ -209,7 +209,8 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
     for (const k of ['sf_alt_phone', 'sf_item_desc', 'sf_total_lot']) if (b[k] !== undefined) f[k] = Boolean(b[k]);
     if (b.steadfast_webhook_token !== undefined) {
       const w = String(b.steadfast_webhook_token).trim();
-      if (w.length < 16 || w.length > 200 || /\s/.test(w)) throw Object.assign(new Error('Auth token must be 16–200 characters, without spaces'), { status: 400 });
+      // Steadfast's portal generates its own token (can be short): accept whatever it gives.
+      if (w.length < 6 || w.length > 200 || /\s/.test(w)) throw Object.assign(new Error('Auth token must be 6–200 characters, without spaces'), { status: 400 });
       f.steadfast_webhook_token = w;
       f.steadfast_webhook_saved_at = new Date();
       if (w !== current.steadfast_webhook_token) f.steadfast_webhook_error_at = null;

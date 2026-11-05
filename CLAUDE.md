@@ -121,3 +121,7 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 - Order list: first page cached; `GET /api/orders?after=<cursor>` for older pages, `?q=` searches the
   whole store (Shopify order search). Dashboard keeps loaded pages and search hits across live redraws.
 - Owner page `/admin` shows recent bookings (no customer data) to trace any order.
+- Webhook addresses answer GET with a "ready" page for installed shops (merchants open them in a
+  browser and read 404 as "broken"). Steadfast auth token: 6–200 chars, because Steadfast's portal can
+  generate its own token that the merchant pastes into ShipBridge. Steadfast only calls on a parcel
+  status change; until then the tracker polls it every minute.

@@ -481,3 +481,17 @@ test('saving a webhook marks it set up; Live still comes only from the courier',
   assert.equal(boot.pathaoWebhook.saved, true);
   assert.equal(boot.steadfastWebhook.live, false);
 });
+
+test('Steadfast webhook address: friendly page in a browser, short Steadfast-generated tokens accepted', async (t) => {
+  const { startApp, SHOP } = require('./helpers');
+  const a = await startApp();
+  t.after(() => a.close());
+  await a.api('/bootstrap');
+  const page = await fetch(`${a.base}/steadfast/webhook/${SHOP}`);
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /ready for Steadfast updates/);
+  assert.equal((await fetch(`${a.base}/steadfast/webhook/never-installed.myshopify.com`)).status, 404);
+  const r = await a.api('/settings', { method: 'POST', body: { steadfast_webhook_token: 'Ab12Cd34' } });
+  assert.equal(r.status, 200);
+  assert.equal((await a.api('/bootstrap')).data.steadfastWebhook.token, 'Ab12Cd34');
+});
