@@ -583,18 +583,6 @@ test('versioned courier logos are cached for a year; unversioned ones are re-che
   assert.equal(plain.headers.get('cache-control'), 'no-cache');
 });
 
-test('merchant can delete stored customer data (needs DELETE); settings stay', async (t) => {
-  const a = await connected(t);
-  await a.db.pool.query(`INSERT INTO shipments (shop, shopify_order_id, status, phone) VALUES ($1, '70', 'sent', '01712345678')`, [SHOP]);
-  await a.db.setNote(SHOP, '70', 'call before 5pm');
-  assert.equal((await a.api('/data/delete', { method: 'POST', body: {} })).status, 400);
-  const r = await a.api('/data/delete', { method: 'POST', body: { confirm: 'DELETE' } });
-  assert.equal(r.status, 200);
-  assert.equal(r.data.removed, 2);
-  assert.equal(await a.db.getShipment(SHOP, 70), null);
-  assert.ok((await a.db.getSettings(SHOP)).pathao_client_id);
-});
-
 test('self-hosted font: served from the app and cached; no Google Fonts in the page', async (t) => {
   const a = await connected(t);
   const f = await fetch(a.base + '/assets/fonts/inter-latin-400.woff2');

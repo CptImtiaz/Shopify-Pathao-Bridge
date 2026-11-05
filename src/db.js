@@ -454,14 +454,6 @@ function makeDb(pool) {
         + (await n('SELECT COUNT(*) AS n FROM order_notes WHERE shop = $1 AND shopify_order_id = ANY($2)', [shop, ids]))
         + (await n('SELECT COUNT(*) AS n FROM sms_log WHERE shop = $1 AND (shopify_order_id = ANY($2) OR phone = ANY($3))', [shop, ids, phones]));
     },
-    // Merchant "Delete customer data": every row that holds customer details. Settings stay.
-    async deleteCustomerData(shop) {
-      let removed = 0;
-      for (const t of ['shipments', 'sms_log', 'order_notes', 'support_tickets']) {
-        removed += (await q(`DELETE FROM ${t} WHERE shop = $1`, [shop])).rowCount || 0;
-      }
-      return removed;
-    },
 
     // ---------- order notes ----------
     async notesForOrders(shop, orderIds) {

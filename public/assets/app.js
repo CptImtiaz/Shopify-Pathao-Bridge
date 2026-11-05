@@ -1144,13 +1144,6 @@
       savePrefs(id === 'default_weight' ? { default_weight: w } : { default_note: $(id).value }, true);
     }, 700);
   }));
-  $('delete-data').addEventListener('click', async () => {
-    const typed = prompt('This deletes every parcel record, order note and SMS log ShipBridge keeps for this store. Couriers and settings stay. It can\'t be undone.\n\nType DELETE to confirm.');
-    if (typed === null) return;
-    if (typed.trim() !== 'DELETE') { toast('Nothing deleted. Type DELETE to confirm.', true); return; }
-    try { const r = await api('/data/delete', { method: 'POST', body: { confirm: 'DELETE' } }); toast(`Deleted ${r.removed} stored record${r.removed === 1 ? '' : 's'}`); }
-    catch (e) { toast(e.message, true); }
-  });
   $('search').addEventListener('input', (e) => { state.search = e.target.value; renderRows(); searchStore(e.target.value); });
   window.addEventListener('resize', closeMenu);
   // ---------------- live updates ----------------

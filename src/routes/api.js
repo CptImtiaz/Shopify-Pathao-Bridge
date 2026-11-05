@@ -552,16 +552,6 @@ function makeApiRouter({ redact = (t) => String(t), config, db, tokens, admin, p
     contact: { email: config.supportEmail || null, whatsapp: config.supportWhatsapp || null },
   })));
 
-  // Merchant deletes everything ShipBridge keeps about their customers (order data, notes, SMS log).
-  // Courier connections and settings stay so the app keeps working; uninstalling removes the rest.
-  router.post('/data/delete', wrap(async (req) => {
-    if ((req.body || {}).confirm !== 'DELETE') throw Object.assign(new Error('Type DELETE to confirm'), { status: 400 });
-    const removed = await db.deleteCustomerData(req.shop);
-    admin.forgetOrders(req.shop);
-    log.info(`[${req.shop}] merchant deleted stored customer data (${removed} records)`);
-    return { removed };
-  }));
-
   router.post('/billing/cancel', wrap(async (req) => {
     const { subscription } = await syncPlan(req.shop, req.opts);
     if (subscription) await admin.cancelSubscription(req.shop, subscription.id, req.opts);

@@ -185,8 +185,8 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   `pathao_status` (`paid` only sets `courier_message`). Pathao statuses are stored lowercase-hyphen
   (`pathaoSlug` in tracking.js); `pickup-cancelled` counts as finished.
 - Courier webhooks answer 404 for shops that never installed / uninstalled (no rows created).
-- Order list: first page cached; `GET /api/orders?after=<cursor>` for older pages, `?q=` searches the
-  whole store (Shopify order search). Dashboard keeps loaded pages and search hits across live redraws.
+- Order list: first page cached; `GET /api/orders?after=<cursor>` for older pages, `POST /api/orders/search {q}`
+  searches the whole store (Shopify order search). Dashboard keeps loaded pages and search hits across live redraws.
 - Owner page `/admin` shows recent bookings (no customer data) to trace any order.
 - Webhook addresses answer GET with a "ready" page for installed shops (merchants open them in a
   browser and read 404 as "broken"). Steadfast only calls on a parcel
@@ -200,7 +200,7 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 - Store search is `POST /api/orders/search` (body), never `?q=` in the URL (access logs).
 - Inter is self-hosted in public/assets/fonts (no Google Fonts). No support-ticket collection (`POST /support` removed).
 - customers/redact deletes by order IDs AND the customer's normalized phone; data_request logs a record count.
-- Merchant "Delete stored customer data" (Couriers page, right column) = `POST /api/data/delete {confirm:'DELETE'}`:
-  shipments, sms_log, order_notes, support_tickets; settings and courier connections stay.
+- No merchant "delete customer data" button (built then removed 2026-11-05 at the owner's request); data goes on
+  uninstall (shop/redact) and Shopify customer redaction only.
 - Pathao password is encrypted (AES-256-GCM), not hashed, because it must be sent to Pathao; the app has no user
   passwords of its own (Shopify session tokens). Steadfast Api-Key is plaintext in DB (useless without the encrypted secret).

@@ -794,7 +794,3 @@ input[role=switch]:checked + i, .switch-row input:checked + i { background: #303
 .cx-hero { background: #fff; }
 .cx-label, .hero-facts span, .rules-sub { text-transform: none; letter-spacing: 0; font-size: 12px; color: #616161; }
 .k-foot b { color: #0c5132; }
-
-/* Customer data (right column) */
-.data-del { display: grid; gap: 10px; }
-.btn.danger-text { color: #8e0b21; justify-self: start; }
