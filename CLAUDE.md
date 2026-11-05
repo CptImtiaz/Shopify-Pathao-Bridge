@@ -42,6 +42,9 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   never retry 401s. Webhook `/steadfast/webhook/:shop`: `X-Signature` = HMAC-SHA256(raw body,
   per-shop auth token shown in the app), or `Authorization: Bearer <token>`.
   `*_approval_pending` statuses are rider-only and don't move the Shopify order.
+  Every Steadfast webhook is logged (`steadfast webhook: <type> cid=… status=… order=…`). Any event
+  with a status updates the order; `tracking_message` is saved in `shipments.courier_message` and
+  shown in the order panel. Events without `consignment_id` are matched by `invoice`.
 - `shipments.courier` says which courier booked an order; `shipments.pathao_status` holds the
   courier's status text for every courier (name predates multi-courier).
 - `settings.default_courier` drives Send buttons and auto-send.

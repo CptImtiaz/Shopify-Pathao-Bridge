@@ -372,6 +372,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, sh
           sms: smsById.has(n.id) ? { status: smsById.get(n.id).status, error: smsById.get(n.id).error } : null,
           shipment: s ? {
             status: s.status, courier: s.courier || 'pathao', consignmentId: s.consignment_id, trackingCode: s.tracking_code || null, pathaoStatus: s.pathao_status,
+            courierMessage: s.courier_message || null, courierMessageAt: s.courier_message_at || null,
             error: s.error, deliveryFee: s.delivery_fee == null ? null : Number(s.delivery_fee), updatedAt: s.updated_at,
             shopifySynced: Boolean(s.shopify_fulfillment_id), shopifyEvent: s.shopify_event || null, syncError: s.sync_error || null,
           } : null,

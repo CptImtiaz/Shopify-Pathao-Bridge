@@ -592,6 +592,7 @@
       <div class="fp-stats"><div><b>${h.delivered || 0}</b><span>Delivered</span></div><div><b>${h.returned || 0}</b><span>Returned</span></div><div><b>${h.cancelled || 0}</b><span>Cancelled</span></div><div><b>${h.successRate != null ? h.successRate + '%' : '—'}</b><span>Success</span></div></div>
       <div class="d-sec"><div class="d-label">Delivery${sent && o.shipment.consignmentId ? ` · <span class="mono">${esc(o.shipment.consignmentId)}</span>` : ''}</div>
         <ul class="tl">${tl}</ul>
+        ${sent && o.shipment.courierMessage ? `<div class="courier-msg"><b>Latest from ${esc(cname(o.shipment.courier))}</b>${esc(o.shipment.courierMessage)}${o.shipment.courierMessageAt ? `<span class="sub">${esc(time(o.shipment.courierMessageAt))}</span>` : ''}</div>` : ''}
         ${sent && o.shipment.shopifySynced ? '<div class="synced"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Shopify order updated automatically</div>' : ''}
         ${sent && webhookLive() ? '<span class="live"><i></i>Live — updates instantly</span>' : sent ? `<button class="btn sm" data-track="${esc(o.id)}">Refresh status</button>` : ''}
       </div>

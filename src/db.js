@@ -111,6 +111,9 @@ const SCHEMA = [
   `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS tracking_code TEXT`,
   // Set when Steadfast answers 401: stops further calls (10 failures = 60 min lockout).
   `ALTER TABLE settings ADD COLUMN IF NOT EXISTS steadfast_auth_error TEXT`,
+  // Latest tracking text from the courier (e.g. Steadfast's tracking_message).
+  `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS courier_message TEXT`,
+  `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS courier_message_at TIMESTAMPTZ`,
   // Merchant's own note on an order (e.g. why it is on hold). Never sent to couriers.
   `CREATE TABLE IF NOT EXISTS order_notes (
     shop TEXT NOT NULL,
@@ -314,6 +317,10 @@ function makeDb(pool) {
       return row ? Number(row.n) : 0;
     },
 
+    // Steadfast invoice = order name without '#'; used when an event has no consignment id.
+    findShipmentByInvoice: (shop, invoice) =>
+      one(`SELECT * FROM shipments WHERE shop = $1 AND courier = 'steadfast' AND order_name IN ($2, $3) ORDER BY updated_at DESC LIMIT 1`,
+        [shop, String(invoice), `#${String(invoice).replace(/^#/, '')}`]),
     findShipmentByConsignment: (shop, consignmentId) =>
       one('SELECT * FROM shipments WHERE shop = $1 AND consignment_id = $2', [shop, String(consignmentId)]),
 

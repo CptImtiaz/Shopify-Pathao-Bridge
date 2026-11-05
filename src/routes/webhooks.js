@@ -164,16 +164,24 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
     try { body = JSON.parse(raw.toString('utf8') || '{}'); } catch { return res.status(400).json({ status: 'error', message: 'Invalid JSON' }); }
     await db.updateSettings(shop, { steadfast_webhook_at: new Date() }).catch(() => {});
 
-    const type = String(body.notification_type || '');
-    if (type !== 'delivery_status' || !body.consignment_id) return res.json({ status: 'success' });
+    // Every event is logged (no customer data), so a missing update can always be traced.
+    const type = String(body.notification_type || 'unknown');
+    const cid = body.consignment_id != null ? String(body.consignment_id) : '';
+    const shipment = cid ? await db.findShipmentByConsignment(shop, cid)
+      : body.invoice ? await db.findShipmentByInvoice(shop, body.invoice) : null;
+    const status = body.status != null && body.status !== '' ? String(body.status).toLowerCase() : null;
+    const message = String(body.tracking_message || body.message || '').trim().slice(0, 300) || null;
+    log.info(`[${shop}] steadfast webhook: ${type} cid=${cid || '-'} invoice=${body.invoice || '-'} status=${status || '-'} order=${shipment ? shipment.order_name : 'not found'}`);
+    // Parcel events (delivery_status, tracking_update, consignment_update...) carry a status and/or a message.
+    if (!shipment || (!status && !message)) return res.json({ status: 'success' });
 
-    const shipment = await db.findShipmentByConsignment(shop, body.consignment_id);
-    if (!shipment) return res.json({ status: 'success' });
-    const status = String(body.status || 'unknown').toLowerCase();
-    const fields = { pathao_status: status };
+    const fields = {};
+    if (status) fields.pathao_status = status; // courier status column (see CLAUDE.md)
+    if (message) Object.assign(fields, { courier_message: message, courier_message_at: new Date() });
     if (body.delivery_charge != null && Number.isFinite(Number(body.delivery_charge))) fields.delivery_fee = Number(body.delivery_charge);
     await db.finishShipment(shop, shipment.shopify_order_id, fields);
     res.json({ status: 'success' });
+    if (!status) { if (admin.forgetOrders) admin.forgetOrders(shop); return undefined; }
 
     // Update Shopify after acknowledging Steadfast.
     defer((async () => {

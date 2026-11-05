@@ -214,3 +214,34 @@ test('steadfast "Account is not active!" is reported as an inactive account, not
     (e) => { assert.match(e.message, /account is not active yet/); assert.doesNotMatch(e.message, /rejected the API key/); }
   );
 });
+
+test('steadfast webhook: tracking updates save the message; events are logged; invoice-only events still match', async (t) => {
+  const a = await steadfastShop(t);
+  a.fake.state.orders['820'] = gqlOrder(820);
+  await a.api('/orders/send', { method: 'POST', body: { ids: ['820'], courier: 'steadfast' } });
+  const token = (await a.api('/bootstrap')).data.steadfastWebhook.token;
+
+  // tracking_update without a status: message saved, status unchanged
+  let r = await sfHook(a, { notification_type: 'tracking_update', consignment_id: 5001, invoice: '820', tracking_message: 'Parcel received at Dhaka hub' }, { token });
+  assert.equal(r.status, 200);
+  await a.settle();
+  let s = await a.db.getShipment(SHOP, '820');
+  assert.equal(s.courier_message, 'Parcel received at Dhaka hub');
+  assert.equal(s.pathao_status, 'in_review');
+  assert.ok(a.logs.some((l) => /steadfast webhook: tracking_update cid=5001 .*order=#820/.test(l)), 'event logged');
+
+  // status change found by invoice only
+  r = await sfHook(a, { notification_type: 'delivery_status', invoice: '820', status: 'pending', tracking_message: 'Assigned to rider' }, { token });
+  assert.equal(r.status, 200);
+  await a.settle();
+  s = await a.db.getShipment(SHOP, '820');
+  assert.equal(s.pathao_status, 'pending');
+  assert.equal(s.courier_message, 'Assigned to rider');
+  const o = (await a.api('/orders?fresh=1')).data.orders.find((x) => x.id === '820');
+  assert.equal(o.shipment.courierMessage, 'Assigned to rider');
+
+  // unknown parcel: acknowledged and logged as not found
+  r = await sfHook(a, { notification_type: 'delivery_status', consignment_id: 999, status: 'delivered' }, { token });
+  assert.equal(r.status, 200);
+  assert.ok(a.logs.some((l) => /cid=999 .*order=not found/.test(l)));
+});
