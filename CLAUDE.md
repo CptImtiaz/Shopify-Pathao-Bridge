@@ -129,7 +129,12 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   area inside Shopify admin on a 1366px laptop is ~1060px wide.
 
 ## Design rules (design review 2026-11-05)
-- All text >= 4.5:1 contrast (`--muted` #5f6673; table headers #545b66). Re-measure after colour changes.
+- All text >= 4.5:1 contrast (`--muted` #5f6673; small uppercase labels #4b5563). Re-measure after colour changes.
+- Type scale (UI report fixes 2026-11-05): font sizes only 11 / 12 / 13.5 (body) / 15 / 20 / 26 px; weights only
+  400 / 600 / 700. Near-duplicate colours merged into one palette (WhatsApp keeps #25D366).
+- Overview: under 1250 px only the first row of cards shows until "Show all" (remembered per browser);
+  wide screens show all 6. Wording: sentence case buttons, US "fulfill", "3 of 50 orders used this month",
+  "Not delivered" card, "Prices in USD, billed by Shopify" on Billing.
 - Overview cards are neutral (no coloured stripes); colour only where it means something.
 - Fraud: traffic light — low/safe green, medium amber, high red; score shown as x/100.
 - Payment cell (owner's choice): amount, yellow "Pending" badge (green "Paid" once delivered), then

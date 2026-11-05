@@ -44,6 +44,7 @@
       <section class="overview" aria-label="Delivery overview">
         <div class="ov-head">
           <div><h2>Delivery overview</h2><p class="meta" id="ov-sub">All parcels sent through ShipBridge</p></div>
+          <div class="ov-tools"><button class="btn ghost sm ov-more" id="ov-more" aria-expanded="false">Show all</button>
           <div class="dp" id="dp">
             <button class="btn dp-btn" id="dp-btn" aria-haspopup="dialog" aria-expanded="false">
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
@@ -64,7 +65,8 @@
             </div>
           </div>
         </div>
-        <div class="ov-kpis" id="ov-kpis"></div>
+        </div>
+        <div class="ov-kpis collapsed" id="ov-kpis"></div>
       </section>
 
       <section class="card setup collapsed" id="setup" hidden>
@@ -218,11 +220,11 @@
           <label class="switch-row"><span><b>Hold high-risk orders</b><small>Fraud-flagged orders wait for you</small></span><input type="checkbox" role="switch" id="hold_risky" /><i aria-hidden="true"></i></label>
           <div class="rules-sub">Update orders inside Shopify</div>
               <label class="switch-row"><span><b>Update fulfillment and status</b><small>Shown on the order timeline and the customer's order page</small></span><input type="checkbox" role="switch" id="sync_fulfillment" /><i aria-hidden="true"></i></label>
-              <div class="pref"><b>Mark the Shopify order fulfilled</b>
+              <div class="pref"><b>Mark fulfilled</b>
                 <div class="seg" role="radiogroup" aria-label="Mark fulfilled" id="when-seg"><button role="radio" data-when="booked">When sent</button><button role="radio" data-when="picked">When picked up</button></div></div>
               <label class="switch-row"><span><b>Email the customer a tracking link</b><small>Shopify sends its shipping confirmation</small></span><input type="checkbox" role="switch" id="notify_customer" /><i aria-hidden="true"></i></label>
               <label class="switch-row"><span><b>Mark paid when delivered</b><small>Cash on delivery: Payment pending turns Paid once the courier confirms delivery</small></span><input type="checkbox" role="switch" id="mark_paid_on_delivery" /><i aria-hidden="true"></i></label>
-              <label class="switch-row"><span><b>Unfulfil returned parcels</b><small>A returned or cancelled parcel puts the order back to Unfulfilled</small></span><input type="checkbox" role="switch" id="undo_on_return" /><i aria-hidden="true"></i></label>
+              <label class="switch-row"><span><b>Unfulfill returned parcels</b><small>A returned or cancelled parcel puts the order back to Unfulfilled</small></span><input type="checkbox" role="switch" id="undo_on_return" /><i aria-hidden="true"></i></label>
         </aside>
       </div>
     </main>
@@ -241,7 +243,7 @@
         <div class="card bill-usage" id="bill-usage"></div>
       </section>
       <div class="plans-head">
-        <h2>Plans</h2>
+        <div><h2>Plans</h2><p class="meta">Prices in USD, billed by Shopify</p></div>
         <div class="seg" role="radiogroup" aria-label="Billing period" id="period-seg">
           <button role="radio" data-period="monthly">Monthly</button><button role="radio" data-period="yearly">Yearly · save 17%</button>
         </div>

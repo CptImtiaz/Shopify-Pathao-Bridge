@@ -10,10 +10,10 @@ const AVAILABLE = ['pathao', 'steadfast'];
 const CATALOG = [
   { key: 'pathao', name: 'Pathao', color: '#E8202A', tagline: 'On-demand logistics and delivery across Bangladesh', region: 'Bangladesh' },
   { key: 'steadfast', name: 'Steadfast', color: '#13A538', tagline: 'Fast and reliable delivery across Bangladesh', region: 'Bangladesh' },
-  { key: 'redx', name: 'RedX', color: '#D7263D', tagline: 'Smart logistics for e-commerce businesses', region: 'Bangladesh' },
-  { key: 'paperfly', name: 'Paperfly', color: '#1E88E5', tagline: 'End-to-end e-commerce logistics', region: 'Bangladesh' },
-  { key: 'carrybee', name: 'Carrybee', color: '#F5A300', tagline: 'Efficient courier service for your business', region: 'Bangladesh' },
-  { key: 'bahok', name: 'Bahok', color: '#C2185B', tagline: 'Nationwide parcel delivery with COD', region: 'Bangladesh' },
+  { key: 'redx', name: 'RedX', color: '#D7263D', tagline: 'Nationwide courier', region: 'Bangladesh' },
+  { key: 'paperfly', name: 'Paperfly', color: '#1E88E5', tagline: 'E-commerce delivery', region: 'Bangladesh' },
+  { key: 'carrybee', name: 'Carrybee', color: '#F5A300', tagline: 'Parcel delivery', region: 'Bangladesh' },
+  { key: 'bahok', name: 'Bahok', color: '#C2185B', tagline: 'Nationwide COD delivery', region: 'Bangladesh' },
 ];
 
 function listCouriers(settings, { pathao }) {

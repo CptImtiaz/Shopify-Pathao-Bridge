@@ -238,7 +238,7 @@
   function renderHeader() {
     renderAutoBox();
     const u = state.boot.usage;
-    $('usage-line').textContent = u.limit ? `Orders: ${u.used} / ${u.limit} this month` : `Orders: ${u.used} this month · Unlimited`;
+    $('usage-line').textContent = u.limit ? `${u.used} of ${u.limit} orders used this month` : `${u.used} orders this month · Unlimited`;
     const live = (state.boot.couriers || []).filter((c) => c.available && webhookLive(c.key));
     const pill = $('live-pill');
     show(pill, live.length > 0);
@@ -377,6 +377,14 @@
     list.forEach((o) => { c[o.fraud.level] = (c[o.fraud.level] || 0) + 1; });
     return { total: list.length, ...c };
   }
+  // Overview: on narrower screens only the first row of cards shows until "Show all" (choice remembered).
+  function setOverviewOpen(open) {
+    state.ovOpen = open;
+    try { localStorage.setItem('sb-ov-open', open ? '1' : '0'); } catch (e) { /* storage blocked */ }
+    $('ov-kpis').classList.toggle('collapsed', !open);
+    $('ov-more').textContent = open ? 'Show less' : 'Show all';
+    $('ov-more').setAttribute('aria-expanded', String(open));
+  }
   function renderOverview() {
     const st = state.stats;
     if (!st) { $('ov-kpis').innerHTML = '<div class="card kpi skeleton"></div>'.repeat(6); return; }
@@ -395,14 +403,14 @@
          <span class="k-foot">${st.booked} sent · ${st.picked} picked up · ${st.transit} on the road</span>`),
       kpi('done', '<path d="M5 12.5l4.5 4.5L19 7.5"/>', 'Delivered', st.delivered,
         `<span class="k-foot"><b>${taka(st.codCollected)}</b> cash collected</span>`),
-      kpi('bad', '<path d="M9 14l-5-5 5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>', 'Returned & failed', st.problems,
+      kpi('bad', '<path d="M9 14l-5-5 5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>', 'Not delivered', st.problems,
         `<span class="k-foot">${st.returned} returned · ${st.cancelled} cancelled · ${st.failed} failed</span>`),
       `<div class="card kpi k-rate"><div class="kpi-top"><span class="k-label">Success rate</span></div>
         <div class="rate"><span class="rate-ring" style="background:conic-gradient(${srCol} 0 ${sr || 0}%, #eceef2 ${sr || 0}% 100%)"><b>${sr == null ? '—' : sr + '%'}</b></span>
-        <span class="k-foot">${sr == null ? 'Shows once parcels finish' : `${st.delivered} of ${st.delivered + st.problems} finished parcels delivered`}</span></div></div>`,
-      `<button class="card kpi k-fraud" data-fraudcard title="Show high-risk orders">
+        <span class="k-foot">${sr == null ? 'Shows once parcels finish' : `${st.delivered} of ${st.delivered + st.problems} finished parcel${st.delivered + st.problems === 1 ? '' : 's'} delivered`}</span></div></div>`,
+      `<button class="card kpi k-fraud" data-fraudcard title="Show high risk orders">
         <div class="kpi-top"><span class="k-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M12 8v4M12 15h.01"/></svg></span><span class="k-label">Fraud check</span></div>
-        <b class="k-value">${fr.high}<small> high-risk</small></b>
+        <b class="k-value">${fr.high}<small> high risk</small></b>
         <span class="k-split">${fr.total ? `<i style="flex:${fr.high}" class="f-high"></i><i style="flex:${fr.medium}" class="f-med"></i><i style="flex:${fr.low + fr.pending}" class="f-low"></i><i style="flex:${fr.safe}" class="f-safe"></i>` : '<i style="flex:1" class="s0"></i>'}</span>
         <span class="k-foot">${fr.total ? `${fr.medium} medium · ${fr.low + fr.pending} low · ${fr.safe} safe · ${fr.total} order${fr.total === 1 ? '' : 's'}` : 'No orders in these dates'}</span></button>`,
     ].join('');
@@ -463,7 +471,7 @@
     if (s && s.status === 'processing') return '<span class="sub">Sending…</span>';
     if (o.cancelled && !s) return '<span class="sub">—</span>';
     if (badPhoneOf(o)) return `<a class="assign warn" href="${esc(shopifyOrderUrl(o))}" target="_top"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>Fix phone</a>`;
-    return `<button class="assign" data-assign="${esc(o.id)}">${TRUCK}${s ? 'Retry' : 'Assign Courier'}</button>`;
+    return `<button class="assign" data-assign="${esc(o.id)}">${TRUCK}${s ? 'Retry' : 'Assign courier'}</button>`;
   }
   // Delivery status: a coloured pill with icon, and a 5-dot stepper underneath.
   const ST_ICON = { ok: '<path d="M5 12.5l4.5 4.5L19 7.5"/>', bad: '<path d="M7 7l10 10M17 7L7 17"/>', go: '<path d="M5 12h12M13 7l5 5-5 5"/>', wait: '<circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/>', hold: '<path d="M9 7v10M15 7v10"/>' };
@@ -554,7 +562,7 @@
     const f = o.fraud, h = f.history || {}, pop = $('fraud-pop');
     const shop = { high: 'High risk', medium: 'Needs review', low: 'No issues found', pending: 'Still analysing', none: 'No result', unavailable: 'Not available' }[f.shopify] || '—';
     pop.innerHTML = `<div class="fp-head risk-${esc(f.level)}"><svg viewBox="0 0 24 24" aria-hidden="true">${RISK_ICON[f.level] || ''}</svg><div><b>${esc(f.label)}</b><span>${esc(o.name)} · ${esc(o.customer || '')}</span></div><em>${Number(f.score)}/100</em></div>
-      <div class="fp-stats"><div><b>${h.delivered || 0}</b><span>Delivered</span></div><div><b>${h.returned || 0}</b><span>Returned</span></div><div><b>${h.cancelled || 0}</b><span>Cancelled</span></div><div><b>${h.successRate != null ? h.successRate + '%' : '—'}</b><span>Success</span></div></div>
+      ${h.total ? `<div class="fp-stats"><div><b>${h.delivered || 0}</b><span>Delivered</span></div><div><b>${h.returned || 0}</b><span>Returned</span></div><div><b>${h.cancelled || 0}</b><span>Cancelled</span></div><div><b>${h.successRate != null ? h.successRate + '%' : '—'}</b><span>Success</span></div></div>` : ''}
       <ul class="fp-reasons">${f.reasons.map((r) => `<li class="t-${esc(r.tone || '')}">${esc(r.text)}</li>`).join('') || '<li>No warning signs</li>'}</ul>
       <div class="fp-foot"><span>Shopify analysis: <b>${esc(shop)}</b></span><span>Courier network <span class="soon">Soon</span></span></div>`;
     show(pop, true);
@@ -573,7 +581,7 @@
     const f = o.fraud || { level: 'pending', score: 0, reasons: [], history: {} }, h = f.history || {};
     const st = stageOf(o);
     const colors = { high: ['#ef4444', '#fde2e2'], medium: ['#f59e0b', '#fdeccb'], low: ['#22c55e', '#d3f3df'], pending: ['#9ca3af', '#e5e7eb'], safe: ['#22c55e', '#d3f3df'] }[f.level];
-    const title = { high: 'High risk — review first', medium: 'Check before sending', low: 'Looks fine', pending: 'Shopify is still checking', safe: 'Trusted customer' }[f.level];
+    const title = { high: 'High risk — review first', medium: 'Check before sending', low: 'Low risk · looks fine', pending: 'Shopify is still checking', safe: 'Trusted customer' }[f.level];
     const steps = [`Sent to ${cname(o.shipment && o.shipment.status === 'sent' ? o.shipment.courier : defKey())}`, 'Picked up by rider', 'In transit', 'Out for delivery', 'Delivered'];
     const sent = o.shipment && o.shipment.status === 'sent';
     const tl = steps.map((label, i) => {
@@ -601,7 +609,7 @@
         <div class="ring" style="background:conic-gradient(${colors[0]} 0 ${Number(f.score) || 0}%, ${colors[1]} ${Number(f.score) || 0}% 100%)"><b>${Number(f.score) || 0}<small>/100</small></b></div>
         <div><div class="t">${esc(title)}</div><div class="r-scale">Risk score · higher means riskier</div><ul>${f.reasons.slice(0, 3).map((r) => `<li>${esc(r.text)}</li>`).join('')}</ul></div>
       </div>
-      <div class="fp-stats"><div><b>${h.delivered || 0}</b><span>Delivered</span></div><div><b>${h.returned || 0}</b><span>Returned</span></div><div><b>${h.cancelled || 0}</b><span>Cancelled</span></div><div><b>${h.successRate != null ? h.successRate + '%' : '—'}</b><span>Success</span></div></div>
+      ${h.total ? `<div class="fp-stats"><div><b>${h.delivered || 0}</b><span>Delivered</span></div><div><b>${h.returned || 0}</b><span>Returned</span></div><div><b>${h.cancelled || 0}</b><span>Cancelled</span></div><div><b>${h.successRate != null ? h.successRate + '%' : '—'}</b><span>Success</span></div></div>` : ''}
       <div class="d-sec"><div class="d-label">Delivery${sent && o.shipment.consignmentId ? ` · <span class="mono">${esc(o.shipment.consignmentId)}</span>` : ''}</div>
         <ul class="tl">${tl}</ul>
         ${sent && o.shipment.courierMessage ? `<div class="courier-msg"><b>Latest from ${esc(cname(o.shipment.courier))}</b>${esc(o.shipment.courierMessage)}${o.shipment.courierMessageAt ? `<span class="sub">${esc(time(o.shipment.courierMessageAt))}</span>` : ''}</div>` : ''}
@@ -930,7 +938,7 @@
     const sub = b.subscription;
     $('bill-current').innerHTML = `<span class="sub">Your plan</span>
       <div class="bc-name"><b>${esc(cur.name)}</b>${b.interval ? `<span class="pill p-wait">${b.interval === 'yearly' ? 'Yearly' : 'Monthly'}</span>` : ''}${sub && sub.test ? '<span class="pill p-check">Test charge</span>' : ''}</div>
-      <div class="meta">${cur.price ? `${usd(b.interval === 'yearly' ? cur.yearlyPrice : cur.price)} / ${b.interval === 'yearly' ? 'year' : 'month'} · ${sub && sub.currentPeriodEnd ? `renews ${esc(dateOnly(sub.currentPeriodEnd))}` : 'active'}` : 'Free forever · no card needed'}</div>
+      <div class="meta">${cur.price ? `${usd(b.interval === 'yearly' ? cur.yearlyPrice : cur.price)} / ${b.interval === 'yearly' ? 'year' : 'month'} · ${sub && sub.currentPeriodEnd ? `renews ${esc(dateOnly(sub.currentPeriodEnd))}` : 'active'}` : 'Free forever'}</div>
       <div class="meta">${esc(cur.tagline || '')}</div>
       ${cur.price ? '<div><button class="btn sm" data-downgrade style="margin-top:6px">Switch to Free</button></div>' : ''}`;
     const u = b.usage, pct = u.limit ? Math.min(100, Math.round((u.used / u.limit) * 100)) : 100;
@@ -1059,6 +1067,7 @@
       if (t.closest('#dp-cancel') || !t.closest('#dp-pop')) { closePicker(); if (t.closest('#dp-cancel')) return; }
       else return;
     }
+    if (t.closest('#ov-more')) { setOverviewOpen(!state.ovOpen); return; }
     if (t.closest('[data-fraudcard]')) {
       state.risk = 'high'; state.stage = null; renderOrders();
       document.querySelector('.list').scrollIntoView({ behavior: 'smooth', block: 'start' }); return;
@@ -1193,6 +1202,8 @@
 
   async function start() {
     let embedded = true;
+    let ovOpen = false; try { ovOpen = localStorage.getItem('sb-ov-open') === '1'; } catch (e) { /* storage blocked */ }
+    setOverviewOpen(ovOpen);
     try { embedded = window.top !== window.self; } catch (e) { embedded = true; }
     if (!embedded || !(window.shopify && shopify.idToken)) {
       $('banners').innerHTML = '<div class="banner info"><b>Open ShipBridge from your Shopify admin.</b>&nbsp;Go to your store admin → Apps → ShipBridge. If it isn\'t listed, install it first.</div>';
