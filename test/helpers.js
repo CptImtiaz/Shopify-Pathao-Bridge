@@ -193,9 +193,10 @@ async function startApp({ smsFeature = true, adminPassword = '' } = {}) {
     pathaoProductionUrl: 'https://api-hermes.pathao.com', pathaoSandboxUrl: 'https://courier-api-sandbox.pathao.com',
     pathaoIntegrationSecret: 'integration-uuid',
     steadfastBaseUrl: 'https://portal.packzy.com/api/v1',
+    pollStatuses: false,
     smsFeature, adminPassword,
   };
-  const { app, db } = createApp({ config, pool: memPool(), fetchImpl: fake.impl, log });
+  const { app, db, tracker } = createApp({ config, pool: memPool(), fetchImpl: fake.impl, log });
   await db.migrate();
   const server = await new Promise((r) => { const s = app.listen(0, () => r(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -216,7 +217,7 @@ async function startApp({ smsFeature = true, adminPassword = '' } = {}) {
 
   const settle = () => new Promise((r) => setTimeout(r, 150));
 
-  return { base, api, webhook, settle, fake, db, logs, close: () => server.close() };
+  return { base, api, webhook, settle, fake, db, tracker, logs, close: () => server.close() };
 }
 
 module.exports = { startApp, sessionToken, gqlOrder, memPool, fakeFetch, SHOP, SECRET };

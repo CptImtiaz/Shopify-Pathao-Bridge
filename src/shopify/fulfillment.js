@@ -120,7 +120,16 @@ function makeFulfillmentSync({ admin, db, log = console }) {
     const open = fos.filter((f) => ['OPEN', 'IN_PROGRESS', 'SCHEDULED'].includes(f.status)).map((f) => f.id);
     let fulfillmentId = null;
     if (open.length) {
-      fulfillmentId = (await createFulfillment(shop, open, tracking, settings.notify_customer)).id;
+      // One fulfillment per fulfillment order: Shopify refuses to fulfil a gift card
+      // together with other items ("Cannot fulfill a gift card with another fulfillment order").
+      const errors = [];
+      for (const id of open) {
+        try {
+          const f = await createFulfillment(shop, [id], tracking, settings.notify_customer);
+          if (!fulfillmentId) fulfillmentId = f.id;
+        } catch (e) { errors.push(e.message); }
+      }
+      if (!fulfillmentId) throw new Error(errors.join('; '));
     } else {
       // Already fulfilled (e.g. by hand): attach Pathao tracking to the existing fulfillment(s).
       const existing = fos.flatMap((f) => f.fulfillments.nodes).filter((f) => f.status !== 'CANCELLED');
@@ -166,7 +175,14 @@ function makeFulfillmentSync({ admin, db, log = console }) {
     }
   }
 
-  return { sync, ensureFulfilled };
+  // Undo a fulfillment we created (e.g. the parcel was removed in the courier's panel).
+  async function cancelFulfillment(shop, fulfillmentId) {
+    const d = await gql(shop, `mutation Cancel($id: ID!) { fulfillmentCancel(id: $id) { fulfillment { id status } userErrors { message } } }`, { id: fulfillmentId });
+    const r = d.fulfillmentCancel;
+    if (r.userErrors && r.userErrors.length) throw new Error(r.userErrors.map((e) => e.message).join('; '));
+  }
+
+  return { sync, ensureFulfilled, cancelFulfillment };
 }
 
 module.exports = { makeFulfillmentSync, shopifyEventFor, readyToFulfil, trackingUrl, trackingFor, TRACKING_COMPANY };

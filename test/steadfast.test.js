@@ -283,3 +283,35 @@ test('main Refresh asks couriers for active parcels only, and picks up a cancell
   assert.equal(a.fake.calls.filter((c) => c.url.includes('/status_by_cid/')).length - before, 1, 'delivered parcel not checked');
   assert.equal((await a.db.getShipment(SHOP, '840')).pathao_status, 'cancelled');
 });
+
+test('parcel removed in Steadfast (unknown while in review) goes back to Not sent and can be sent again', async (t) => {
+  const a = await steadfastShop(t);
+  a.fake.state.orders['850'] = gqlOrder(850);
+  await a.api('/orders/send', { method: 'POST', body: { ids: ['850'], courier: 'steadfast' } });
+  let s = await a.db.getShipment(SHOP, '850');
+  assert.ok(s.shopify_fulfillment_id, 'fulfilled when sent');
+  a.fake.state.steadfastStatus['5001'] = 'unknown';
+  const r = await a.api('/orders/refresh-active', { method: 'POST' });
+  assert.equal(r.data.changed, 1);
+  s = await a.db.getShipment(SHOP, '850');
+  assert.equal(s.status, 'skipped');
+  assert.match(s.error, /Removed in Steadfast/);
+  assert.equal(s.consignment_id, null);
+  assert.equal(s.counted, false, 'does not use up the monthly limit');
+  assert.equal(s.shopify_fulfillment_id, null);
+  assert.ok(a.fake.calls.some((c) => c.body && c.body.includes('fulfillmentCancel')), 'Shopify fulfillment undone');
+  // can be sent again
+  const again = await a.api('/orders/send', { method: 'POST', body: { ids: ['850'], courier: 'steadfast' } });
+  assert.equal(again.data.results[0].ok, true, again.data.results[0].error);
+  assert.equal((await a.db.getShipment(SHOP, '850')).consignment_id, '5002');
+});
+
+test('tracker checks every shop with parcels on the way', async (t) => {
+  const a = await steadfastShop(t);
+  a.fake.state.orders['860'] = gqlOrder(860);
+  await a.api('/orders/send', { method: 'POST', body: { ids: ['860'], courier: 'steadfast' } });
+  a.fake.state.steadfastStatus['5001'] = 'delivered';
+  assert.deepEqual(await a.db.shopsWithActiveShipments(), [SHOP]);
+  await a.tracker.pollAll();
+  assert.equal((await a.db.getShipment(SHOP, '860')).pathao_status, 'delivered');
+});

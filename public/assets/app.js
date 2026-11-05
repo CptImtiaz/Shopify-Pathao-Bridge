@@ -72,6 +72,7 @@
   function waitReason(o) {
     if (o.cancelled || !canSend(o) || errorReason(o)) return null;
     if (held(o)) return (o.shipment.error || '').replace(/^Held( for review)?:\s*/i, '') || 'Held for review';
+    if (o.shipment && o.shipment.status === 'skipped' && o.shipment.error) return o.shipment.error;
     if (o.fraud && o.fraud.level === 'high') return 'High fraud risk · check before sending';
     return null;
   }
@@ -448,7 +449,7 @@
     const s = o.shipment;
     if (s && s.status === 'sent') {
       const c = courier(s.courier || 'pathao');
-      return `<span class="courier-chip">${cmono(c)}${esc(c.name)}</span>${webhookLive(c.key) ? '<span class="live" title="Webhook connected — status updates instantly"><i></i>Live</span>' : ''}<button class="link-btn" data-track="${esc(o.id)}">Refresh status</button>`;
+      return `<span class="courier-chip">${cmono(c)}${esc(c.name)}</span>${webhookLive(c.key) ? '<span class="live" title="Webhook connected — status updates instantly"><i></i>Live</span>' : ''}`;
     }
     if (s && s.status === 'processing') return '<span class="sub">Sending…</span>';
     if (o.cancelled && !s) return '<span class="sub">—</span>';
@@ -594,7 +595,7 @@
         <ul class="tl">${tl}</ul>
         ${sent && o.shipment.courierMessage ? `<div class="courier-msg"><b>Latest from ${esc(cname(o.shipment.courier))}</b>${esc(o.shipment.courierMessage)}${o.shipment.courierMessageAt ? `<span class="sub">${esc(time(o.shipment.courierMessageAt))}</span>` : ''}</div>` : ''}
         ${sent && o.shipment.shopifySynced ? '<div class="synced"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Shopify order updated automatically</div>' : ''}
-        ${sent ? `<div class="d-refresh">${webhookLive(o.shipment.courier || 'pathao') ? '<span class="live"><i></i>Live — updates instantly</span>' : ''}<button class="btn sm" data-track="${esc(o.id)}">Refresh status</button></div>` : ''}
+        ${sent ? `<div class="d-refresh">${webhookLive(o.shipment.courier || 'pathao') ? '<span class="live"><i></i>Live — updates instantly</span>' : '<span class="sub">Status is checked automatically</span>'}</div>` : ''}
       </div>
       <div class="d-money">
         <div class="d-items">${(o.products || []).map((p) => `<div class="it">${p.image ? `<img class="thumb" src="${esc(p.image)}" alt="" />` : `<span class="thumb">${esc((p.title || '?').charAt(0))}</span>`}<span class="ellip" style="flex:1">${esc(p.title)}</span><span class="sub">× ${p.quantity}</span></div>`).join('')}</div>
@@ -1065,6 +1066,10 @@
   }));
   $('search').addEventListener('input', (e) => { state.search = e.target.value; renderRows(); });
   window.addEventListener('resize', closeMenu);
+  setInterval(() => {
+    const busy = state.selected.size || state.focus || state.dp || !$('courier-menu').hidden;
+    if (document.visibilityState === 'visible' && state.page === 'orders' && state.loaded && !busy) loadOrders();
+  }, 60000);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (state.dp) { closePicker(); return; } closeMenu(); closeDetail(); } });
   // Typing a date in the Start / End boxes.
   ['dp-from', 'dp-to'].forEach((id) => $(id).addEventListener('change', () => {

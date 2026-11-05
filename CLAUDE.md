@@ -46,8 +46,15 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   with a status updates the order; `tracking_message` is saved in `shipments.courier_message` and
   shown in the order panel. Events without `consignment_id` are matched by `invoice`.
   Only real delivery statuses (their list) change an order; `cancel_request` only sets a message
-  until approved (then `cancelled`). "Refresh status" is always shown; the main Refresh calls
-  `POST /api/orders/refresh-active` (up to 20 parcels still on the way, skipped while keys are paused).
+  until approved (then `cancelled`).
+- Statuses update on their own (owner does not want refresh buttons): `src/tracking.js` polls
+  couriers every 3 min for parcels still on the way (started in server.js; `pollStatuses:false`
+  in tests) and when the dashboard loads (max once a minute per shop). The dashboard reloads
+  its list every 60 s. Steadfast `unknown` for a parcel that was `in_review`/`pending` = removed
+  in the Steadfast panel -> shipment back to skipped "Removed in Steadfast", Shopify
+  fulfillment cancelled, not counted toward the plan limit.
+- Shopify fulfillment is created per fulfillment order (gift cards can't be fulfilled together
+  with other items).
 - `shipments.courier` says which courier booked an order; `shipments.pathao_status` holds the
   courier's status text for every courier (name predates multi-courier).
 - `settings.default_courier` drives Send buttons and auto-send.
