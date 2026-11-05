@@ -681,7 +681,7 @@
         <p class="meta">${esc(p.tagline || '')}</p></div></div>
       <div class="hero-r"><span class="hero-ring" style="background:conic-gradient(#4f46e5 0 ${pct}%, #e4e5f7 ${pct}% 100%)"><b>${done}/${steps.length}</b></span><span class="meta">${done === steps.length ? 'All set' : 'steps done'}</span></div>
       <div class="hero-facts"><div><span>Pickup store</span><b>${esc(s.pathao_store_name || (s.pathao_store_id ? 'Store #' + s.pathao_store_id : '—'))}</b></div>
-        <div><span>Mode</span><b>${s.pathao_env === 'sandbox' ? 'Test (sandbox)' : 'Live'}</b></div>
+        <div><span>Default</span><b>${defKey() === 'pathao' ? 'Yes' : 'No'}</b></div>
         <div><span>Auto-send</span><b>${s.auto_send ? 'On' : 'Off'}</b></div>
         <div><span>Delivery type</span><b>${String(s.delivery_type) === '12' ? 'Express' : 'Regular'}</b></div></div>`;
 
@@ -696,12 +696,11 @@
       el.querySelector('.step-act').textContent = isOpen ? 'Close' : x.done ? (x.key === 'webhook' ? 'View' : 'Edit') : 'Set up';
       el.querySelector('.step-row').setAttribute('aria-expanded', String(isOpen));
     });
-    document.querySelector('[data-step="account"] [data-summary]').textContent = s.connected ? `${s.pathao_username} · ${s.pathao_env === 'sandbox' ? 'Test (sandbox)' : 'Live'}` : 'Client ID, secret, merchant email and password';
+    document.querySelector('[data-step="account"] [data-summary]').textContent = s.connected ? `${s.pathao_username} · connected` : 'Client ID, secret, merchant email and password';
     document.querySelector('[data-step="delivery"] [data-summary]').textContent = s.pathao_store_id
       ? `${s.pathao_store_name || 'Store #' + s.pathao_store_id} · ${String(s.delivery_type) === '12' ? 'Express' : 'Regular'} · ${Number(s.default_weight) || 0.5} kg`
       : 'Pickup store, delivery type, parcel weight, note for rider';
     document.querySelector('[data-step="webhook"] [data-summary]').innerHTML = webhookLive() ? '<span class="live" style="margin:0"><i></i>Live</span>' : 'Pathao tells ShipBridge the moment a parcel moves';
-    $$('#env-seg button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.env === (state.envDraft || s.pathao_env))));
     const wh = state.boot.pathaoWebhook || {};
     $('wh-state').innerHTML = wh.live ? ''
       : wh.secret ? '<span class="wait-line">Secret saved. Waiting for the first update from Pathao.</span>' : '';
@@ -834,7 +833,8 @@
     return test;
   }
   async function saveConnection() {
-    const body = { pathao_env: state.envDraft || S().pathao_env, pathao_client_id: $('pathao_client_id').value.trim(), pathao_username: $('pathao_username').value.trim() };
+    // Always the live Pathao account (no test/sandbox switch).
+    const body = { pathao_env: 'production', pathao_client_id: $('pathao_client_id').value.trim(), pathao_username: $('pathao_username').value.trim() };
     if ($('pathao_client_secret').value) body.pathao_client_secret = $('pathao_client_secret').value;
     if ($('pathao_password').value) body.pathao_password = $('pathao_password').value;
     if (!body.pathao_client_id || !body.pathao_username) throw new Error('Enter your Pathao Client ID and merchant email');
@@ -842,7 +842,6 @@
     const test = await loadStores(S().pathao_store_id);
     toast(S().pathao_store_id ? 'Pathao connected' : `Connected — now choose your pickup store (${test.stores.length} found)`);
     state.section = undefined;
-    state.envDraft = null;
     fillAccount(); renderAll();
   }
   let saveTimer;
@@ -983,8 +982,6 @@
     }
     const ts = t.closest('[data-toggle-step]');
     if (ts) { const k = ts.dataset.toggleStep; const isOpen = document.querySelector(`.step[data-step="${k}"]`).classList.contains('open'); state.section = isOpen ? null : k; if (!isOpen) fillAccount(); renderCouriers(); return; }
-    const env = t.closest('[data-env]');
-    if (env) { state.envDraft = env.dataset.env; renderCouriers(); return; }
     const sp = t.closest('[data-speed]');
     if (sp) { savePrefs({ delivery_type: Number(sp.dataset.speed) }); return; }
     const wn = t.closest('[data-when]');
