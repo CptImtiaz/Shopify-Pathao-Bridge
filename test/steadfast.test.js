@@ -347,3 +347,15 @@ test('live updates: an open dashboard is told the moment a courier webhook chang
   await a.settle();
   assert.equal(a.bus.count(SHOP), 0, 'listener removed when the dashboard closes');
 });
+
+test('steadfast webhook in the older format (no notification_type, bearer token only) still updates the order', async (t) => {
+  const a = await steadfastShop(t);
+  a.fake.state.orders['890'] = gqlOrder(890);
+  await a.api('/orders/send', { method: 'POST', body: { ids: ['890'], courier: 'steadfast' } });
+  const token = (await a.api('/bootstrap')).data.steadfastWebhook.token;
+  // Payload shape from Steadfast's own Laravel package example.
+  const r = await sfHook(a, { consignment_id: 5001, invoice: '890', status: 'delivered', cod_amount: 990, updated_at: '2026-11-05 10:00:00' }, { token, bearerOnly: true });
+  assert.equal(r.status, 200);
+  await a.settle();
+  assert.equal((await a.db.getShipment(SHOP, '890')).pathao_status, 'delivered');
+});
