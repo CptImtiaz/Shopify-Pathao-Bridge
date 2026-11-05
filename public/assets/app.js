@@ -46,7 +46,7 @@
   const setVal = (id, v) => { const el = $(id); if (el) el.value = v == null ? '' : String(v); };
   const courier = (key) => (state.boot.couriers || []).find((c) => c.key === key) || { key, name: key, color: '#6B7875' };
   const LOGO_V = (document.querySelector('meta[name="logo-version"]') || {}).content || '1';
-  const LOGOS = { pathao: `/assets/couriers/pathao-mark.png?v=${LOGO_V}`, steadfast: `/assets/couriers/steadfast-mark.png?v=${LOGO_V}` };
+  const LOGOS = Object.fromEntries(['pathao', 'steadfast', 'redx', 'paperfly', 'carrybee', 'bahok'].map((k) => [k, `/assets/couriers/${k}-mark.png?v=${LOGO_V}`]));
   const cmono = (c, cls = '') => (LOGOS[c.key] ? `<img class="cmono logo-img ${cls}" src="${LOGOS[c.key]}" alt="${esc(c.name)}" />` : `<span class="cmono ${cls}" style="background:${esc(c.color)}">${esc(c.name.charAt(0))}</span>`);
   const webhookSaved = (key = 'pathao') => Boolean(state.boot && (key === 'steadfast' ? state.boot.steadfastWebhook : state.boot.pathaoWebhook)?.saved) || webhookLive(key);
   const webhookLive = (key = 'pathao') => Boolean(state.boot && (key === 'steadfast' ? state.boot.steadfastWebhook : state.boot.pathaoWebhook)?.live);
@@ -709,8 +709,8 @@
     $('courier-nav').innerHTML = `<div class="cx-label">Your couriers</div>
       <button class="cx-item${view === 'pathao' ? ' active' : ''}" data-cview="pathao">${cmono(p)}<span class="cx-name"><b>Pathao</b><small class="${ready ? 'ok' : 'warn'}">${ready ? (webhookLive('pathao') ? 'Connected · Live' : 'Connected') : s.connected ? 'Choose a pickup store' : 'Not connected'}</small></span>${def === 'pathao' ? '<span class="cx-def">Default</span>' : ''}</button>
       <button class="cx-item${view === 'steadfast' ? ' active' : ''}" data-cview="steadfast">${cmono(sf)}<span class="cx-name"><b>Steadfast</b><small class="${sfConnected() ? 'ok' : 'warn'}">${sfConnected() ? (webhookLive('steadfast') ? 'Connected · Live' : 'Connected') : sfRejected() ? 'Needs attention' : 'Not connected'}</small></span>${def === 'steadfast' ? '<span class="cx-def">Default</span>' : ''}</button>
-      <button class="cx-item${view === 'sms' ? ' active' : ''}" data-cview="sms"><span class="cmono" style="background:#64748b">✉</span><span class="cx-name"><b>SMS to customers</b><small>Coming soon</small></span></button>
-      ${soon.length ? '<div class="cx-label">Coming soon</div>' : ''}
+      <div class="cx-label">Coming soon</div>
+      <button class="cx-item off${view === 'sms' ? ' active' : ''}" data-cview="sms"><span class="cmono" style="background:#64748b">✉</span><span class="cx-name"><b>SMS to customers</b><small>Order confirmation by SMS</small></span></button>
       ${soon.map((c) => `<div class="cx-item off">${cmono(c)}<span class="cx-name"><b>${esc(c.name)}</b><small>${esc(c.tagline)}</small></span></div>`).join('')}`;
     show($('pathao-setup'), view === 'pathao');
     show($('steadfast-setup'), view === 'steadfast');
@@ -809,7 +809,7 @@
       <div class="hero-facts"><div><span>Balance</span><b>${state.sfBalance != null ? esc(taka(state.sfBalance)) : '—'}</b></div>
         <div><span>Default</span><b>${defKey() === 'steadfast' ? 'Yes' : 'No'}</b></div>
         <div><span>Auto-send</span><b>${s.auto_send && defKey() === 'steadfast' ? 'On' : 'Off'}</b></div>
-        <div><span>Updates</span><b>${webhookLive('steadfast') ? 'Live' : 'Manual'}</b></div></div>`;
+        <div><span>Updates</span><b title="${webhookLive('steadfast') ? 'Steadfast sends updates the moment a parcel moves' : 'Until Steadfast sends its first update, ShipBridge checks every minute'}">${webhookLive('steadfast') ? 'Live' : 'Auto · every min'}</b></div></div>`;
 
     const firstOpen = (steps.find((x) => !x.done) || {}).key || null;
     const open = state.section === undefined || state.section === 'auto' ? firstOpen : state.section;

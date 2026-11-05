@@ -653,3 +653,6 @@ button.kpi.k-fraud:hover { box-shadow: 0 0 0 2px #fecaca, var(--shadow); }
 .step-body textarea { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; }
 
 .load-more { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 14px; border-top: 1px solid var(--line); }
+button.cx-item.off { cursor: pointer; }
+button.cx-item.off.active { border-style: solid; border-color: var(--accent); }
+.cx-item.off .cmono { opacity: .85; }
