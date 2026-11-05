@@ -5,7 +5,7 @@
 const crypto = require('crypto');
 const express = require('express');
 const { verifySessionToken, AuthError } = require('../shopify/auth');
-const { fromGraphql, fromDraft, normalizePhone } = require('../pathao/mapper');
+const { fromGraphql, normalizePhone } = require('../pathao/mapper');
 const { assessOrder } = require('../fraud');
 const { summarise, RANGES } = require('../stats');
 const { PLANS, intervalFromSubscriptionName } = require('../plans');
@@ -327,16 +327,12 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, sh
   }));
 
   router.get('/orders', wrap(async (req) => {
-    const fresh = req.query.fresh === '1';
-    const [orders, draftList] = await Promise.all([
-      admin.listRecentOrdersCached(req.shop, req.opts, 50, { rich: true, fresh }),
-      admin.listOpenDraftsCached ? admin.listOpenDraftsCached(req.shop, req.opts, { fresh }) : { drafts: [], error: null },
-    ]);
+    const orders = await admin.listRecentOrdersCached(req.shop, req.opts, 50, { rich: true, fresh: req.query.fresh === '1' });
     const norm = orders.map(fromGraphql);
     const phoneOf = (n) => [n.shipping.phone, ...n.fallbackPhones].filter(Boolean).map(normalizePhone).find((p) => p.valid)?.phone || null;
     const phones = norm.map(phoneOf);
     const history = await db.historyForPhones(req.shop, phones);
-    const ids = orders.map((o) => String(o.legacyResourceId)).concat(draftList.drafts.map((d) => `d${d.legacyResourceId}`));
+    const ids = orders.map((o) => String(o.legacyResourceId));
     const [shipments, smsRows, notes] = await Promise.all([db.shipmentsForOrders(req.shop, ids), db.smsForOrders(req.shop, ids), db.notesForOrders(req.shop, ids)]);
     const byId = new Map(shipments.map((s) => [s.shopify_order_id, s]));
     const noteById = new Map(notes.map((n) => [n.shopify_order_id, n.note]));
@@ -381,47 +377,11 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, sh
           } : null,
         };
       }),
-      // Open draft orders: always on hold until the merchant sends one.
-      drafts: draftList.drafts.map((d) => {
-        const n = fromDraft(d);
-        const phone = phoneOf(n);
-        return {
-          id: n.id, draft: true, name: n.name, createdAt: n.createdAt,
-          customer: n.shipping.name || n.fallbackName || '',
-          phone: n.shipping.phone || n.fallbackPhones.find(Boolean) || '',
-          city: n.shipping.city || '',
-          address: [n.shipping.address1, n.shipping.address2, n.shipping.city].filter(Boolean).join(', '),
-          phoneNormalized: phone, total: n.total, currency: d.totalPriceSet?.shopMoney?.currencyCode || '', cod: n.total,
-          financial: 'DRAFT', fulfillment: null,
-          items: n.items.map((i) => `${i.title} x${i.quantity}`).join(', '),
-          itemCount: n.items.reduce((t, i) => t + i.quantity, 0),
-          products: n.items.slice(0, 4).map((i) => ({ title: i.title, quantity: i.quantity, image: i.image })),
-          fraud: assessOrder(n, { history: phone ? history.filter((h) => h.phone === phone) : [], duplicates: [] }),
-          cancelled: false, source: 'draft', note: noteById.get(n.id) || null, sms: null, shipment: null,
-        };
-      }),
-      draftsError: draftList.error,
     };
   }));
 
-  // Draft -> order -> courier. The amount to collect is read from the draft
-  // first, so it is right even if Shopify marks the new order as paid.
-  async function sendDraft(req, draftId, courier) {
-    const id = `d${draftId}`;
-    const d = await admin.getDraft(req.shop, draftId, req.opts);
-    if (!d) return { id, ok: false, error: 'Draft order not found' };
-    if (d.status && d.status !== 'OPEN') return { id, ok: false, error: 'Draft is already completed. Send the order it became.' };
-    const draft = fromDraft(d);
-    const made = await admin.completeDraft(req.shop, draftId, req.opts);
-    log.info(`[${req.shop}] draft ${d.name} completed as order ${made.name}`);
-    const notes = await db.notesForOrders(req.shop, [id]);
-    if (notes[0]) { await db.setNote(req.shop, made.id, notes[0].note); await db.setNote(req.shop, id, null); }
-    const r = await shipping.sendOrder(req.shop, { ...draft, id: made.id, name: made.name, source: 'shopify_draft_order' }, { courier });
-    return { id, orderId: made.id, ok: r.ok, duplicate: Boolean(r.duplicate), error: r.shipment?.error || null, consignmentId: r.shipment?.consignment_id || null };
-  }
-
   router.post('/orders/send', wrap(async (req) => {
-    const ids = [...new Set((req.body?.ids || []).map(String))].filter((id) => /^d?\d+$/.test(id)).slice(0, 50);
+    const ids = [...new Set((req.body?.ids || []).map(String))].filter((id) => /^\d+$/.test(id)).slice(0, 50);
     if (!ids.length) throw Object.assign(new Error('No orders selected'), { status: 400 });
     const courier = req.body?.courier || (await db.getSettings(req.shop)).default_courier || 'pathao';
     if (!AVAILABLE.includes(courier)) throw Object.assign(new Error(`${courier} is not available yet`), { status: 400 });
@@ -432,7 +392,6 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, sh
     const results = [];
     for (const id of ids) {
       try {
-        if (id.startsWith('d')) { results.push(await sendDraft(req, id.slice(1), courier)); continue; }
         const o = await admin.getOrder(req.shop, id, req.opts);
         if (!o) { results.push({ id, ok: false, error: 'Order not found' }); continue; }
         const r = await shipping.sendOrder(req.shop, fromGraphql(o), { courier });
@@ -447,7 +406,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, sh
 
   // Merchant's own note on an order (shown on hold orders). Empty text removes it.
   router.post('/orders/:id/note', wrap(async (req) => {
-    if (!/^d?\d+$/.test(req.params.id)) throw Object.assign(new Error('Unknown order'), { status: 400 });
+    if (!/^\d+$/.test(req.params.id)) throw Object.assign(new Error('Unknown order'), { status: 400 });
     const note = String(req.body?.note || '').trim();
     if (note.length > 500) throw Object.assign(new Error('Note is too long (max 500 characters)'), { status: 400 });
     await db.setNote(req.shop, req.params.id, note || null);

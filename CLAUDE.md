@@ -47,21 +47,17 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 - `settings.default_courier` drives Send buttons and auto-send.
 
 ## Dashboard tabs
-- All = every order except Hold (errors and cancelled included), newest first; other tabs filter.
+- All = every order (errors and cancelled included), newest first; other tabs filter.
 - Wording: an order handed to a courier is "Sent to <Courier>" (pill, order panel), the tab is
   "Sent", cards say "N sent". Never "Booked" in the UI. Steadfast's `in_review` also shows as sent.
 - Overview cards follow the Shopify-style date picker (presets + 2-month calendar); `/api/stats`
   takes `from`/`to` (ISO, `to` exclusive) or `range=all`. The Fraud check card counts the loaded
-  orders in those dates; clicking it filters to High risk across all tabs (Hold included).
+  orders in those dates; clicking it filters the list to High risk.
 - Header live pill: one live courier = "<Courier> live"; several = stacked logos + "N couriers live".
-- Hold = waits for the merchant on purpose: open Shopify draft orders (id `d<draftId>`, need
-  `read/write_draft_orders`), orders made from a draft (`sourceName: shopify_draft_order`,
-  never auto-sent), high fraud risk, or skipped with a "Held: ..." reason.
+- No Hold tab and no draft orders (removed 2026-11-05 at the owner's request; scopes are back to
+  orders + fulfillments only). A merchant-driven "hold this order" feature was proposed, not built.
 - Errors = must be fixed first: bad phone, missing name/address, courier refused, plan limit.
 - Returned = failed delivery / returned. Cancelled = cancelled in Shopify (not sent).
-- Sending a draft completes it (`draftOrderComplete`, payment pending) and books it with the
-  draft's total as COD, so the amount is right even if Shopify marks the order paid.
-- Merchant notes per order live in `order_notes` (never sent to couriers); a draft's note
-  moves to the order it becomes.
+- Merchant notes per order live in `order_notes` (never sent to couriers).
 - Before changing the order table, re-run the overlap check (widths 1060–1600): the app
   area inside Shopify admin on a 1366px laptop is ~1060px wide.

@@ -9,8 +9,7 @@ embedded = true
 [access_scopes]
 # Orders contain customer names/phones/addresses -> also request
 # "Protected customer data" access in the Partner Dashboard.
-# read/write_draft_orders: open draft orders show on hold; sending one completes it into an order.
-scopes = "read_orders,write_orders,read_fulfillments,write_fulfillments,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders,read_draft_orders,write_draft_orders"
+scopes = "read_orders,write_orders,read_fulfillments,write_fulfillments,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders"
 
 [auth]
 redirect_urls = [ "https://shipbridge-production-7b96.up.railway.app/auth/callback" ]
