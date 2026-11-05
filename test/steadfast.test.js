@@ -67,7 +67,8 @@ test('steadfast connect: test shows balance, wrong keys are reported, courier sh
   assert.equal(boot.settings.steadfast.has_secret, true);
   assert.equal(JSON.stringify(boot).includes('sf_secret'), false, 'secret never sent to the browser');
   assert.match(boot.steadfastWebhook.url, /\/steadfast\/webhook\/demo-store\.myshopify\.com\/[0-9a-f]{48}$/);
-  assert.ok(boot.steadfastWebhook.token.length >= 32);
+  assert.ok((await a.db.getSettings(SHOP)).steadfast_webhook_token.length >= 32);
+  assert.equal(boot.steadfastWebhook.token, undefined, 'legacy token is not sent to the browser');
 
   // Wrong keys are checked with Steadfast first and never saved over working ones.
   const bad = await a.api('/steadfast/connect', { method: 'POST', body: { api_key: 'sf_key', secret_key: 'wrong' } });
@@ -159,7 +160,7 @@ test('steadfast webhook: signature checked, status saved, Shopify updated; wrong
   const a = await steadfastShop(t);
   a.fake.state.orders['802'] = gqlOrder(802);
   await a.api('/orders/send', { method: 'POST', body: { ids: ['802'], courier: 'steadfast' } });
-  const token = (await a.api('/bootstrap')).data.steadfastWebhook.token;
+  const token = (await a.api('/bootstrap'), (await a.db.getSettings(SHOP)).steadfast_webhook_token);
   const event = { notification_type: 'delivery_status', consignment_id: 5001, invoice: '802', cod_amount: 990, status: 'delivered', delivery_charge: 100 };
 
   assert.equal((await sfHook(a, event, { token, tamper: true })).status, 401);
@@ -219,7 +220,7 @@ test('steadfast webhook: tracking updates save the message; events are logged; i
   const a = await steadfastShop(t);
   a.fake.state.orders['820'] = gqlOrder(820);
   await a.api('/orders/send', { method: 'POST', body: { ids: ['820'], courier: 'steadfast' } });
-  const token = (await a.api('/bootstrap')).data.steadfastWebhook.token;
+  const token = (await a.api('/bootstrap'), (await a.db.getSettings(SHOP)).steadfast_webhook_token);
 
   // tracking_update without a status: message saved, status unchanged
   let r = await sfHook(a, { notification_type: 'tracking_update', consignment_id: 5001, invoice: '820', tracking_message: 'Parcel received at Dhaka hub' }, { token });
@@ -250,7 +251,7 @@ test('steadfast cancel_request: raised = message only, approved = cancelled; oth
   const a = await steadfastShop(t);
   a.fake.state.orders['830'] = gqlOrder(830);
   await a.api('/orders/send', { method: 'POST', body: { ids: ['830'], courier: 'steadfast' } });
-  const token = (await a.api('/bootstrap')).data.steadfastWebhook.token;
+  const token = (await a.api('/bootstrap'), (await a.db.getSettings(SHOP)).steadfast_webhook_token);
 
   await sfHook(a, { notification_type: 'cancel_request', consignment_id: 5001, status: 'pending' }, { token });
   await a.settle();
@@ -331,7 +332,7 @@ test('live updates: an open dashboard is told the moment a courier webhook chang
   const a = await steadfastShop(t);
   a.fake.state.orders['880'] = gqlOrder(880);
   await a.api('/orders/send', { method: 'POST', body: { ids: ['880'], courier: 'steadfast' } });
-  const token = (await a.api('/bootstrap')).data.steadfastWebhook.token;
+  const token = (await a.api('/bootstrap'), (await a.db.getSettings(SHOP)).steadfast_webhook_token);
 
   const ctrl = new AbortController();
   const res = await fetch(`${a.base}/api/events`, { headers: { Authorization: `Bearer ${sessionToken()}` }, signal: ctrl.signal });
@@ -352,7 +353,7 @@ test('steadfast webhook in the older format (no notification_type, bearer token 
   const a = await steadfastShop(t);
   a.fake.state.orders['890'] = gqlOrder(890);
   await a.api('/orders/send', { method: 'POST', body: { ids: ['890'], courier: 'steadfast' } });
-  const token = (await a.api('/bootstrap')).data.steadfastWebhook.token;
+  const token = (await a.api('/bootstrap'), (await a.db.getSettings(SHOP)).steadfast_webhook_token);
   // Payload shape from Steadfast's own Laravel package example.
   const r = await sfHook(a, { consignment_id: 5001, invoice: '890', status: 'delivered', cod_amount: 990, updated_at: '2026-11-05 10:00:00' }, { token, bearerOnly: true });
   assert.equal(r.status, 200);
@@ -462,7 +463,7 @@ test('once a webhook is live, parcels are not polled (except Steadfast parcels s
   await a.tracker.refreshActive(SHOP);
   assert.equal(calls().length - before, 2);
   // Steadfast's own test arrives -> Live
-  const token = (await a.api('/bootstrap')).data.steadfastWebhook.token;
+  const token = (await a.api('/bootstrap'), (await a.db.getSettings(SHOP)).steadfast_webhook_token);
   assert.equal((await sfHook(a, { notification_type: 'webhook_test' }, { token })).status, 200);
   assert.equal((await a.api('/bootstrap')).data.steadfastWebhook.live, true);
   before = calls().length;
@@ -493,7 +494,7 @@ test('Steadfast webhook address: friendly page in a browser, short Steadfast-gen
   assert.equal((await fetch(`${a.base}/steadfast/webhook/never-installed.myshopify.com`)).status, 404);
   const r = await a.api('/settings', { method: 'POST', body: { steadfast_webhook_token: 'Ab12Cd34' } });
   assert.equal(r.status, 200);
-  assert.equal((await a.api('/bootstrap')).data.steadfastWebhook.token, 'Ab12Cd34');
+  assert.equal((await a.db.getSettings(SHOP)).steadfast_webhook_token, 'Ab12Cd34');
 });
 
 test('Steadfast Callback URL needs no auth token: the key in the URL is enough, a wrong key is refused', async (t) => {
@@ -516,4 +517,15 @@ test('Steadfast Callback URL needs no auth token: the key in the URL is enough, 
   assert.equal((await a.db.getShipment(SHOP, '803')).pathao_status, 'delivered');
   assert.equal((await a.api('/bootstrap')).data.steadfastWebhook.live, true);
   assert.equal((await fetch(url)).status, 200, 'browser check of the new address');
+});
+
+test('the Steadfast API key never goes back to the browser; a blank field keeps the saved key', async (t) => {
+  const a = await steadfastShop(t);
+  const boot = (await a.api('/bootstrap')).data;
+  assert.equal(JSON.stringify(boot).includes('sf_key'), false, 'key not in bootstrap');
+  assert.equal(boot.settings.steadfast.has_api_key, true);
+  assert.match(boot.settings.steadfast.api_key_hint, /^••••/);
+  const r = await a.api('/steadfast/connect', { method: 'POST', body: { api_key: '', secret_key: '' } });
+  assert.equal(r.status, 200, r.data.error);
+  assert.equal((await a.db.getSettings(SHOP)).steadfast_api_key, 'sf_key');
 });

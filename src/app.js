@@ -6,6 +6,7 @@ const path = require('path');
 const { makeOwnerRouter } = require('./routes/owner');
 const express = require('express');
 const compression = require('compression');
+const { makeRedactor, secretsOf, redactingLog } = require('./redact');
 const crypto = require('crypto');
 const { makeCipher } = require('./crypto');
 const { makeDb } = require('./db');
@@ -26,6 +27,9 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const VIEWS_DIR = path.join(__dirname, 'views');
 
 function createApp({ config, pool, fetchImpl: rawFetch = fetch, log = console, defer = (p) => p }) {
+  // Nothing secret may reach the logs or an API answer (see src/redact.js).
+  const redact = makeRedactor(secretsOf(config));
+  log = redactingLog(log, redact); // eslint-disable-line no-param-reassign
   // Every call to Shopify, Pathao, Steadfast or SMS gives up after 30 s, so a courier
   // that stops answering can't leave an order stuck on "Sending".
   const fetchImpl = (url, init = {}) => rawFetch(url, { ...init, signal: init.signal || AbortSignal.timeout(config.httpTimeoutMs || 30000) });
@@ -60,7 +64,7 @@ function createApp({ config, pool, fetchImpl: rawFetch = fetch, log = console, d
 
   // Webhooks need the raw body for HMAC, so mount before any JSON parser.
   app.use(makeWebhookRouter({ config, db, admin, shipping, fulfillment, steadfast, notifier: config.smsFeature ? notifier : null, log, defer }));
-  app.use('/api', makeApiRouter({ config, db, tokens, admin, pathao, steadfast, tracker, bus, shipping, fulfillment, notifier, cipher, log }));
+  app.use('/api', makeApiRouter({ redact, config, db, tokens, admin, pathao, steadfast, tracker, bus, shipping, fulfillment, notifier, cipher, log }));
 
   // Static assets (JS/CSS) and public pages (privacy policy).
   // app.js / app.css are referenced as ?v=<content hash>, so browsers can keep

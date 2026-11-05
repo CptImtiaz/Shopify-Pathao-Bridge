@@ -12,7 +12,7 @@ const { PLANS, intervalFromSubscriptionName } = require('../plans');
 const { DEFAULT_TEMPLATE, SOURCES } = require('../sms/sms');
 const { listCouriers, AVAILABLE } = require('../couriers');
 
-function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tracker = null, bus = null, shipping, fulfillment = null, notifier, cipher, log = console }) {
+function makeApiRouter({ redact = (t) => String(t), config, db, tokens, admin, pathao, steadfast = null, tracker = null, bus = null, shipping, fulfillment = null, notifier, cipher, log = console }) {
   const router = express.Router();
   router.use(express.json({ limit: '200kb' }));
   const webhooksChecked = new Set();
@@ -32,7 +32,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
       const status = e instanceof AuthError ? e.status : 500;
       // Tell App Bridge to fetch a fresh session token and retry.
       if (status === 401) res.set('X-Shopify-Retry-Invalid-Session-Request', '1');
-      res.status(status).json({ error: e.message });
+      res.status(status).json({ error: redact(e.message) });
     }
   });
 
@@ -60,7 +60,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
       res.json(await fn(req, res));
     } catch (e) {
       log.error(`[${req.shop}] ${req.method} ${req.path}: ${e.message}`);
-      res.status(e.status && e.status < 600 ? e.status : 500).json({ error: e.message });
+      res.status(e.status && e.status < 600 ? e.status : 500).json({ error: redact(e.message) });
     }
   };
 
@@ -119,7 +119,9 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
       default_courier: s.default_courier || 'pathao',
       connected: pathao.hasCredentials(s),
       steadfast: {
-        api_key: s.steadfast_api_key || '',
+        // The key itself never goes back to the browser; only enough to recognise it.
+        has_api_key: Boolean(s.steadfast_api_key),
+        api_key_hint: s.steadfast_api_key ? `••••${String(s.steadfast_api_key).slice(-4)}` : '',
         has_secret: Boolean(s.steadfast_secret_enc),
         connected: Boolean(s.steadfast_api_key && s.steadfast_secret_enc),
         auth_error: s.steadfast_auth_error || null,
@@ -200,7 +202,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
       couriers: listCouriers(settings, { pathao }),
       plans: Object.values(PLANS),
       pathaoWebhook: { saved: Boolean(settings.pathao_webhook_saved_at), refusedAt: settings.pathao_webhook_error_at || null, url: `${config.appUrl}/pathao/webhook/${req.shop}`, secret: settings.webhook_secret, lastAt: settings.pathao_webhook_at || null, live: Boolean(settings.webhook_secret && settings.pathao_webhook_at) },
-      steadfastWebhook: { saved: Boolean(settings.steadfast_webhook_saved_at), refusedAt: settings.steadfast_webhook_error_at || null, url: `${config.appUrl}/steadfast/webhook/${req.shop}/${settings.steadfast_webhook_key}`, token: settings.steadfast_webhook_token /* old address only */, lastAt: settings.steadfast_webhook_at || null, live: Boolean(settings.steadfast_webhook_at) },
+      steadfastWebhook: { saved: Boolean(settings.steadfast_webhook_saved_at), refusedAt: settings.steadfast_webhook_error_at || null, url: `${config.appUrl}/steadfast/webhook/${req.shop}/${settings.steadfast_webhook_key}`, lastAt: settings.steadfast_webhook_at || null, live: Boolean(settings.steadfast_webhook_at) },
       webhooks,
       permissions,
     };
@@ -344,7 +346,8 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
     if (!steadfast) throw new Error('Steadfast is not available');
     const b = req.body || {};
     const current = await db.getSettings(req.shop);
-    const apiKey = String(b.api_key || '').trim();
+    // A blank field keeps the key already saved (the browser never receives it back).
+    const apiKey = String(b.api_key || '').trim() || current.steadfast_api_key || '';
     const secret = String(b.secret_key || '').trim();
     if (!apiKey) throw Object.assign(new Error('Enter your Steadfast API key'), { status: 400 });
     if (/\s/.test(apiKey) || /\s/.test(secret)) throw Object.assign(new Error('Keys cannot contain spaces. Copy them again from the Steadfast portal.'), { status: 400 });

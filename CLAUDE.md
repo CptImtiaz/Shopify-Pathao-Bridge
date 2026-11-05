@@ -168,6 +168,15 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 - Order/plan caches are swept every minute; per-store API limit 300 requests/min (API_RATE_PER_MINUTE), live
   stream excluded; versioned courier logos (?v=) cached 1 year. compression >= 1.8.2 (GHSA-vc2v-76pw-4v95).
 
+## Secret safety (pass of 2026-11-05)
+- Every credential comes from env vars via src/config.js; no secret literal anywhere (PATHAO_WEBHOOK_INTEGRATION_SECRET
+  moved to Railway). `.env*` git-ignored except `.env.example` (placeholders only). Git history checked: clean.
+- src/redact.js: all logs (createApp wraps `log`) and API error messages are redacted (own secrets by value,
+  connection strings / bearer tokens / key=value credentials by pattern); start-up errors too.
+- Browser never receives: courier passwords/secrets, the Steadfast API key (only `api_key_hint` last 4), the legacy
+  Steadfast token, encrypted columns. It does receive, by design: Shopify API key (client ID), the Pathao webhook
+  secret and the Steadfast callback URL key (the merchant must paste them into the courier portal).
+
 ## Reliability rules (review 2026-11-05)
 - Every outbound call (Shopify, couriers, SMS) aborts after 30 s (`httpTimeoutMs`, wrapper in app.js).
 - A booking that times out is saved as failed with error `Not confirmed: ...`; `/orders/send` returns

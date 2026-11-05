@@ -50,7 +50,9 @@ function load() {
     // SMS is 'coming soon' in the UI; set SMS_FEATURE=on to enable it.
     smsFeature: bool('SMS_FEATURE', false),
     smsApiUrl: process.env.SSL_API_URL || 'https://smsplus.sslwireless.com/api/v3/send-sms/dynamic',
-    pathaoIntegrationSecret: process.env.PATHAO_WEBHOOK_INTEGRATION_SECRET || 'f3992ecc-59da-4cbe-a049-a13da2018d51',
+    // Value Pathao's merchant docs ask webhook endpoints to send back when a webhook is saved.
+    // Kept in the environment like every other credential-shaped value (no literal in the code).
+    pathaoIntegrationSecret: process.env.PATHAO_WEBHOOK_INTEGRATION_SECRET || '',
   };
 }
 

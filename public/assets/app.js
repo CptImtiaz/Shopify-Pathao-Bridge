@@ -846,7 +846,7 @@
     $$('input[name="sf-type"]').forEach((r) => { r.checked = Number(r.value) === (sf.delivery_type || 0); });
     renderDefBoxes();
     if (document.activeElement !== $('sf_default_note')) setVal('sf_default_note', S().default_note);
-    if (document.activeElement !== $('sf_api_key')) setVal('sf_api_key', sf.api_key);
+    $('sf_api_key').placeholder = sf.has_api_key ? `${sf.api_key_hint} saved` : '';
     $('sf_secret_key').placeholder = sf.has_secret ? '•••••••• saved' : '';
     setVal('sf_wh_url', wh.url);
     show($('sf-disconnect'), sfConnected() || sfRejected());
@@ -862,13 +862,13 @@
   }
   async function saveSteadfast() {
     const key = $('sf_api_key').value.trim(), secret = $('sf_secret_key').value.trim();
-    if (!key) throw new Error('Enter your Steadfast API key');
+    if (!key && !(S().steadfast && S().steadfast.has_api_key)) throw new Error('Enter your Steadfast API key');
     if (!secret && !(S().steadfast && S().steadfast.has_secret)) throw new Error('Enter your Steadfast secret key');
     // Steadfast checks the keys first; nothing is saved if it refuses them.
     const r = await api('/steadfast/connect', { method: 'POST', body: { api_key: key, secret_key: secret } });
     apply(r);
     state.sfBalance = r.balance;
-    setVal('sf_secret_key', '');
+    setVal('sf_secret_key', ''); setVal('sf_api_key', '');
     state.section = undefined;
     toast(`Steadfast connected${r.balance != null ? ` · balance ${taka(r.balance)}` : ''}`);
     renderAll();

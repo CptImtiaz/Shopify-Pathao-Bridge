@@ -30,6 +30,10 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error(e);
+  // Start-up failed (e.g. the database is unreachable): print why, without any secret in it.
+  const { makeRedactor } = require('./redact');
+  const env = process.env;
+  const redact = makeRedactor([env.SHOPIFY_API_SECRET, env.ENCRYPTION_KEY, env.ADMIN_PASSWORD, env.DATABASE_URL, env.PATHAO_WEBHOOK_INTEGRATION_SECRET]);
+  console.error(redact(e && (e.stack || e.message || e)));
   process.exit(1);
 });

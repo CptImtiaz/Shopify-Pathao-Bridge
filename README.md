@@ -105,8 +105,36 @@ Merged from `Shopify-ISMS-Bridge`. Each merchant can send customers an order-con
 - **Webhook handshake**: Pathao's panel expects the header `X-Pathao-Merchant-Webhook-Integration-Secret` on a `202` response. The app echoes Pathao's value, or uses `PATHAO_WEBHOOK_INTEGRATION_SECRET`. Check the value in Pathao's current docs if registration fails.
 - **City/zone**: like your original script, orders are sent with the full address only and no city/zone IDs. This worked for your store. If Pathao starts requiring zones, add a zone picker (the API has `city-list` / `zone-list` endpoints).
 
-## Security note about the old repo
-The original `Shopify-Pathao-Bridge` repo contains a committed `env` file with Shopify credentials. Its server also exposes order and customer data (`/shopify/orders`, `/shopify/customers`) and an order-creation endpoint, all without authentication. **Rotate the Shopify client secret and your Pathao API secret/password, make the repo private, and shut that server down** once this app replaces it.
+## Secrets and safety
+
+> **Warning: rotate any secret that was ever hardcoded or shared.** Removing a value from the code does not remove it
+> from git history; anyone with the repository can still read old commits. This repository is public.
+> - The Shopify client secret was pasted in a chat on 4 November 2026: rotate it in the Shopify Dev Dashboard and
+>   update `SHOPIFY_API_SECRET` on Railway.
+> - The owner-page password (`ADMIN_PASSWORD`) was shared in a chat: change it on Railway.
+> - The scan on 5 November 2026 found no real secret in the code or in any of the 90 commits of history
+>   (only placeholders, the public Shopify client ID, fake test values, the old `env` file with placeholders, and
+>   Pathao's published webhook value, now moved to `PATHAO_WEBHOOK_INTEGRATION_SECRET`). If you ever commit a real
+>   key by mistake, rotate it at once.
+
+Rules this app follows:
+- Every credential comes from an environment variable (`src/config.js`); `.env` is git-ignored and
+  `.env.example` lists every variable with placeholders only.
+- Merchants' courier passwords, secret keys and Shopify tokens are stored encrypted (AES-256-GCM with
+  `ENCRYPTION_KEY`). The Steadfast API key is never sent back to the browser (only its last 4 characters).
+- Nothing secret reaches the browser: the only server value in the page is the Shopify API key (client ID),
+  which Shopify App Bridge requires and which is public by design. No Supabase, Stripe, OpenAI, Firebase,
+  AWS, SendGrid or Twilio keys are used; there is no React/Next.js build, so no `NEXT_PUBLIC_` / `REACT_APP_`
+  variables exist.
+- Logs and API error messages go through `src/redact.js`, which blanks the app's own secrets by value and
+  connection strings, bearer tokens and key=value credentials by pattern.
+
+## Security note about the old bridge
+This repository started as the single-store bridge script. Its commit of 17 September 2026 added a file named
+`env`; checked on 5 November 2026, it held only placeholders (`your_client_id_here`, `your_client_secret_here`)
+and the store handle, and it was deleted on 2 November. The old bridge server also exposed order and customer data
+(`/shopify/orders`, `/shopify/customers`) without authentication: if that server is still running anywhere, shut it
+down, and rotate any Shopify or Pathao credentials it used.
 
 ## Shopify status sync (Pathao → Shopify)
 
