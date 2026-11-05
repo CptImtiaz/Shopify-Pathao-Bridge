@@ -81,6 +81,7 @@
     if (o.cancelled && !(o.shipment && o.shipment.status === 'sent')) return 'cancelled';
     if (errorReason(o)) return 'errors';
     const k = stageOf(o).key;
+    if (k === 'booked' || k === 'picked' || k === 'onway') return 'transit'; // one "In transit" tab
     return k === 'problems' ? 'returned' : k;
   }
   const courierReady = (key) => (key === 'steadfast' ? sfConnected() : Boolean(S().connected && S().pathao_store_id));
@@ -410,8 +411,8 @@
   }
 
   const STAGES = [
-    ['new', 'New', 't-new'], ['errors', 'Errors', 't-bad'], ['booked', 'Sent', 't-go'], ['picked', 'Picked up', 't-go'],
-    ['onway', 'On the way', 't-go'], ['delivered', 'Delivered', 't-done'], ['returned', 'Returned', 't-bad'], ['cancelled', 'Cancelled', ''],
+    ['new', 'New', 't-new'], ['errors', 'Errors', 't-bad'], ['transit', 'In transit', 't-go'],
+    ['delivered', 'Delivered', 't-done'], ['returned', 'Returned', 't-bad'], ['cancelled', 'Cancelled', ''],
   ];
   function renderPipeline() {
     const c = {}; state.orders.forEach((o) => { const k = bucketOf(o); c[k] = (c[k] || 0) + 1; });
@@ -452,8 +453,8 @@
   }
   function payCell(o) {
     const f = String(o.financial || '').toUpperCase();
-    const badge = f === 'PAID' ? '<span class="badge green">Paid</span>' : f === 'PARTIALLY_PAID' ? '<span class="badge yellow">Partially paid</span>' : /REFUND/.test(f) ? '<span class="badge">Refunded</span>' : '<span class="badge yellow">Pending</span>';
-    return `<span class="amount">${esc(taka(o.total))}</span><span class="sub">${badge}</span>${o.cod > 0 && f !== 'PAID' ? `<span class="sub">COD ${esc(taka(o.cod))}</span>` : ''}`;
+    const badge = f === 'PAID' ? '<span class="badge green">Paid</span>' : f === 'PARTIALLY_PAID' ? '<span class="badge yellow">Partially paid</span>' : /REFUND/.test(f) ? '<span class="badge">Refunded</span>' : (o.cod > 0 ? '<span class="badge">COD pending</span>' : '<span class="badge yellow">Pending</span>');
+    return `<span class="amount">${esc(taka(o.total))}</span><span class="sub">${badge}</span>`;
   }
   function courierCell(o) {
     const s = o.shipment;
@@ -463,7 +464,7 @@
     }
     if (s && s.status === 'processing') return '<span class="sub">Sending…</span>';
     if (o.cancelled && !s) return '<span class="sub">—</span>';
-    if (badPhoneOf(o)) return `<a class="assign warn" href="${esc(shopifyOrderUrl(o))}" target="_top">Fix phone</a>`;
+    if (badPhoneOf(o)) return `<a class="assign warn" href="${esc(shopifyOrderUrl(o))}" target="_top"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg>Fix phone</a>`;
     return `<button class="assign" data-assign="${esc(o.id)}">${TRUCK}${s ? 'Retry' : 'Assign Courier'}</button>`;
   }
   // Delivery status: a coloured pill with icon, and a 5-dot stepper underneath.
@@ -492,11 +493,17 @@
     const f = o.fraud;
     if (!f) return '<span class="sub">—</span>';
     const h = f.history || {}, sc = Number(f.score) || 0;
-    const col = { high: '#ef4444', medium: '#f59e0b', low: '#3b82f6', pending: '#9ca3af', safe: '#22c55e' }[f.level];
+    const col = { high: '#ef4444', medium: '#f59e0b', low: '#22c55e', pending: '#9ca3af', safe: '#16a34a' }[f.level];
     const sub = h.total ? `${h.successRate != null ? h.successRate + '% success' : 'In progress'} · ${h.total} parcel${h.total > 1 ? 's' : ''}` : 'No history yet';
-    return `<button class="fc fc-${esc(f.level)}" data-fraud="${esc(o.id)}" aria-label="Fraud check: ${esc(f.label)}, score ${sc}">
+    return `<button class="fc fc-${esc(f.level)}" data-fraud="${esc(o.id)}" aria-label="Fraud check: ${esc(f.label)}, risk score ${sc} out of 100" title="Risk score ${sc}/100 · higher means riskier">
       <span class="gauge" style="background:conic-gradient(${col} 0 ${sc}%, #eceef2 ${sc}% 100%)"><b>${sc}</b></span>
       <span class="fc-t"><b>${esc(f.label)}</b><small>${esc(sub)}</small></span></button>`;
+  }
+  // "+880 1712-345670" -> "01712-345670" (how Bangladeshi numbers are written; fits one line).
+  function localPhone(p) {
+    if (!p) return '';
+    const d = String(p).replace(/[^\d]/g, '').replace(/^0*880/, '0');
+    return /^01\d{9}$/.test(d) ? `${d.slice(0, 5)}-${d.slice(5)}` : String(p);
   }
   function rowHtml(o) {
     const st = stageOf(o), sel = state.selected.has(o.id), f = o.fraud, h = (f && f.history) || {};
@@ -504,15 +511,15 @@
     const more = (o.products || []).length > 1 ? `+${o.products.length - 1} more · ` : '';
     const synced = o.shipment && o.shipment.status === 'sent' && o.shipment.consignmentId ? `<span class="cn mono" title="Pathao consignment">${esc(o.shipment.consignmentId)}</span>` : '';
     return `<div class="row${sel ? ' sel' : ''}" data-row="${esc(o.id)}">
-      <span>${canSend(o) ? `<input type="checkbox" data-select="${esc(o.id)}" ${sel ? 'checked' : ''} aria-label="Select ${esc(o.name)}" />` : ''}</span>
-      <div><span class="o-name">${esc(o.name)}</span><span class="sub">${esc(when(o.createdAt))}</span></div>
-      <div class="prod"><span class="thumbs">${thumbs(o)}</span><div class="prod-t"><span class="ellip" title="${esc(o.items)}">${esc(first ? `${first.title}${first.quantity > 1 ? ` ×${first.quantity}` : ''}` : (o.items || '—'))}</span><span class="sub">${more}${o.itemCount} item${o.itemCount === 1 ? '' : 's'}</span></div></div>
-      <div style="min-width:0"><b class="ellip">${esc(o.customer || '—')}</b><span class="sub">${esc(o.phone || o.city || '')}</span></div>
-      <div>${payCell(o)}</div>
-      <div>${fulfillBadge(o)}</div>
-      <div>${statusCell(o, st)}${synced}</div>
-      <div>${fraudCell(o)}</div>
-      <div>${courierCell(o)}</div>
+      <span class="c-chk">${canSend(o) ? `<input type="checkbox" data-select="${esc(o.id)}" ${sel ? 'checked' : ''} aria-label="Select ${esc(o.name)}" />` : ''}</span>
+      <div class="c-order"><span class="o-name">${esc(o.name)}</span><span class="sub">${esc(when(o.createdAt))}</span></div>
+      <div class="prod c-prod"><span class="thumbs">${thumbs(o)}</span><div class="prod-t"><span class="ellip" title="${esc(o.items)}">${esc(first ? `${first.title}${first.quantity > 1 ? ` ×${first.quantity}` : ''}` : (o.items || '—'))}</span><span class="sub">${more}${o.itemCount} item${o.itemCount === 1 ? '' : 's'}</span></div></div>
+      <div class="c-cust" style="min-width:0"><b class="ellip">${esc(o.customer || '—')}</b><span class="sub nowrap">${esc(localPhone(o.phone) || o.city || '')}</span></div>
+      <div class="c-pay">${payCell(o)}</div>
+      <div class="c-ful">${fulfillBadge(o)}</div>
+      <div class="c-st">${statusCell(o, st)}${synced}</div>
+      <div class="c-fr">${fraudCell(o)}</div>
+      <div class="c-cr">${courierCell(o)}</div>
     </div>`;
   }
   function renderRows() {
@@ -567,7 +574,7 @@
     if (!o) return;
     const f = o.fraud || { level: 'pending', score: 0, reasons: [], history: {} }, h = f.history || {};
     const st = stageOf(o);
-    const colors = { high: ['#ef4444', '#fde2e2'], medium: ['#f59e0b', '#fdeccb'], low: ['#3b82f6', '#dbe7fb'], pending: ['#9ca3af', '#e5e7eb'], safe: ['#22c55e', '#d3f3df'] }[f.level];
+    const colors = { high: ['#ef4444', '#fde2e2'], medium: ['#f59e0b', '#fdeccb'], low: ['#22c55e', '#d3f3df'], pending: ['#9ca3af', '#e5e7eb'], safe: ['#22c55e', '#d3f3df'] }[f.level];
     const title = { high: 'High risk — review first', medium: 'Check before sending', low: 'Looks fine', pending: 'Shopify is still checking', safe: 'Trusted customer' }[f.level];
     const steps = [`Sent to ${cname(o.shipment && o.shipment.status === 'sent' ? o.shipment.courier : defKey())}`, 'Picked up by rider', 'In transit', 'Out for delivery', 'Delivered'];
     const sent = o.shipment && o.shipment.status === 'sent';
@@ -593,8 +600,8 @@
         <textarea id="note-input" rows="2" maxlength="500" placeholder="e.g. Customer asked to deliver after Friday">${esc(o.note || '')}</textarea>
         <div class="note-foot"><span class="hint">Only you see this. It is not sent to the courier.</span><button class="btn sm" data-savenote="${esc(o.id)}">Save note</button></div></div>` : ''}
       <div class="d-risk l-${esc(f.level)}">
-        <div class="ring" style="background:conic-gradient(${colors[0]} 0 ${Number(f.score) || 0}%, ${colors[1]} ${Number(f.score) || 0}% 100%)"><b>${Number(f.score) || 0}</b></div>
-        <div><div class="t">${esc(title)}</div><ul>${f.reasons.slice(0, 3).map((r) => `<li>${esc(r.text)}</li>`).join('')}</ul></div>
+        <div class="ring" style="background:conic-gradient(${colors[0]} 0 ${Number(f.score) || 0}%, ${colors[1]} ${Number(f.score) || 0}% 100%)"><b>${Number(f.score) || 0}<small>/100</small></b></div>
+        <div><div class="t">${esc(title)}</div><div class="r-scale">Risk score · higher means riskier</div><ul>${f.reasons.slice(0, 3).map((r) => `<li>${esc(r.text)}</li>`).join('')}</ul></div>
       </div>
       <div class="fp-stats"><div><b>${h.delivered || 0}</b><span>Delivered</span></div><div><b>${h.returned || 0}</b><span>Returned</span></div><div><b>${h.cancelled || 0}</b><span>Cancelled</span></div><div><b>${h.successRate != null ? h.successRate + '%' : '—'}</b><span>Success</span></div></div>
       <div class="d-sec"><div class="d-label">Delivery${sent && o.shipment.consignmentId ? ` · <span class="mono">${esc(o.shipment.consignmentId)}</span>` : ''}</div>
@@ -722,8 +729,8 @@
     const steps = ['account', 'webhook', 'delivery'].map((k) => pathaoSteps().find((x) => x.key === k));
     const done = steps.filter((x) => x.done).length;
     const pct = Math.round((done / steps.length) * 100);
-    $('cx-hero').innerHTML = `<div class="hero-l"><img class="hero-logo" src="/assets/couriers/pathao-logo.svg?v=${LOGO_V}" alt="Pathao" />
-        <div><div class="hero-title">${ready ? '<span class="badge green">Connected</span>' : '<span class="badge yellow">Setup needed</span>'}${webhookLive() ? '<span class="live-pill"><i></i>Live</span>' : ''}${s.pathao_env === 'sandbox' ? '<span class="badge yellow">Test mode</span>' : ''}</div>
+    $('cx-hero').innerHTML = `<div class="hero-l">${cmono(courier('pathao'), 'hero-mono')}
+        <div><div class="hero-title"><h2>Pathao</h2>${ready ? '<span class="badge green">Connected</span>' : '<span class="badge yellow">Setup needed</span>'}${webhookLive() ? '<span class="live-pill"><i></i>Live</span>' : ''}${s.pathao_env === 'sandbox' ? '<span class="badge yellow">Test mode</span>' : ''}</div>
         <p class="meta">${esc(p.tagline || '')}</p></div></div>
       <div class="hero-r"><span class="hero-ring" style="background:conic-gradient(#4f46e5 0 ${pct}%, #e4e5f7 ${pct}% 100%)"><b>${done}/${steps.length}</b></span><span class="meta">${done === steps.length ? 'All set' : 'steps done'}</span></div>
       <div class="hero-facts"><div><span>Pickup store</span><b>${esc(s.pathao_store_name || (s.pathao_store_id ? 'Store #' + s.pathao_store_id : '—'))}</b></div>
@@ -750,12 +757,10 @@
     const wh = state.boot.pathaoWebhook || {};
     $('wh-state').innerHTML = webhookState(wh, 'Pathao', 'secret key', 'Pathao Merchant Panel');
 
-    const miss = (state.boot.permissions && state.boot.permissions.missing) || [];
     const sync = s.sync_fulfillment !== false;
     $('perm-body').innerHTML = !sync ? '' : permMissing()
-      ? `<div class="perm-box"><b>Shopify needs your OK once.</b> Bookings keep working meanwhile.
-          <ol><li>Dev Dashboard → ShipBridge → <b>Versions</b> → <b>Create version</b>, add <code>${miss.map(esc).join('</code> <code>')}</code> (and the matching <code>read_</code> scopes), then <b>Release</b>.</li>
-          <li>Reopen ShipBridge, click <b>Update</b> when Shopify asks, then press Check again.</li></ol><button class="btn sm" data-perm>Check again</button></div>`
+      ? `<div class="perm-box"><b>Allow ShipBridge to update your Shopify orders.</b> Sending to couriers keeps working meanwhile.
+          <div><button class="btn primary sm" data-perm>Allow access</button></div></div>`
       : ''; // allowed: nothing to show
 
     $('sync_fulfillment').checked = sync;
@@ -770,8 +775,10 @@
     const def = defKey();
     $('def-seg').innerHTML = (state.boot.couriers || []).filter((c) => c.available).map((c) => {
       const ok = courierReady(c.key);
-      return `<button role="radio" data-defc="${esc(c.key)}" aria-checked="${c.key === def}" ${ok ? '' : 'disabled title="Connect it first"'}>${esc(c.name)}</button>`;
+      return `<button role="radio" data-defc="${esc(c.key)}" aria-checked="${c.key === def}" ${ok ? '' : `disabled title="Connect ${esc(c.name)} first"`}>${esc(c.name)}</button>`;
     }).join('');
+    const notReady = (state.boot.couriers || []).filter((c) => c.available && !courierReady(c.key)).map((c) => c.name);
+    $('def-hint').textContent = notReady.length ? `Connect ${notReady.join(' and ')} to make it your default.` : '';
     $('auto-hint').textContent = `Sent to ${cname(def)} within seconds`;
     $('auto_send').checked = Boolean(s.auto_send); $('auto_send').disabled = !courierReady(def);
     $('hold_risky').checked = s.hold_risky !== false;
@@ -922,7 +929,7 @@
     const missing = state.boot.permissions.missing;
     if (window.shopify && shopify.scopes && shopify.scopes.request) { try { await shopify.scopes.request(missing); } catch (e) { /* not offered yet */ } }
     await refreshBoot();
-    toast(permMissing() ? 'Not allowed yet — release the new app version first' : 'Shopify access allowed');
+    toast(permMissing() ? 'Not allowed yet. Approve the request from Shopify, then try again.' : 'Shopify access allowed');
   }
 
   // ---------------- billing page ----------------

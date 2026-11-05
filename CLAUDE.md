@@ -106,8 +106,9 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 
 ## Dashboard tabs
 - All = every order (errors and cancelled included), newest first; other tabs filter.
-- Wording: an order handed to a courier is "Sent to <Courier>" (pill, order panel), the tab is
-  "Sent", cards say "N sent". Never "Booked" in the UI. Steadfast's `in_review` also shows as sent.
+- Wording: an order handed to a courier is "Sent to <Courier>" (pill, order panel), cards say "N sent".
+  Tabs (design review 2026-11-05): All, New, Errors, In transit (= sent + picked up + on the way), Delivered,
+  Returned, Cancelled. Never "Booked" in the UI. Steadfast's `in_review` also shows as sent.
 - Overview cards follow the Shopify-style date picker (presets + 2-month calendar); `/api/stats`
   takes `from`/`to` (ISO, `to` exclusive) or `range=all`. The Fraud check card counts the loaded
   orders in those dates; clicking it filters the list to High risk.
@@ -121,6 +122,16 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 - Merchant notes per order live in `order_notes` (never sent to couriers).
 - Before changing the order table, re-run the overlap check (widths 1060–1600): the app
   area inside Shopify admin on a 1366px laptop is ~1060px wide.
+
+## Design rules (design review 2026-11-05)
+- All text >= 4.5:1 contrast (`--muted` #5f6673; table headers #545b66). Re-measure after colour changes.
+- Overview cards are neutral (no coloured stripes); colour only where it means something.
+- Fraud: traffic light — low/safe green, medium amber, high red; score shown as x/100.
+- COD orders show a grey "COD pending" payment badge (normal for COD); yellow only for real attention.
+- Row actions share one button shape (`.assign`; `.assign.warn` red for fixes). To-do step dots are grey.
+- Phones (<=640px): each order row is a card (grid areas c-chk/c-order/...); keep every column's class.
+- Phone numbers shown in local format 01XXX-XXXXXX on one line. Header: Billing, WhatsApp (outline,
+  green icon), Couriers.
 
 ## Reliability rules (review 2026-11-05)
 - Every outbound call (Shopify, couriers, SMS) aborts after 30 s (`httpTimeoutMs`, wrapper in app.js).
