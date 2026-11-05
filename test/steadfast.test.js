@@ -387,3 +387,14 @@ test('steadfast delivery settings are saved and used when sending', async (t) =>
   assert.equal(sent.total_lot, 2);
   assert.equal('item_description' in sent, false);
 });
+
+test('tracker skips a courier that is not connected (no error spam)', async (t) => {
+  const a = await steadfastShop(t);
+  await a.api('/settings', { method: 'POST', body: { pathao_client_id: 'c', pathao_client_secret: 's', pathao_username: 'u', pathao_password: 'p', pathao_store_id: 77 } });
+  a.fake.state.orders['910'] = gqlOrder(910);
+  await a.api('/orders/send', { method: 'POST', body: { ids: ['910'], courier: 'pathao' } });
+  await a.db.updateSettings(SHOP, { pathao_client_id: null }); // Pathao disconnected afterwards
+  const r = await a.tracker.refreshActive(SHOP);
+  assert.equal(r.failed, 0);
+  assert.equal(a.logs.some((l) => /status check #910 failed/.test(l)), false);
+});

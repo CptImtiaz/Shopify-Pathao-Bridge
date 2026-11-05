@@ -41,6 +41,7 @@ function makeTracker({ db, pathao, steadfast, fulfillment = null, admin = null, 
       // (also catches parcels already saved as "unknown" by an earlier check)
       if (status === 'unknown' && /^(in_review|pending|unknown)$/.test(String(s.pathao_status || ''))) return markRemoved(shop, s);
     } else {
+      if (!pathao.hasCredentials(settings)) return s.pathao_status; // Pathao not connected: nothing to ask
       const info = await pathao.orderInfo(settings, s.consignment_id);
       status = info.order_status_slug || info.order_status || s.pathao_status;
     }
