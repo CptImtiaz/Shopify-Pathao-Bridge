@@ -590,7 +590,7 @@
         <ul class="tl">${tl}</ul>
         ${sent && o.shipment.courierMessage ? `<div class="courier-msg"><b>Latest from ${esc(cname(o.shipment.courier))}</b>${esc(o.shipment.courierMessage)}${o.shipment.courierMessageAt ? `<span class="sub">${esc(time(o.shipment.courierMessageAt))}</span>` : ''}</div>` : ''}
         ${sent && o.shipment.shopifySynced ? '<div class="synced"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Shopify order updated automatically</div>' : ''}
-        ${sent ? `<div class="d-refresh">${webhookLive(o.shipment.courier || 'pathao') ? '<span class="live"><i></i>Live — updates instantly</span>' : '<span class="sub">Status is checked automatically</span>'}</div>` : ''}
+        ${sent ? `<div class="d-refresh">${webhookLive(o.shipment.courier || 'pathao') ? '<span class="live"><i></i>Live</span>' : '<span class="sub">Status is checked automatically</span>'}</div>` : ''}
       </div>
       <div class="d-money">
         <div class="d-items">${(o.products || []).map((p) => `<div class="it">${p.image ? `<img class="thumb" src="${esc(p.image)}" alt="" />` : `<span class="thumb">${esc((p.title || '?').charAt(0))}</span>`}<span class="ellip" style="flex:1">${esc(p.title)}</span><span class="sub">× ${p.quantity}</span></div>`).join('')}</div>
@@ -691,10 +691,10 @@
     document.querySelector('[data-step="delivery"] [data-summary]').textContent = s.pathao_store_id
       ? `${s.pathao_store_name || 'Store #' + s.pathao_store_id} · ${String(s.delivery_type) === '12' ? 'Express' : 'Regular'} · ${Number(s.default_weight) || 0.5} kg`
       : 'Pickup store, delivery type, parcel weight, note for rider';
-    document.querySelector('[data-step="webhook"] [data-summary]').innerHTML = webhookLive() ? '<span class="live" style="margin:0"><i></i>Live — statuses update instantly</span>' : 'Pathao tells ShipBridge the moment a parcel moves';
+    document.querySelector('[data-step="webhook"] [data-summary]').innerHTML = webhookLive() ? '<span class="live" style="margin:0"><i></i>Live</span>' : 'Pathao tells ShipBridge the moment a parcel moves';
     $$('#env-seg button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.env === (state.envDraft || s.pathao_env))));
     const wh = state.boot.pathaoWebhook || {};
-    $('wh-state').innerHTML = wh.live ? '<span class="ok-line"><span class="live" style="margin:0"><i></i></span>Connected — delivery status updates the moment Pathao reports it.</span>'
+    $('wh-state').innerHTML = wh.live ? ''
       : wh.secret ? '<span class="wait-line">Secret saved. Waiting for the first update from Pathao.</span>' : '';
 
     const miss = (state.boot.permissions && state.boot.permissions.missing) || [];
@@ -763,14 +763,20 @@
       : sfRejected() ? 'Steadfast refused the connection, see below' : 'API key and secret key';
     $('sf-auth-error').innerHTML = sfRejected() ? `<b>Steadfast bookings are paused.</b> ${esc(sf.auth_error)}. ShipBridge stopped calling Steadfast so your key doesn't get locked out. When it's fixed, click Save &amp; connect.` : '';
     show($('sf-auth-error'), sfRejected());
-    document.querySelector('[data-step="sf-webhook"] [data-summary]').innerHTML = webhookLive('steadfast') ? '<span class="live" style="margin:0"><i></i>Live — statuses update instantly</span>' : 'Steadfast tells ShipBridge the moment a parcel moves';
-    document.querySelector('[data-step="sf-delivery"] [data-summary]').textContent = S().default_note ? `Note for rider: ${S().default_note}` : 'Note for rider';
+    document.querySelector('[data-step="sf-webhook"] [data-summary]').innerHTML = webhookLive('steadfast') ? '<span class="live" style="margin:0"><i></i>Live</span>' : 'Steadfast tells ShipBridge the moment a parcel moves';
+    document.querySelector('[data-step="sf-delivery"] [data-summary]').textContent = [
+      sf.delivery_type === 1 ? 'Hub pick-up' : 'Home delivery',
+      sf.item_desc !== false ? 'product list' : null, sf.total_lot ? 'item count' : null, sf.alt_phone ? '2nd phone' : null,
+      S().default_note ? `note: ${S().default_note}` : null,
+    ].filter(Boolean).join(' · ');
+    $$('#sf-type-seg button').forEach((b) => b.setAttribute('aria-checked', String(Number(b.dataset.sftype) === (sf.delivery_type || 0))));
+    $('sf_item_desc').checked = sf.item_desc !== false; $('sf_total_lot').checked = Boolean(sf.total_lot); $('sf_alt_phone').checked = Boolean(sf.alt_phone);
     if (document.activeElement !== $('sf_default_note')) setVal('sf_default_note', S().default_note);
     if (document.activeElement !== $('sf_api_key')) setVal('sf_api_key', sf.api_key);
     $('sf_secret_key').placeholder = sf.has_secret ? '•••••••• saved' : '';
     setVal('sf_wh_url', wh.url); setVal('sf_wh_token', wh.token);
     show($('sf-disconnect'), sfConnected() || sfRejected());
-    $('sf-wh-state').innerHTML = wh.live ? '<span class="ok-line"><span class="live" style="margin:0"><i></i></span>Connected — delivery status updates the moment Steadfast reports it.</span>'
+    $('sf-wh-state').innerHTML = wh.live ? ''
       : sfConnected() ? '<span class="wait-line">Waiting for the first update from Steadfast.</span>' : '';
   }
   async function saveSteadfast() {
@@ -956,6 +962,8 @@
       state.section = undefined;
       renderCouriers(); return;
     }
+    const sft = t.closest('[data-sftype]');
+    if (sft) { savePrefs({ sf_delivery_type: Number(sft.dataset.sftype) }); return; }
     const dc = t.closest('[data-defc]');
     if (dc && !dc.disabled) { savePrefs({ default_courier: dc.dataset.defc }); return; }
     const cp = t.closest('[data-copy]');
@@ -1039,7 +1047,7 @@
       renderRows(); return;
     }
     if (el.id === 'check-all') { visible().filter(canSend).forEach((o) => { if (el.checked) state.selected.add(o.id); else state.selected.delete(o.id); }); renderRows(); return; }
-    if (['auto_send', 'hold_risky', 'sync_fulfillment', 'notify_customer'].includes(el.id)) { savePrefs({ [el.id]: el.checked }); return; }
+    if (['auto_send', 'hold_risky', 'sync_fulfillment', 'notify_customer', 'sf_item_desc', 'sf_total_lot', 'sf_alt_phone'].includes(el.id)) { savePrefs({ [el.id]: el.checked }); return; }
     if (el.id === 'dash-auto') { savePrefs({ auto_send: el.checked }); return; }
     if (el.id === 'pathao_store_id' && /^\d+$/.test(el.value)) {
       const name = el.options[el.selectedIndex].textContent.replace(' (inactive)', '');

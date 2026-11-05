@@ -113,6 +113,11 @@ const SCHEMA = [
   `ALTER TABLE settings ADD COLUMN IF NOT EXISTS steadfast_auth_error TEXT`,
   // Latest tracking text from the courier (e.g. Steadfast's tracking_message).
   `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS courier_message TEXT`,
+  // Steadfast delivery settings (optional create_order fields; each is only sent when switched on).
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS sf_delivery_type INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS sf_alt_phone BOOLEAN NOT NULL DEFAULT FALSE`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS sf_item_desc BOOLEAN NOT NULL DEFAULT TRUE`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS sf_total_lot BOOLEAN NOT NULL DEFAULT FALSE`,
   `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS courier_message_at TIMESTAMPTZ`,
   // Merchant's own note on an order (e.g. why it is on hold). Never sent to couriers.
   `CREATE TABLE IF NOT EXISTS order_notes (

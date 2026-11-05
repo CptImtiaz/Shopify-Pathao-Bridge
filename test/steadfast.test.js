@@ -359,3 +359,31 @@ test('steadfast webhook in the older format (no notification_type, bearer token 
   await a.settle();
   assert.equal((await a.db.getShipment(SHOP, '890')).pathao_status, 'delivered');
 });
+
+test('steadfast delivery settings: optional fields are only sent when switched on', () => {
+  const base = order({ fallbackPhones: ['01911222333'], items: [{ title: 'Panjabi', quantity: 2, grams: 0 }, { title: 'Cap', quantity: 1, grams: 0 }] });
+  let p = buildSteadfastOrder(base, {}).payload;
+  assert.equal(p.item_description, 'Panjabi x 2, Cap x 1', 'product list on by default (as before)');
+  assert.equal('total_lot' in p, false);
+  assert.equal('delivery_type' in p, false);
+  assert.equal('alternative_phone' in p, false);
+  p = buildSteadfastOrder(base, { sf_item_desc: false, sf_total_lot: true, sf_delivery_type: 1, sf_alt_phone: true }).payload;
+  assert.equal('item_description' in p, false);
+  assert.equal(p.total_lot, 3);
+  assert.equal(p.delivery_type, 1);
+  assert.equal(p.alternative_phone, '01911222333');
+  // second phone equal to the main one is not sent
+  assert.equal('alternative_phone' in buildSteadfastOrder(order({ fallbackPhones: ['+8801712345678'] }), { sf_alt_phone: true }).payload, false);
+});
+
+test('steadfast delivery settings are saved and used when sending', async (t) => {
+  const a = await steadfastShop(t);
+  const r = await a.api('/settings', { method: 'POST', body: { sf_delivery_type: 1, sf_total_lot: true, sf_item_desc: false } });
+  assert.deepEqual([r.data.settings.steadfast.delivery_type, r.data.settings.steadfast.total_lot, r.data.settings.steadfast.item_desc], [1, true, false]);
+  a.fake.state.orders['900'] = gqlOrder(900);
+  await a.api('/orders/send', { method: 'POST', body: { ids: ['900'], courier: 'steadfast' } });
+  const sent = a.fake.state.steadfastOrders[0];
+  assert.equal(sent.delivery_type, 1);
+  assert.equal(sent.total_lot, 2);
+  assert.equal('item_description' in sent, false);
+});

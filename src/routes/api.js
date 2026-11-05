@@ -96,6 +96,10 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
         has_secret: Boolean(s.steadfast_secret_enc),
         connected: Boolean(s.steadfast_api_key && s.steadfast_secret_enc),
         auth_error: s.steadfast_auth_error || null,
+        delivery_type: Number(s.sf_delivery_type) === 1 ? 1 : 0,
+        alt_phone: Boolean(s.sf_alt_phone),
+        item_desc: s.sf_item_desc !== false,
+        total_lot: Boolean(s.sf_total_lot),
       },
       sms: {
         available: Boolean(config.smsFeature),
@@ -195,6 +199,8 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
       // Don't leave auto-send pointing at a courier that can no longer book.
       if ((current.default_courier || 'pathao') === 'steadfast') Object.assign(f, { default_courier: 'pathao', auto_send: false });
     }
+    if (b.sf_delivery_type !== undefined) f.sf_delivery_type = Number(b.sf_delivery_type) === 1 ? 1 : 0;
+    for (const k of ['sf_alt_phone', 'sf_item_desc', 'sf_total_lot']) if (b[k] !== undefined) f[k] = Boolean(b[k]);
     if (b.steadfast_webhook_token !== undefined) {
       const w = String(b.steadfast_webhook_token).trim();
       if (w.length < 16 || w.length > 200 || /\s/.test(w)) throw Object.assign(new Error('Auth token must be 16–200 characters, without spaces'), { status: 400 });

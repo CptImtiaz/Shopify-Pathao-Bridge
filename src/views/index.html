@@ -194,8 +194,13 @@
           <div class="step" data-step="sf-delivery">
             <button class="step-row" data-toggle-step="sf-delivery"><span class="step-dot"></span><span class="step-text"><b>Delivery settings</b><span class="meta" data-summary></span></span><span class="step-act"></span></button>
             <div class="step-body">
+              <div class="pref" style="margin-top:0"><b>Delivery type</b>
+                <div class="seg" role="radiogroup" aria-label="Steadfast delivery type" id="sf-type-seg"><button role="radio" data-sftype="0">Home delivery</button><button role="radio" data-sftype="1">Pick up from Steadfast hub</button></div></div>
+              <label class="switch-row"><span><b>Send product list</b><small>Product names and quantities, shown to the rider</small></span><input type="checkbox" role="switch" id="sf_item_desc" /><i aria-hidden="true"></i></label>
+              <label class="switch-row"><span><b>Send number of items</b><small>Total quantity in the parcel</small></span><input type="checkbox" role="switch" id="sf_total_lot" /><i aria-hidden="true"></i></label>
+              <label class="switch-row"><span><b>Send a second phone number</b><small>Billing or account phone, when it differs from the shipping phone</small></span><input type="checkbox" role="switch" id="sf_alt_phone" /><i aria-hidden="true"></i></label>
               <label class="field"><span>Note for rider</span><input id="sf_default_note" data-note maxlength="200" placeholder="e.g. Call before delivery" /><small class="hint">Used when the order has no note (same note for every courier)</small></label>
-              <p class="hint">Product names and quantities are sent to Steadfast as the item description. The rider collects what the customer still owes in Shopify.</p>
+              <p class="hint">Cash to collect is what the customer still owes in Shopify (0 for paid orders).</p>
             </div>
           </div>
         </section>

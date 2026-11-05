@@ -65,7 +65,9 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 ## Couriers page
 - Left: courier list. Main: hero + exactly three steps per courier, same names for every courier:
   **API configuration**, **Webhook configuration**, **Delivery settings** (Pathao: pickup store,
-  delivery type, parcel weight, note; Steadfast: note). The note for rider is one shared setting.
+  delivery type, parcel weight, note; Steadfast: delivery type home/hub (`delivery_type` 1 only sent
+  for hub), product list (`item_description`, on by default), item count (`total_lot`), second phone
+  (`alternative_phone`), note). The note for rider is one shared setting. Webhook status shows just "Live".
 - Right column "Sending rules": default courier, auto-send, hold high-risk, and "Update orders
   inside Shopify" (permissions box, sync toggle, when to fulfil, email customer).
 
