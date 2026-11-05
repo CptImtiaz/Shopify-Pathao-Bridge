@@ -817,6 +817,9 @@
       return `<span class="bad-line"><b>No test from ${name} in 5 minutes.</b> Check that the Callback URL saved in the ${portal} is exactly the one above (and the ${secretWord} matches), then save it there again.</span>`;
     }
     if (wh.live) return '';
+    if (key === 'steadfast') {
+      return `<span class="wait-line">Not live yet. Steadfast doesn't send a test when you save; it connects with its first parcel update (e.g. when it approves a parcel). Live appears then.</span>`;
+    }
     return `<span class="wait-line">Not live yet. Save the webhook in the ${portal}: ${name} sends a test, and this turns Live when it arrives.</span>`;
   }
   // While waiting, re-check every 10 s (the courier's test also arrives instantly through live updates).
@@ -1067,9 +1070,15 @@
         const field = courier === 'pathao' ? 'webhook_secret' : 'steadfast_webhook_token';
         const value = $(courier === 'pathao' ? 'wh_secret' : 'sf_wh_token').value.trim();
         apply(await api('/settings', { method: 'POST', body: { [field]: value } }));
-        state.whWait[courier] = Date.now();
-        await refreshBoot();
-        toast(`Saved · now save it in the ${courier === 'pathao' ? 'Pathao Merchant Panel' : 'Steadfast portal'}`);
+        if (courier === 'pathao') {
+          state.whWait.pathao = Date.now();
+          await refreshBoot();
+          toast('Saved · now save it in the Pathao Merchant Panel');
+        } else {
+          state.courierView = 'steadfast'; state.section = 'sf-delivery';
+          await refreshBoot();
+          toast('Saved · Live turns on with Steadfast\'s first parcel update');
+        }
       });
       if (b.dataset.plan) return await busy(b, async () => { const r = await api('/billing/subscribe', { method: 'POST', body: { plan: b.dataset.plan, interval: state.period } }); window.open(r.confirmationUrl, '_top'); });
       if (b.dataset.downgrade !== undefined) {

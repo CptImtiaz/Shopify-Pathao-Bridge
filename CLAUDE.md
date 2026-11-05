@@ -52,7 +52,8 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   dashboard reads with fetch (session token header) and reconnects every 3 s if dropped. Any
   `admin.forgetOrders(shop)` publishes an event (wrapped in app.js), so webhooks (orders/create,
   orders/updated, Pathao, Steadfast), the tracker and bookings all redraw open dashboards.
-  Webhook first: Pathao and Steadfast both send a test when the webhook is saved in their panel;
+  Webhook first: Pathao sends a test (webhook_integration) when saved in its panel; Steadfast does
+  NOT (its portal shows "No deliveries yet" until the first parcel update) -- confirmed 2026-11-05;
   any authenticated courier call sets `*_webhook_at` -> "Live". Once a courier is Live it is NOT
   polled, except Steadfast parcels still `in_review`/`unknown` (removal sends no webhook).
   `src/tracking.js` polls couriers every minute for parcels still on the way (started in
@@ -76,7 +77,8 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   from real courier calls. A courier call with the wrong secret/token is refused (401) AND recorded
   (`pathao_webhook_error_at` / `steadfast_webhook_error_at`) -> red warning on the page; cleared
   when the secret/token is changed or a good call arrives.
-- Save on a webhook step starts a 5-minute wait for the courier's own test call (browser state
+- Save on the Pathao webhook step starts a 5-minute wait for Pathao's own test call; Steadfast
+  Save just moves on to Delivery settings (Live comes with the first parcel update). Pathao wait (browser state
   `whWait`): spinner line -> Live + toast when it arrives (pushed via /api/events), red warning
   on a token mismatch, or a 'no test in 5 minutes, check the Callback URL' message.
   When it goes Live the page moves on by itself to that courier's Delivery settings step.
