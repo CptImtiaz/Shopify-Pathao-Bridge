@@ -66,7 +66,7 @@ test('steadfast connect: test shows balance, wrong keys are reported, courier sh
   assert.equal(boot.settings.steadfast.connected, true);
   assert.equal(boot.settings.steadfast.has_secret, true);
   assert.equal(JSON.stringify(boot).includes('sf_secret'), false, 'secret never sent to the browser');
-  assert.match(boot.steadfastWebhook.url, /\/steadfast\/webhook\/demo-store\.myshopify\.com$/);
+  assert.match(boot.steadfastWebhook.url, /\/steadfast\/webhook\/demo-store\.myshopify\.com\/[0-9a-f]{48}$/);
   assert.ok(boot.steadfastWebhook.token.length >= 32);
 
   // Wrong keys are checked with Steadfast first and never saved over working ones.
@@ -474,7 +474,7 @@ test('saving a webhook marks it set up; Live still comes only from the courier',
   const a = await steadfastShop(t);
   let boot = (await a.api('/bootstrap')).data;
   assert.equal(boot.steadfastWebhook.saved, false);
-  await a.api('/settings', { method: 'POST', body: { steadfast_webhook_token: boot.steadfastWebhook.token } });
+  await a.api('/settings', { method: 'POST', body: { steadfast_webhook_saved: true } });
   await a.api('/settings', { method: 'POST', body: { webhook_secret: 'pathao-secret-123' } });
   boot = (await a.api('/bootstrap')).data;
   assert.equal(boot.steadfastWebhook.saved, true);
@@ -494,4 +494,26 @@ test('Steadfast webhook address: friendly page in a browser, short Steadfast-gen
   const r = await a.api('/settings', { method: 'POST', body: { steadfast_webhook_token: 'Ab12Cd34' } });
   assert.equal(r.status, 200);
   assert.equal((await a.api('/bootstrap')).data.steadfastWebhook.token, 'Ab12Cd34');
+});
+
+test('Steadfast Callback URL needs no auth token: the key in the URL is enough, a wrong key is refused', async (t) => {
+  const a = await steadfastShop(t);
+  a.fake.state.orders['803'] = gqlOrder(803);
+  await a.api('/orders/send', { method: 'POST', body: { ids: ['803'], courier: 'steadfast' } });
+  const url = (await a.api('/bootstrap')).data.steadfastWebhook.url.replace(/^https?:\/\/[^/]+/, a.base);
+  const event = JSON.stringify({ notification_type: 'delivery_status', consignment_id: 5001, invoice: '803', status: 'delivered' });
+  const post = (u, headers = {}) => fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: event });
+
+  const wrong = await post(url.replace(/[0-9a-f]{48}$/, 'f'.repeat(48)));
+  assert.equal(wrong.status, 401);
+  assert.equal((await a.api('/bootstrap')).data.steadfastWebhook.refusedAt, null, 'a guessed address is not shown as a merchant problem');
+  assert.equal((await a.db.getShipment(SHOP, '803')).pathao_status, 'in_review');
+
+  // No Authorization, no X-Signature; a stale token header from Steadfast doesn't matter either.
+  assert.equal((await post(url)).status, 200);
+  assert.equal((await post(url, { Authorization: 'Bearer stale-token' })).status, 200);
+  await a.settle();
+  assert.equal((await a.db.getShipment(SHOP, '803')).pathao_status, 'delivered');
+  assert.equal((await a.api('/bootstrap')).data.steadfastWebhook.live, true);
+  assert.equal((await fetch(url)).status, 200, 'browser check of the new address');
 });

@@ -147,6 +147,7 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
   };
   router.get('/pathao/webhook/:shop', ready('Pathao'));
   router.get('/steadfast/webhook/:shop', ready('Steadfast'));
+  router.get('/steadfast/webhook/:shop/:key', ready('Steadfast'));
 
   // Pathao -> us: delivery status updates. Merchant pastes this URL and the
   // secret shown in the app into Pathao Merchant Panel > Developers > Webhooks.
@@ -202,17 +203,28 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
     return res.status(202).send('OK');
   });
 
-  // Steadfast -> us: delivery status updates. The merchant pastes this URL and
-  // the auth token shown in the app into Steadfast's webhook settings. Steadfast
-  // sends `Authorization: Bearer <token>` and `X-Signature` = HMAC-SHA256(raw body, token).
-  router.post('/steadfast/webhook/:shop', express.raw({ type: '*/*', limit: '1mb' }), async (req, res) => {
+  // Steadfast -> us: delivery status updates. The merchant pastes the Callback URL shown in the app
+  // into Steadfast's webhook settings; no auth token needed. The URL ends with a long per-shop key
+  // (`steadfast_webhook_key`), which is what proves the call is for this shop.
+  // The older address without a key still works with `Authorization: Bearer <token>` or
+  // `X-Signature` = HMAC-SHA256(raw body, token), for merchants who set it up that way.
+  const steadfastAuth = async (req, res) => {
     const shop = req.params.shop;
-    if (!isValidShop(shop)) return res.status(404).json({ status: 'error', message: 'Unknown shop' });
+    if (!isValidShop(shop)) { res.status(404).json({ status: 'error', message: 'Unknown shop' }); return null; }
     const row = await db.getShop(shop);
-    if (!row || row.uninstalled_at) return res.status(404).json({ status: 'error', message: 'Unknown shop' });
+    if (!row || row.uninstalled_at) { res.status(404).json({ status: 'error', message: 'Unknown shop' }); return null; }
     const settings = await db.getSettings(shop);
-    const token = settings.steadfast_webhook_token;
     const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from('');
+    if (req.params.key !== undefined) {
+      // A wrong key is someone guessing, not the merchant's Steadfast: refuse without a warning.
+      if (!settings.steadfast_webhook_key || !safeEqual(String(req.params.key), settings.steadfast_webhook_key)) {
+        log.warn(`[${shop}] steadfast webhook refused: wrong address key`);
+        res.status(401).json({ status: 'error', message: 'Unknown address' });
+        return null;
+      }
+      return { shop, settings, raw };
+    }
+    const token = settings.steadfast_webhook_token;
     const sig = String(req.get('X-Signature') || '');
     const bearer = String(req.get('Authorization') || '').replace(/^Bearer\s+/i, '');
     const expected = token ? crypto.createHmac('sha256', token).update(raw).digest('hex') : '';
@@ -220,12 +232,18 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
     const bearerOk = Boolean(token && bearer && safeEqual(bearer, token));
     // A signature, when sent, must match; otherwise the bearer token must.
     if (!token || (sig ? !sigOk : !bearerOk)) {
-      // Steadfast reached this store's address with a different auth token: show it on the Couriers page.
-      log.warn(`[${shop}] steadfast webhook refused: auth token does not match`);
+      log.warn(`[${shop}] steadfast webhook refused: old address without a matching auth token`);
       await db.updateSettings(shop, { steadfast_webhook_error_at: new Date() }).catch(() => {});
       if (admin.forgetOrders) admin.forgetOrders(shop, 'courier');
-      return res.status(401).json({ status: 'error', message: 'Bad signature' });
+      res.status(401).json({ status: 'error', message: 'Bad signature' });
+      return null;
     }
+    return { shop, settings, raw };
+  };
+  const steadfastHandler = async (req, res) => {
+    const ok = await steadfastAuth(req, res);
+    if (!ok) return undefined;
+    const { shop, settings, raw } = ok;
 
     let body;
     try { body = JSON.parse(raw.toString('utf8') || '{}'); } catch { return res.status(400).json({ status: 'error', message: 'Invalid JSON' }); }
@@ -268,7 +286,10 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
       }
     })().catch((e) => log.error(`[${shop}] steadfast webhook follow-up failed: ${e.message}`)));
     return undefined;
-  });
+  };
+  const rawBody = express.raw({ type: '*/*', limit: '1mb' });
+  router.post('/steadfast/webhook/:shop/:key', rawBody, steadfastHandler);
+  router.post('/steadfast/webhook/:shop', rawBody, steadfastHandler);
 
   return router;
 }

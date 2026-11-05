@@ -837,13 +837,14 @@
     if (document.activeElement !== $('sf_default_note')) setVal('sf_default_note', S().default_note);
     if (document.activeElement !== $('sf_api_key')) setVal('sf_api_key', sf.api_key);
     $('sf_secret_key').placeholder = sf.has_secret ? '•••••••• saved' : '';
-    setVal('sf_wh_url', wh.url); if (document.activeElement !== $('sf_wh_token')) setVal('sf_wh_token', wh.token);
+    setVal('sf_wh_url', wh.url);
     show($('sf-disconnect'), sfConnected() || sfRejected());
-    $('sf-wh-state').innerHTML = webhookState(wh, 'Steadfast', 'auth token', 'Steadfast portal');
+    $('sf-wh-state').innerHTML = webhookState(wh, 'Steadfast');
   }
   // Only a real problem is shown under the webhook: the courier calling with a different secret/token.
   function webhookState(wh, name, secretWord, portal) {
     if (wh.refusedAt && (!wh.lastAt || new Date(wh.refusedAt) > new Date(wh.lastAt))) {
+      if (!secretWord) return `<span class="bad-line"><b>${name} is calling an old ShipBridge address.</b> Copy the Callback URL above into the ${name} portal again and save it there.</span>`;
       return `<span class="bad-line"><b>${name} is calling ShipBridge with a different ${secretWord}.</b> Make the ${secretWord} here and in the ${portal} the same, then save both.</span>`;
     }
     return '';
@@ -1088,9 +1089,9 @@
       }
       if (b.id === 'save-webhook' || b.id === 'sf-save-webhook') return await busy(b, async () => {
         const courier = b.id === 'save-webhook' ? 'pathao' : 'steadfast';
-        const field = courier === 'pathao' ? 'webhook_secret' : 'steadfast_webhook_token';
-        const value = $(courier === 'pathao' ? 'wh_secret' : 'sf_wh_token').value.trim();
-        apply(await api('/settings', { method: 'POST', body: { [field]: value } }));
+        // Steadfast needs only the Callback URL (no auth token).
+        const body = courier === 'pathao' ? { webhook_secret: $('wh_secret').value.trim() } : { steadfast_webhook_saved: true };
+        apply(await api('/settings', { method: 'POST', body }));
         state.courierView = courier; state.section = courier === 'pathao' ? 'delivery' : 'sf-delivery';
         await refreshBoot();
         toast('Saved');

@@ -40,8 +40,10 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 - Pathao: `src/pathao/` (OAuth password grant, stores, webhook `/pathao/webhook/:shop`).
 - Steadfast (Packzy API `https://portal.packzy.com/api/v1`): `src/couriers/steadfast.js`.
   Api-Key + Secret-Key headers, no token. 10 failed logins in 5 min = 60 min lockout, so
-  never retry 401s. Webhook `/steadfast/webhook/:shop`: `X-Signature` = HMAC-SHA256(raw body,
-  per-shop auth token shown in the app), or `Authorization: Bearer <token>`.
+  never retry 401s. Webhook: the Callback URL shown in the app is `/steadfast/webhook/:shop/:key`
+  (`settings.steadfast_webhook_key`, 48 hex) and needs NO auth token (owner's request, 2026-11-05);
+  a wrong key = 401, not recorded. Old `/steadfast/webhook/:shop` still accepts `X-Signature` =
+  HMAC-SHA256(raw body, `steadfast_webhook_token`) or `Authorization: Bearer <token>`.
   `*_approval_pending` statuses are rider-only and don't move the Shopify order.
   Every Steadfast webhook is logged (`steadfast webhook: <type> cid=… status=… order=…`). Any event
   with a status updates the order; `tracking_message` is saved in `shipments.courier_message` and
@@ -76,7 +78,8 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   Home / Point delivery (`delivery_type` 1 only sent for Point). Steadfast's API has no Regular/Express or weight
   field, so those are not offered. Product list (`item_description`), item count (`total_lot`) and a second phone
   (`alternative_phone`, when it differs) always go to Steadfast; no switches. The note for rider is one shared setting. Webhook status shows just "Live".
-- Webhook configuration: editable secret (Pathao) / auth token (Steadfast) + Save. No self-test
+- Webhook configuration: editable secret (Pathao) + Save; Steadfast shows only the Callback URL + Save
+  (`steadfast_webhook_saved: true`), no auth token field. No self-test
   (removed: ShipBridge can't read the courier's portal, so a self-test proved nothing). "Live" only
   from real courier calls. A courier call with the wrong secret/token is refused (401) AND recorded
   (`pathao_webhook_error_at` / `steadfast_webhook_error_at`) -> red warning on the page; cleared
@@ -122,6 +125,5 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   whole store (Shopify order search). Dashboard keeps loaded pages and search hits across live redraws.
 - Owner page `/admin` shows recent bookings (no customer data) to trace any order.
 - Webhook addresses answer GET with a "ready" page for installed shops (merchants open them in a
-  browser and read 404 as "broken"). Steadfast auth token: 6–200 chars, because Steadfast's portal can
-  generate its own token that the merchant pastes into ShipBridge. Steadfast only calls on a parcel
+  browser and read 404 as "broken"). Steadfast only calls on a parcel
   status change; until then the tracker polls it every minute.

@@ -152,10 +152,12 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
   // ---- bootstrap: everything the UI needs on load ----
   router.get('/bootstrap', wrap(async (req) => {
     let settings = await db.getSettings(req.shop);
-    if (!settings.webhook_secret || !settings.steadfast_webhook_token) {
+    if (!settings.webhook_secret || !settings.steadfast_webhook_token || !settings.steadfast_webhook_key) {
       settings = await db.updateSettings(req.shop, {
         webhook_secret: settings.webhook_secret || crypto.randomBytes(16).toString('hex'),
         steadfast_webhook_token: settings.steadfast_webhook_token || crypto.randomBytes(24).toString('hex'),
+        // Long secret at the end of the Steadfast Callback URL (Steadfast needs no auth token then).
+        steadfast_webhook_key: settings.steadfast_webhook_key || crypto.randomBytes(24).toString('hex'),
       });
     }
     // Webhooks only need checking once per shop per server start, not on every page load.
@@ -177,7 +179,7 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
       couriers: listCouriers(settings, { pathao }),
       plans: Object.values(PLANS),
       pathaoWebhook: { saved: Boolean(settings.pathao_webhook_saved_at), refusedAt: settings.pathao_webhook_error_at || null, url: `${config.appUrl}/pathao/webhook/${req.shop}`, secret: settings.webhook_secret, lastAt: settings.pathao_webhook_at || null, live: Boolean(settings.webhook_secret && settings.pathao_webhook_at) },
-      steadfastWebhook: { saved: Boolean(settings.steadfast_webhook_saved_at), refusedAt: settings.steadfast_webhook_error_at || null, url: `${config.appUrl}/steadfast/webhook/${req.shop}`, token: settings.steadfast_webhook_token, lastAt: settings.steadfast_webhook_at || null, live: Boolean(settings.steadfast_webhook_at) },
+      steadfastWebhook: { saved: Boolean(settings.steadfast_webhook_saved_at), refusedAt: settings.steadfast_webhook_error_at || null, url: `${config.appUrl}/steadfast/webhook/${req.shop}/${settings.steadfast_webhook_key}`, token: settings.steadfast_webhook_token /* old address only */, lastAt: settings.steadfast_webhook_at || null, live: Boolean(settings.steadfast_webhook_at) },
       webhooks,
       permissions,
     };
@@ -207,6 +209,8 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
     }
     if (b.sf_delivery_type !== undefined) f.sf_delivery_type = Number(b.sf_delivery_type) === 1 ? 1 : 0;
     for (const k of ['sf_alt_phone', 'sf_item_desc', 'sf_total_lot']) if (b[k] !== undefined) f[k] = Boolean(b[k]);
+    // Steadfast needs only the Callback URL: Save just marks the step done.
+    if (b.steadfast_webhook_saved) Object.assign(f, { steadfast_webhook_saved_at: new Date(), steadfast_webhook_error_at: null });
     if (b.steadfast_webhook_token !== undefined) {
       const w = String(b.steadfast_webhook_token).trim();
       // Steadfast's portal generates its own token (can be short): accept whatever it gives.
