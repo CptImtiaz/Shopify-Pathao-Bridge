@@ -82,7 +82,7 @@ function fakeFetch() {
       if (query.includes('currentAppInstallation')) {
         return json(200, { data: { currentAppInstallation: { activeSubscriptions: state.activeSubscriptions, allSubscriptions: { nodes: state.allSubscriptions || [] } } } });
       }
-      if (query.includes('RecentOrders')) return json(200, { data: { orders: { nodes: Object.values(state.orders) } } });
+      if (query.includes('RecentOrders')) { state.orderLists = (state.orderLists || 0) + 1; } if (query.includes('RecentOrders')) return json(200, { data: { orders: { nodes: Object.values(state.orders) } } });
       if (query.includes('OneOrder')) {
         const id = variables.id.split('/').pop();
         return json(200, { data: { order: state.orders[id] || null } });
@@ -187,7 +187,7 @@ function gqlOrder(id, extra = {}) {
   };
 }
 
-async function startApp({ smsFeature = true, adminPassword = '' } = {}) {
+async function startApp({ smsFeature = true, adminPassword = '', apiRatePerMinute } = {}) {
   const fake = fakeFetch();
   const logs = [];
   const log = { info: (m) => logs.push(m), warn: (m) => logs.push(m), error: (...m) => logs.push(m.join(' ')) };
@@ -198,7 +198,7 @@ async function startApp({ smsFeature = true, adminPassword = '' } = {}) {
     pathaoProductionUrl: 'https://api-hermes.pathao.com', pathaoSandboxUrl: 'https://courier-api-sandbox.pathao.com',
     pathaoIntegrationSecret: 'integration-uuid',
     steadfastBaseUrl: 'https://portal.packzy.com/api/v1',
-    pollStatuses: false,
+    pollStatuses: false, apiRatePerMinute,
     smsFeature, adminPassword,
   };
   const { app, db, tracker, bus } = createApp({ config, pool: memPool(), fetchImpl: fake.impl, log });

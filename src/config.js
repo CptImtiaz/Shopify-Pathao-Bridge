@@ -39,6 +39,7 @@ function load() {
     // Billing. Keep BILLING_TEST=true until the app is approved; test charges cost nothing.
     billingTest: bool('BILLING_TEST', true),
     adminPassword: process.env.ADMIN_PASSWORD || '',
+    apiRatePerMinute: Number(process.env.API_RATE_PER_MINUTE) || 300,
     supportEmail: process.env.SUPPORT_EMAIL || '',
     supportWhatsapp: process.env.SUPPORT_WHATSAPP || '+60199944971',
 

@@ -453,7 +453,7 @@ test('merchant notes are saved per order and never block sending', async (t) => 
   assert.equal(r.data.results[0].ok, true, r.data.results[0].error);
 });
 
-test('courier logos: page carries a logo version, logos are re-checked on every visit', async (t) => {
+test('courier logos: page carries a logo fingerprint, so versioned logos are cached for a year', async (t) => {
   const a = await startApp();
   t.after(() => a.close());
   const html = await (await fetch(`${a.base}/?embedded=1&host=x`)).text();
@@ -461,7 +461,7 @@ test('courier logos: page carries a logo version, logos are re-checked on every 
   for (const f of ['steadfast-mark.png', 'pathao-mark.png']) {
     const r = await fetch(`${a.base}/assets/couriers/${f}?v=x`);
     assert.equal(r.status, 200, f);
-    assert.equal(r.headers.get('cache-control'), 'no-cache', f);
+    assert.match(r.headers.get('cache-control'), /immutable/, f);
   }
 });
 
@@ -553,4 +553,24 @@ test('privacy policy: no blanks, names Steadfast, shows the support contact', as
   assert.match(html, /Steadfast/);
   assert.match(html, /AutoCourier BD/);
   assert.match(html, /Questions or data requests: \S/);
+});
+
+test('per-store rate limit answers 429 with a friendly message', async (t) => {
+  const { startApp } = require('./helpers');
+  const a = await startApp({ apiRatePerMinute: 3 });
+  t.after(() => a.close());
+  for (let i = 0; i < 3; i++) assert.notEqual((await a.api('/bootstrap')).status, 429);
+  const r = await a.api('/bootstrap');
+  assert.equal(r.status, 429);
+  assert.match(r.data.error, /Too many requests/);
+});
+
+test('versioned courier logos are cached for a year; unversioned ones are re-checked', async (t) => {
+  const { startApp } = require('./helpers');
+  const a = await startApp();
+  t.after(() => a.close());
+  const v = await fetch(`${a.base}/assets/couriers/pathao-mark.png?v=abc123`);
+  assert.match(v.headers.get('cache-control'), /max-age=31536000, immutable/);
+  const plain = await fetch(`${a.base}/assets/couriers/pathao-mark.png`);
+  assert.equal(plain.headers.get('cache-control'), 'no-cache');
 });

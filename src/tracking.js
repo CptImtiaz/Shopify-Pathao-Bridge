@@ -8,19 +8,17 @@
 
 const { COURIER_NAMES } = require('./couriers');
 
-// Final statuses: nothing more will happen to these parcels.
-const DONE = /^(order\.)?(delivered|partial[_-]delivered|partial[_-]delivery|cancelled|returned|paid[_-]return|pickup[_-]cancell?ed|cancelled_return_received|partial_delivered_return_received)$/i;
-
-// Pathao's status check says "Pickup_Cancelled", its webhook "pickup-cancelled": store one form.
-const pathaoSlug = (s) => (s ? String(s).trim().toLowerCase().replace(/^order\./, '').replace(/[\s_]+/g, '-') : s);
+const { DONE, pathaoSlug } = require('./statuses');
 
 function makeTracker({ db, pathao, steadfast, fulfillment = null, admin = null, log = console }) {
   const lastRun = new Map();
+  const shopifyChanged = new Set(); // shops whose Shopify orders changed during this check
 
   // A parcel removed in the Steadfast panel (only possible while it is in review)
   // is answered with "unknown". Put the order back to "Not sent" so it can be sent again.
   async function markRemoved(shop, s) {
     if (s.shopify_fulfillment_id && fulfillment && fulfillment.cancelFulfillment) {
+      shopifyChanged.add(shop);
       await fulfillment.cancelFulfillment(shop, s.shopify_fulfillment_id)
         .catch((e) => log.warn(`[${shop}] ${s.order_name}: could not undo the Shopify fulfillment: ${e.message}`));
     }
@@ -53,7 +51,8 @@ function makeTracker({ db, pathao, steadfast, fulfillment = null, admin = null, 
       await db.finishShipment(shop, s.shopify_order_id, { pathao_status: status });
       log.info(`[${shop}] ${s.order_name} ${s.courier} status ${s.pathao_status || '-'} -> ${status} (checked)`);
     }
-    if (fulfillment) await fulfillment.sync(shop, s.shopify_order_id, { status });
+    const result = fulfillment ? await fulfillment.sync(shop, s.shopify_order_id, { status }) : null;
+    if (result && result.shopifyChanged) shopifyChanged.add(shop);
     return status;
   }
 
@@ -76,7 +75,11 @@ function makeTracker({ db, pathao, steadfast, fulfillment = null, admin = null, 
       try { if ((await refreshShipment(shop, s, settings)) !== s.pathao_status) changed += 1; }
       catch (e) { failed += 1; log.warn(`[${shop}] status check ${s.order_name} failed: ${e.message}`); }
     }
-    if (changed && admin && admin.forgetOrders) admin.forgetOrders(shop);
+    // Redraw open dashboards; ask Shopify again only if a Shopify order itself changed.
+    if (changed && admin) {
+      if (shopifyChanged.has(shop) || !admin.touchOrders) { if (admin.forgetOrders) admin.forgetOrders(shop); } else admin.touchOrders(shop);
+    }
+    shopifyChanged.delete(shop);
     return { checked: list.length, changed, failed };
   }
 

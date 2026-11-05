@@ -30,6 +30,10 @@ const STEADFAST_DELIVERY_STATUSES = new Set([
 const PATHAO_INFO_EVENTS = { created: null, updated: null, paid: 'Cash paid out by Pathao' };
 
 function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, steadfast = null, notifier, log = console, defer = (p) => p }) {
+  // Courier data lives in Postgres, so a courier update only needs open dashboards to redraw;
+  // Shopify is asked again only when the Shopify order itself changed (fulfilled, paid, unfulfilled).
+  const touch = (shop, type) => (admin.touchOrders ? admin.touchOrders(shop, type) : admin.forgetOrders && admin.forgetOrders(shop, type));
+  const afterSync = (shop, result) => (admin.afterCourierUpdate ? admin.afterCourierUpdate(shop, result) : admin.forgetOrders && admin.forgetOrders(shop));
   const router = express.Router();
   const raw = express.raw({ type: '*/*', limit: '2mb' });
 
@@ -166,14 +170,14 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
       // Pathao reached this store's address with a different secret: show it on the Couriers page.
       log.warn(`[${shop}] pathao webhook refused: secret does not match`);
       await db.updateSettings(shop, { pathao_webhook_error_at: new Date() }).catch(() => {});
-      if (admin.forgetOrders) admin.forgetOrders(shop, 'courier');
+      touch(shop, 'courier');
       return res.status(401).send('Bad signature');
     }
 
     const body = req.body || {};
     const event = String(body.event || '');
     await db.updateSettings(shop, { pathao_webhook_at: new Date(), pathao_webhook_error_at: null }).catch(() => {});
-    if (event === 'webhook_integration' || !body.consignment_id) { if (admin.forgetOrders) admin.forgetOrders(shop, 'courier'); return res.status(202).send('OK'); }
+    if (event === 'webhook_integration' || !body.consignment_id) { touch(shop, 'courier'); return res.status(202).send('OK'); }
 
     const shipment = await db.findShipmentByConsignment(shop, body.consignment_id);
     const kind = event.replace(/^order\./, '');
@@ -181,7 +185,7 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
       // Not a delivery status: keep the current one, at most note what happened.
       if (PATHAO_INFO_EVENTS[kind]) {
         await db.finishShipment(shop, shipment.shopify_order_id, { courier_message: PATHAO_INFO_EVENTS[kind], courier_message_at: new Date() });
-        if (admin.forgetOrders) admin.forgetOrders(shop);
+        touch(shop);
       }
       return res.status(202).send('OK');
     }
@@ -189,10 +193,11 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
       const status = kind || 'updated';
       await db.finishShipment(shop, shipment.shopify_order_id, { pathao_status: status });
       res.status(202).send('OK');
+      touch(shop); // the new status shows straight away
       // Update Shopify after acknowledging Pathao.
       defer((async () => {
-        if (fulfillment) await fulfillment.sync(shop, shipment.shopify_order_id, { status });
-        if (admin.forgetOrders) admin.forgetOrders(shop);
+        const result = fulfillment ? await fulfillment.sync(shop, shipment.shopify_order_id, { status }) : null;
+        if (result && result.shopifyChanged) afterSync(shop, result);
         if (settings.tag_orders && ['delivered', 'returned', 'delivery-failed'].includes(status)) {
           await admin.annotateOrder(shop, shipment.shopify_order_id, { tags: [`pathao-${status}`] })
             .catch((e) => log.warn(`[${shop}] tag failed: ${e.message}`));
@@ -234,7 +239,7 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
     if (!token || (sig ? !sigOk : !bearerOk)) {
       log.warn(`[${shop}] steadfast webhook refused: old address without a matching auth token`);
       await db.updateSettings(shop, { steadfast_webhook_error_at: new Date() }).catch(() => {});
-      if (admin.forgetOrders) admin.forgetOrders(shop, 'courier');
+      touch(shop, 'courier');
       res.status(401).json({ status: 'error', message: 'Bad signature' });
       return null;
     }
@@ -266,7 +271,7 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
     }
     log.info(`[${shop}] steadfast webhook: ${type} cid=${cid || '-'} invoice=${body.invoice || '-'} status=${given || '-'}${status && status !== given ? `->${status}` : ''} order=${shipment ? shipment.order_name : 'not found'}`);
     // Parcel events (delivery_status, tracking_update, consignment_update...) carry a status and/or a message.
-    if (!shipment || (!status && !message)) { if (admin.forgetOrders) admin.forgetOrders(shop, 'courier'); return res.json({ status: 'success' }); }
+    if (!shipment || (!status && !message)) { touch(shop, 'courier'); return res.json({ status: 'success' }); }
 
     const fields = {};
     if (status) fields.pathao_status = status; // courier status column (see CLAUDE.md)
@@ -274,12 +279,13 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
     if (body.delivery_charge != null && Number.isFinite(Number(body.delivery_charge))) fields.delivery_fee = Number(body.delivery_charge);
     await db.finishShipment(shop, shipment.shopify_order_id, fields);
     res.json({ status: 'success' });
-    if (!status) { if (admin.forgetOrders) admin.forgetOrders(shop); return undefined; }
+    touch(shop); // the new status / message shows straight away
+    if (!status) return undefined;
 
     // Update Shopify after acknowledging Steadfast.
     defer((async () => {
-      if (fulfillment) await fulfillment.sync(shop, shipment.shopify_order_id, { status });
-      if (admin.forgetOrders) admin.forgetOrders(shop);
+      const result = fulfillment ? await fulfillment.sync(shop, shipment.shopify_order_id, { status }) : null;
+      if (result && result.shopifyChanged) afterSync(shop, result);
       if (settings.tag_orders && ['delivered', 'partial_delivered', 'cancelled'].includes(status)) {
         await admin.annotateOrder(shop, shipment.shopify_order_id, { tags: [`steadfast-${status.replace(/_/g, '-')}`] })
           .catch((e) => log.warn(`[${shop}] tag failed: ${e.message}`));

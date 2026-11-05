@@ -206,3 +206,34 @@ test('catch-up on start: older pickup-cancelled / delivered parcels get the Shop
   assert.equal(await a.tracker.catchUp(), 0, 'nothing left the second time');
   assert.ok(r1.ok && r2.ok);
 });
+
+test('status checker reads only unfinished parcels, and skips stores whose courier webhook is live', async (t) => {
+  const a = await ready(t);
+  a.fake.state.orders['730'] = gqlOrder(730);
+  const r = (await a.api('/orders/send', { method: 'POST', body: { ids: ['730'] } })).data.results[0];
+  assert.deepEqual(await a.db.shopsWithActiveShipments(), [SHOP], 'not live yet: checked');
+  assert.equal((await a.db.activeShipments(SHOP)).length, 1);
+  await pathaoHook(a, { event: 'order.in-transit', consignment_id: r.consignmentId }); // a real call makes Pathao live
+  assert.deepEqual(await a.db.shopsWithActiveShipments(), [], 'live webhook: not polled');
+  await pathaoHook(a, { event: 'order.delivered', consignment_id: r.consignmentId });
+  assert.equal((await a.db.getShipment(SHOP, '730')).finished, true);
+  assert.equal((await a.db.activeShipments(SHOP)).length, 0, 'finished parcels are never read again');
+});
+
+test('a courier status update redraws from our data without asking Shopify again; paid on delivery does', async (t) => {
+  const a = await ready(t);
+  a.fake.state.orders['740'] = gqlOrder(740);
+  const r = (await a.api('/orders/send', { method: 'POST', body: { ids: ['740'] } })).data.results[0];
+  await a.api('/orders');
+  const events = [];
+  a.bus.subscribe(SHOP, (type) => events.push(type));
+  const before = a.fake.state.orderLists;
+  await pathaoHook(a, { event: 'order.in-transit', consignment_id: r.consignmentId });
+  assert.ok(events.length >= 1, 'open dashboards are told to redraw');
+  const o = (await a.api('/orders')).data.orders.find((x) => x.id === '740');
+  assert.equal(o.shipment.pathaoStatus, 'in-transit', 'the new status is shown');
+  assert.equal(a.fake.state.orderLists, before, 'no new Shopify order list request');
+  await pathaoHook(a, { event: 'order.delivered', consignment_id: r.consignmentId });
+  await a.api('/orders');
+  assert.equal(a.fake.state.orderLists, before + 1, 'marked paid in Shopify: list fetched again');
+});

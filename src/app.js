@@ -37,6 +37,11 @@ function createApp({ config, pool, fetchImpl: rawFetch = fetch, log = console, d
   const bus = makeBus();
   const forgetOrders = admin.forgetOrders;
   admin.forgetOrders = (shop, type = 'orders') => { forgetOrders(shop); bus.publish(shop, type); };
+  // Only ShipBridge's own data changed (a courier status, a note): redraw open dashboards, but keep
+  // the cached Shopify order list. /api/orders merges parcel data from Postgres on every call.
+  admin.touchOrders = (shop, type = 'orders') => bus.publish(shop, type);
+  // After a courier update: refetch from Shopify only if the Shopify order itself changed.
+  admin.afterCourierUpdate = (shop, result) => (result && result.shopifyChanged ? admin.forgetOrders(shop) : admin.touchOrders(shop));
   const pathao = makePathao({ config, db, cipher, fetchImpl });
   const fulfillment = makeFulfillmentSync({ admin, db, log });
   const steadfast = makeSteadfast({ config, cipher, db, fetchImpl });
@@ -64,8 +69,9 @@ function createApp({ config, pool, fetchImpl: rawFetch = fetch, log = console, d
     maxAge: '1h',
     setHeaders: (res, file) => {
       if (/app\.(js|css)$/.test(file)) res.set('Cache-Control', 'public, max-age=31536000, immutable');
-      // Courier logos can be replaced under the same name: browsers re-check (a quick 304) every visit.
-      else if (/[\\/]couriers[\\/]/.test(file)) res.set('Cache-Control', 'no-cache');
+      // Courier logos: the dashboard asks for them as ?v=<fingerprint of all logos>, so a new logo gets
+      // a new address and they can be kept for a year. Without ?v= browsers re-check every visit.
+      else if (/[\\/]couriers[\\/]/.test(file)) res.set('Cache-Control', res.req && res.req.query && res.req.query.v ? 'public, max-age=31536000, immutable' : 'no-cache');
     },
   }));
   // Privacy policy: the contact line comes from SUPPORT_EMAIL / SUPPORT_WHATSAPP.

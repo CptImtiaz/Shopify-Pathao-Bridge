@@ -190,17 +190,21 @@ function makeFulfillmentSync({ admin, db, log = console }) {
           courier_message: null, courier_message_at: null, shopify_fulfillment_id: null, shopify_event: null, sync_error: null,
         });
         log.info(`[${shop}] ${shipment.order_name}: pickup cancelled by ${name}, back to Not sent`);
-        return { ok: true, undone: 'pickup cancelled' };
+        return { ok: true, undone: 'pickup cancelled', shopifyChanged: Boolean(shipment.shopify_fulfillment_id) };
       }
 
+      // shopifyChanged = the Shopify order's own columns (payment / fulfillment) changed, so the
+      // dashboard's cached Shopify order list must be fetched again; otherwise only our data changed.
+      let paid = false;
       // Delivered: COD is collected, so the Shopify order is paid (independent of fulfillment sync).
       if (settings.mark_paid_on_delivery !== false && fullyDelivered(raw, courier) && !shipment.shopify_paid_at) {
         await markPaid(shop, orderId);
         await db.finishShipment(shop, orderId, { shopify_paid_at: new Date() });
         log.info(`[${shop}] ${shipment.order_name} marked paid in Shopify (delivered by ${name})`);
+        paid = true;
       }
 
-      if (!settings.sync_fulfillment) return { skipped: 'off' };
+      if (!settings.sync_fulfillment) return { skipped: 'off', shopifyChanged: paid };
       const ev = shopifyEventFor(raw, courier);
 
       // Returned to the merchant: undo the fulfillment so the order is Unfulfilled again.
@@ -209,22 +213,24 @@ function makeFulfillmentSync({ admin, db, log = console }) {
           await cancelFulfillment(shop, shipment.shopify_fulfillment_id);
           await db.finishShipment(shop, orderId, { shopify_fulfillment_id: null, shopify_event: null, sync_error: null });
           log.info(`[${shop}] ${shipment.order_name} came back from ${name}: Shopify fulfillment undone`);
-          return { ok: true, undone: 'returned' };
+          return { ok: true, undone: 'returned', shopifyChanged: true };
         }
-        if (!shipment.shopify_fulfillment_id) return { skipped: 'returned before fulfilment' };
+        if (!shipment.shopify_fulfillment_id) return { skipped: 'returned before fulfilment', shopifyChanged: paid };
       }
 
+      let fulfilled = false;
       if (!shipment.shopify_fulfillment_id) {
-        if (/cancel/.test(String(raw).toLowerCase())) return { skipped: 'cancelled before fulfilment' };
-        if (!readyToFulfil(settings.fulfill_when, raw, courier)) return { skipped: 'waiting for pickup' };
+        if (/cancel/.test(String(raw).toLowerCase())) return { skipped: 'cancelled before fulfilment', shopifyChanged: paid };
+        if (!readyToFulfil(settings.fulfill_when, raw, courier)) return { skipped: 'waiting for pickup', shopifyChanged: paid };
         await ensureFulfilled(shop, shipment, settings);
+        fulfilled = true;
         shipment = await db.getShipment(shop, orderId);
       }
       if (ev && ev !== shipment.shopify_event) {
         await addEvent(shop, shipment.shopify_fulfillment_id, ev, `${name}: ${String(raw).replace(/^order\./, '').replace(/[-_]/g, ' ')}`);
         await db.finishShipment(shop, orderId, { shopify_event: ev, sync_error: null });
       }
-      return { ok: true, event: ev };
+      return { ok: true, event: ev, shopifyChanged: paid || fulfilled };
     } catch (e) {
       const msg = /access denied|ACCESS_DENIED|required access/i.test(e.message)
         ? 'Shopify permission missing: open the app and approve the new fulfillment permissions'

@@ -36,6 +36,25 @@ function makeApiRouter({ config, db, tokens, admin, pathao, steadfast = null, tr
     }
   });
 
+  // ---- per-store rate limit ----
+  // A dashboard makes a handful of calls per minute (more during live updates); this only stops
+  // runaway loops or abuse. Fixed one-minute window per store; the live stream is not counted.
+  const RATE_PER_MIN = config.apiRatePerMinute || 300;
+  const hits = new Map(); // shop -> { start, n }
+  router.use((req, res, next) => {
+    if (req.path === '/events') return next();
+    const now = Date.now();
+    let h = hits.get(req.shop);
+    if (!h || now - h.start >= 60000) { h = { start: now, n: 0 }; hits.set(req.shop, h); }
+    h.n += 1;
+    if (hits.size > 5000) for (const [k, v] of hits) if (now - v.start >= 60000) hits.delete(k);
+    if (h.n > RATE_PER_MIN) {
+      res.set('Retry-After', String(Math.ceil((h.start + 60000 - now) / 1000)));
+      return res.status(429).json({ error: 'Too many requests. Wait a moment and try again.' });
+    }
+    return next();
+  });
+
   const wrap = (fn) => async (req, res) => {
     try {
       res.json(await fn(req, res));

@@ -46,10 +46,20 @@ function makeAdmin({ config, tokens, fetchImpl = fetch }) {
   const ORDERS_TTL_MS = 30000;
   const orderCache = new Map();
   function forgetOrders(shop) { orderCache.delete(shop); }
+  // Drop copies nobody asked for recently, so memory doesn't grow with every store ever opened.
+  let lastSweep = 0;
+  function sweepOrderCache() {
+    const now = Date.now();
+    if (now - lastSweep < 60000) return;
+    lastSweep = now;
+    for (const [shop, e] of orderCache) if (now - e.at > ORDERS_TTL_MS * 2) orderCache.delete(shop);
+    for (const [shop, e] of planCache) if (now - e.at > PLAN_TTL_MS) planCache.delete(shop);
+  }
   async function listRecentOrdersCached(shop, opts, first = 30, { rich = false, fresh = false } = {}) {
     const key = `${first}:${rich}`;
     const hit = orderCache.get(shop);
     if (!fresh && hit && hit.key === key && Date.now() - hit.at < ORDERS_TTL_MS) return hit.promise;
+    sweepOrderCache();
     const entry = { key, at: Date.now(), promise: listOrdersPage(shop, opts, { first, rich }) };
     orderCache.set(shop, entry);
     entry.promise.catch(() => { if (orderCache.get(shop) === entry) orderCache.delete(shop); });

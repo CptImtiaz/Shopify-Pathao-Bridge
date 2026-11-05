@@ -126,6 +126,9 @@ const SCHEMA = [
   `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS courier_message_at TIMESTAMPTZ`,
   // COD standard: mark the Shopify order paid when delivered; undo the fulfillment when the parcel comes back.
   `ALTER TABLE settings ADD COLUMN IF NOT EXISTS mark_paid_on_delivery BOOLEAN NOT NULL DEFAULT TRUE`,
+  // Parcel reached a final status: the status checker never reads it again.
+  `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS finished BOOLEAN NOT NULL DEFAULT FALSE`,
+  `CREATE INDEX IF NOT EXISTS shipments_open ON shipments (finished, status, shop)`,
   `ALTER TABLE settings ADD COLUMN IF NOT EXISTS undo_on_return BOOLEAN NOT NULL DEFAULT TRUE`,
   `ALTER TABLE shipments ADD COLUMN IF NOT EXISTS shopify_paid_at TIMESTAMPTZ`,
   // Merchant's own note on an order (e.g. why it is on hold). Never sent to couriers.
@@ -138,6 +141,8 @@ const SCHEMA = [
   )`,
 ];
 
+const { isFinished } = require('./statuses');
+
 function makeDb(pool) {
   const q = (text, params = []) => pool.query(text, params);
   const one = async (text, params) => (await q(text, params)).rows[0] || null;
@@ -147,6 +152,10 @@ function makeDb(pool) {
 
     async migrate() {
       for (const stmt of SCHEMA) await q(stmt);
+      // Mark parcels that finished before the "finished" column existed (runs once; cheap afterwards).
+      const open = (await q(`SELECT id, pathao_status FROM shipments WHERE status = 'sent' AND finished = FALSE AND pathao_status IS NOT NULL`)).rows;
+      const done = open.filter((r) => isFinished(r.pathao_status)).map((r) => r.id);
+      if (done.length) await q('UPDATE shipments SET finished = TRUE WHERE id = ANY($1)', [done]);
     },
 
     // ---------- shops ----------
@@ -245,7 +254,9 @@ function makeDb(pool) {
     getShipment: (shop, orderId) =>
       one('SELECT * FROM shipments WHERE shop = $1 AND shopify_order_id = $2', [shop, String(orderId)]),
 
-    async finishShipment(shop, orderId, fields) {
+    async finishShipment(shop, orderId, input) {
+      // Any change of courier status also keeps the "finished" flag in step.
+      const fields = 'pathao_status' in input ? { ...input, finished: isFinished(input.pathao_status) } : input;
       const keys = Object.keys(fields);
       const sets = keys.map((k, i) => `${k} = $${i + 3}`).join(', ');
       return one(
@@ -359,12 +370,18 @@ function makeDb(pool) {
         [shop, String(invoice), `#${String(invoice).replace(/^#/, '')}`]),
     // Sent parcels with a consignment (newest first); final statuses are filtered by the caller.
     activeShipments: async (shop, limit = 200) => (await q(
-      `SELECT * FROM shipments WHERE shop = $1 AND status = 'sent' AND consignment_id IS NOT NULL ORDER BY updated_at DESC LIMIT $2`,
+      `SELECT * FROM shipments WHERE shop = $1 AND finished = FALSE AND status = 'sent' AND consignment_id IS NOT NULL ORDER BY updated_at DESC LIMIT $2`,
       [shop, limit]
     )).rows,
     shopsWithActiveShipments: async () => (await q(
-      `SELECT DISTINCT s.shop FROM shipments s JOIN shops sh ON sh.shop = s.shop
-       WHERE s.status = 'sent' AND s.consignment_id IS NOT NULL AND sh.uninstalled_at IS NULL`
+      // Only stores with an unfinished parcel that still needs asking: its courier's webhook isn't
+      // live yet, or it is a Steadfast parcel still in review (removal sends no webhook).
+      `SELECT DISTINCT s.shop FROM shipments s
+         JOIN shops sh ON sh.shop = s.shop
+         JOIN settings st ON st.shop = s.shop
+       WHERE s.finished = FALSE AND s.status = 'sent' AND s.consignment_id IS NOT NULL AND sh.uninstalled_at IS NULL
+         AND ((COALESCE(s.courier, 'pathao') = 'pathao' AND st.pathao_webhook_at IS NULL)
+           OR (s.courier = 'steadfast' AND (st.steadfast_webhook_at IS NULL OR s.pathao_status IN ('in_review', 'unknown'))))`
     )).rows.map((r) => r.shop),
     findShipmentByConsignment: (shop, consignmentId) =>
       one('SELECT * FROM shipments WHERE shop = $1 AND consignment_id = $2', [shop, String(consignmentId)]),

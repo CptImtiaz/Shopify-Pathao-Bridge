@@ -158,6 +158,16 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 - Phone numbers shown in local format 01XXX-XXXXXX on one line. Header: Billing, WhatsApp (outline,
   green icon), Couriers.
 
+## Performance and cost rules (backend report fixes 2026-11-05)
+- `shipments.finished` (kept in step by db.finishShipment from `isFinished` in src/statuses.js) + index
+  `shipments_open`; the tracker reads only unfinished parcels and only stores whose courier still needs asking
+  (webhook not live, or Steadfast in_review/unknown).
+- Courier updates call `admin.touchOrders` (redraw only; /api/orders merges parcel data from Postgres each call).
+  `admin.forgetOrders` (refetch from Shopify) only for Shopify order changes: orders webhooks, sending, and
+  fulfillment.sync results with `shopifyChanged` (fulfilled, paid, unfulfilled) via `admin.afterCourierUpdate`.
+- Order/plan caches are swept every minute; per-store API limit 300 requests/min (API_RATE_PER_MINUTE), live
+  stream excluded; versioned courier logos (?v=) cached 1 year. compression >= 1.8.2 (GHSA-vc2v-76pw-4v95).
+
 ## Reliability rules (review 2026-11-05)
 - Every outbound call (Shopify, couriers, SMS) aborts after 30 s (`httpTimeoutMs`, wrapper in app.js).
 - A booking that times out is saved as failed with error `Not confirmed: ...`; `/orders/send` returns
