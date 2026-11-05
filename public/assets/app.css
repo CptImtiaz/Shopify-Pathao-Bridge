@@ -636,3 +636,7 @@ button.kpi.k-fraud:hover { box-shadow: 0 0 0 2px #fecaca, var(--shadow); }
 .courier-msg b { font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 650; }
 .d-refresh { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; }
 .d-refresh .live { margin-top: 0; }
+.rules-sub { margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 11.5px; font-weight: 700; color: #8a8f98; text-transform: uppercase; letter-spacing: .05em; }
+.step-body .pref { margin-top: 14px; }
+.perm-box, .perm-box li, .perm-box code { overflow-wrap: anywhere; word-break: break-word; }
+.cx-rules .perm-box ol { padding-left: 18px; }

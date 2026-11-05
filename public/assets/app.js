@@ -209,7 +209,7 @@
     const s = S();
     return [
       { key: 'account', done: Boolean(s.connected), html: 'Connect your Pathao account', btn: ['account', 'Add Pathao'] },
-      { key: 'store', done: Boolean(s.pathao_store_id), html: 'Choose the Pathao store parcels are picked up from', btn: ['store', 'Choose store'] },
+      { key: 'delivery', done: Boolean(s.pathao_store_id), html: 'Choose the Pathao store parcels are picked up from', btn: ['delivery', 'Choose store'] },
       { key: 'webhook', done: webhookLive(), html: 'Connect the Pathao webhook so delivery status updates live', btn: ['webhook', 'Set up webhook'] },
       { key: 'shopify', done: s.sync_fulfillment === false || !permMissing(), html: 'Allow ShipBridge to update orders inside Shopify', btn: ['shopify', 'Allow access'] },
       { key: 'auto', done: Boolean(s.auto_send), html: 'Send new orders to Pathao automatically', btn: ['defaults', 'Turn on auto-send'] },
@@ -663,7 +663,8 @@
     renderRules();
     if (view === 'steadfast') { renderSteadfast(); return; }
 
-    const steps = pathaoSteps().filter((x) => ['account', 'store', 'webhook', 'shopify'].includes(x.key));
+    // Same three steps for every courier: API configuration, Webhook configuration, Delivery settings.
+    const steps = ['account', 'webhook', 'delivery'].map((k) => pathaoSteps().find((x) => x.key === k));
     const done = steps.filter((x) => x.done).length;
     const pct = Math.round((done / steps.length) * 100);
     $('cx-hero').innerHTML = `<div class="hero-l"><img class="hero-logo" src="/assets/couriers/pathao-logo.svg?v=${LOGO_V}" alt="Pathao" />
@@ -683,11 +684,13 @@
       el.classList.toggle('done', x.done); el.classList.toggle('open', isOpen);
       el.classList.toggle('attention', !x.done && x.key === firstOpen);
       el.querySelector('.step-dot').textContent = x.done ? '' : String(i + 1);
-      el.querySelector('.step-act').textContent = isOpen ? 'Close' : x.done ? (x.key === 'store' ? 'Change' : x.key === 'account' ? 'Edit' : 'View') : 'Set up';
+      el.querySelector('.step-act').textContent = isOpen ? 'Close' : x.done ? (x.key === 'webhook' ? 'View' : 'Edit') : 'Set up';
       el.querySelector('.step-row').setAttribute('aria-expanded', String(isOpen));
     });
     document.querySelector('[data-step="account"] [data-summary]').textContent = s.connected ? `${s.pathao_username} · ${s.pathao_env === 'sandbox' ? 'Test (sandbox)' : 'Live'}` : 'Client ID, secret, merchant email and password';
-    document.querySelector('[data-step="store"] [data-summary]').textContent = s.pathao_store_id ? `${s.pathao_store_name || 'Store #' + s.pathao_store_id} · riders collect parcels here` : 'Where riders pick up your parcels';
+    document.querySelector('[data-step="delivery"] [data-summary]').textContent = s.pathao_store_id
+      ? `${s.pathao_store_name || 'Store #' + s.pathao_store_id} · ${String(s.delivery_type) === '12' ? 'Express' : 'Regular'} · ${Number(s.default_weight) || 0.5} kg`
+      : 'Pickup store, delivery type, parcel weight, note for rider';
     document.querySelector('[data-step="webhook"] [data-summary]').innerHTML = webhookLive() ? '<span class="live" style="margin:0"><i></i>Live — statuses update instantly</span>' : 'Pathao tells ShipBridge the moment a parcel moves';
     $$('#env-seg button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.env === (state.envDraft || s.pathao_env))));
     const wh = state.boot.pathaoWebhook || {};
@@ -728,7 +731,7 @@
     const steps = [
       { key: 'sf-account', done: sfConnected() },
       { key: 'sf-webhook', done: webhookLive('steadfast') },
-      { key: 'sf-default', done: defKey() === 'steadfast' },
+      { key: 'sf-delivery', done: sfConnected() },
     ];
     const done = steps.filter((x) => x.done).length, pct = Math.round((done / steps.length) * 100);
     // Fetch the balance once per visit (Steadfast rate-limits failed logins, so not on every render).
@@ -753,7 +756,7 @@
       el.classList.toggle('done', x.done); el.classList.toggle('open', isOpen);
       el.classList.toggle('attention', !x.done && x.key === firstOpen);
       el.querySelector('.step-dot').textContent = x.done ? '' : String(i + 1);
-      el.querySelector('.step-act').textContent = isOpen ? 'Close' : x.done ? (x.key === 'sf-account' ? 'Edit' : 'View') : 'Set up';
+      el.querySelector('.step-act').textContent = isOpen ? 'Close' : x.done ? (x.key === 'sf-webhook' ? 'View' : 'Edit') : 'Set up';
       el.querySelector('.step-row').setAttribute('aria-expanded', String(isOpen));
     });
     document.querySelector('[data-step="sf-account"] [data-summary]').textContent = sfConnected() ? `API key ${String(sf.api_key).slice(0, 6)}… · connected`
@@ -761,17 +764,14 @@
     $('sf-auth-error').innerHTML = sfRejected() ? `<b>Steadfast bookings are paused.</b> ${esc(sf.auth_error)}. ShipBridge stopped calling Steadfast so your key doesn't get locked out. When it's fixed, click Save &amp; connect.` : '';
     show($('sf-auth-error'), sfRejected());
     document.querySelector('[data-step="sf-webhook"] [data-summary]').innerHTML = webhookLive('steadfast') ? '<span class="live" style="margin:0"><i></i>Live — statuses update instantly</span>' : 'Steadfast tells ShipBridge the moment a parcel moves';
-    document.querySelector('[data-step="sf-default"] [data-summary]').textContent = defKey() === 'steadfast' ? 'New orders go to Steadfast' : `New orders go to ${cname(defKey())}`;
+    document.querySelector('[data-step="sf-delivery"] [data-summary]').textContent = S().default_note ? `Note for rider: ${S().default_note}` : 'Note for rider';
+    if (document.activeElement !== $('sf_default_note')) setVal('sf_default_note', S().default_note);
     if (document.activeElement !== $('sf_api_key')) setVal('sf_api_key', sf.api_key);
     $('sf_secret_key').placeholder = sf.has_secret ? '•••••••• saved' : '';
     setVal('sf_wh_url', wh.url); setVal('sf_wh_token', wh.token);
     show($('sf-disconnect'), sfConnected() || sfRejected());
     $('sf-wh-state').innerHTML = wh.live ? '<span class="ok-line"><span class="live" style="margin:0"><i></i></span>Connected — delivery status updates the moment Steadfast reports it.</span>'
       : sfConnected() ? '<span class="wait-line">Waiting for the first update from Steadfast.</span>' : '';
-    $('sf-default-text').textContent = defKey() === 'steadfast'
-      ? 'Steadfast is your default: the Send buttons and auto-send use it. You can still pick Pathao for any order from the courier menu.'
-      : 'Make Steadfast the courier used by the Send buttons and auto-send. You can still pick another courier for any order.';
-    $('sf-make-default').disabled = !sfConnected() || defKey() === 'steadfast';
   }
   async function saveSteadfast() {
     const key = $('sf_api_key').value.trim(), secret = $('sf_secret_key').value.trim();
@@ -788,7 +788,9 @@
   }
   function gotoSection(sec) {
     state.settingsTab = 'couriers';
-    state.courierView = /^sf-/.test(sec) ? 'steadfast' : ['account', 'store', 'webhook'].includes(sec) ? 'pathao' : state.courierView;
+    if (sec === 'store') sec = 'delivery';
+    state.courierView = /^sf-/.test(sec) ? 'steadfast' : ['account', 'webhook', 'delivery'].includes(sec) ? 'pathao' : state.courierView;
+    if (sec === 'shopify') sec = 'defaults'; // Shopify updates now live in the right-hand column
     state.section = sec === 'defaults' ? null : sec;
     fillAccount();
     if (state.page !== 'couriers') navigate('/couriers'); else renderCouriers();
@@ -997,7 +999,7 @@
     const per = t.closest('[data-period]');
     if (per) { state.period = per.dataset.period; renderBilling(); return; }
 
-    const b = t.closest('#send-new,#bulk-default,#save-connection,#save-webhook,#sf-save,#sf-disconnect,#sf-make-default,[data-plan],[data-downgrade]');
+    const b = t.closest('#send-new,#bulk-default,#save-connection,#save-webhook,#sf-save,#sf-disconnect,[data-plan],[data-downgrade]');
     if (!b) return;
     try {
       if (b.id === 'send-new') {
@@ -1008,7 +1010,6 @@
       if (b.id === 'bulk-default') return await busy(b, () => sendOrders([...state.selected], S().default_courier || 'pathao'));
       if (b.id === 'save-connection') return await busy(b, saveConnection);
       if (b.id === 'sf-save') return await busy(b, saveSteadfast);
-      if (b.id === 'sf-make-default') return await busy(b, () => savePrefs({ default_courier: 'steadfast' }));
       if (b.id === 'sf-disconnect') {
         if (!confirm('Disconnect Steadfast? Orders already sent keep their tracking. If Steadfast is your default, Pathao becomes the default and auto-send turns off.')) return;
         return await busy(b, async () => { apply(await api('/settings', { method: 'POST', body: { steadfast_disconnect: true } })); state.sfBalance = null; toast('Steadfast disconnected'); renderAll(); });
@@ -1045,12 +1046,13 @@
       api('/settings', { method: 'POST', body: { pathao_store_id: el.value, pathao_store_name: name } }).then((r) => { apply(r); toast('Pickup store saved'); renderAll(); }).catch((e) => toast(e.message, true));
     }
   });
-  ['default_weight', 'default_note'].forEach((id) => $(id).addEventListener('input', () => {
+  // Note for rider appears on both couriers' Delivery settings (one shared value).
+  ['default_weight', 'default_note', 'sf_default_note'].forEach((id) => $(id).addEventListener('input', () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       const w = Number($('default_weight').value);
       if (id === 'default_weight' && !(w >= 0.5 && w <= 10)) { $('prefs-state').textContent = 'Weight must be 0.5–10 kg'; return; }
-      savePrefs(id === 'default_weight' ? { default_weight: w } : { default_note: $('default_note').value }, true);
+      savePrefs(id === 'default_weight' ? { default_weight: w } : { default_note: $(id).value }, true);
     }, 700);
   }));
   $('search').addEventListener('input', (e) => { state.search = e.target.value; renderRows(); });

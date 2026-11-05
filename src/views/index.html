@@ -122,7 +122,7 @@
           <div class="card cx-hero" id="cx-hero"></div>
 
           <div class="step" data-step="account">
-            <button class="step-row" data-toggle-step="account"><span class="step-dot"></span><span class="step-text"><b>Pathao account</b><span class="meta" data-summary></span></span><span class="step-act"></span></button>
+            <button class="step-row" data-toggle-step="account"><span class="step-dot"></span><span class="step-text"><b>API configuration</b><span class="meta" data-summary></span></span><span class="step-act"></span></button>
             <div class="step-body">
               <div class="seg" role="radiogroup" aria-label="Pathao environment" id="env-seg">
                 <button role="radio" data-env="production">Live</button><button role="radio" data-env="sandbox">Test (sandbox)</button>
@@ -138,16 +138,8 @@
             </div>
           </div>
 
-          <div class="step" data-step="store">
-            <button class="step-row" data-toggle-step="store"><span class="step-dot"></span><span class="step-text"><b>Pickup store</b><span class="meta" data-summary></span></span><span class="step-act"></span></button>
-            <div class="step-body">
-              <label class="field"><span>Riders collect parcels from</span><select id="pathao_store_id"><option value="">Connect your account first</option></select></label>
-              <div class="sec-foot"><button class="btn" id="reload-stores">Reload stores</button></div>
-            </div>
-          </div>
-
           <div class="step" data-step="webhook">
-            <button class="step-row" data-toggle-step="webhook"><span class="step-dot"></span><span class="step-text"><b>Live delivery updates</b><span class="meta" data-summary>Pathao tells ShipBridge the moment a parcel moves</span></span><span class="step-act"></span></button>
+            <button class="step-row" data-toggle-step="webhook"><span class="step-dot"></span><span class="step-text"><b>Webhook configuration</b><span class="meta" data-summary>Pathao tells ShipBridge the moment a parcel moves</span></span><span class="step-act"></span></button>
             <div class="step-body">
               <div class="field"><span>Callback URL</span><div class="copy"><input id="wh_url" readonly /><button class="btn" id="copy-url"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h9"/></svg>Copy</button></div></div>
               <label class="field"><span>Secret key (same as in Pathao)</span><input id="wh_secret" autocomplete="off" /></label>
@@ -157,14 +149,18 @@
             </div>
           </div>
 
-          <div class="step" data-step="shopify">
-            <button class="step-row" data-toggle-step="shopify"><span class="step-dot"></span><span class="step-text"><b>Update orders inside Shopify</b><span class="meta">Fulfilled with tracking link, then Picked up → In transit → Delivered</span></span><span class="step-act"></span></button>
+          <div class="step" data-step="delivery">
+            <button class="step-row" data-toggle-step="delivery"><span class="step-dot"></span><span class="step-text"><b>Delivery settings</b><span class="meta" data-summary></span></span><span class="step-act"></span></button>
             <div class="step-body">
-              <div id="perm-body"></div>
-              <label class="switch-row"><span><b>Update fulfillment and delivery status</b><small>Shown on the order timeline and the customer's order page</small></span><input type="checkbox" role="switch" id="sync_fulfillment" /><i aria-hidden="true"></i></label>
-              <div class="pref"><b>Mark the Shopify order fulfilled</b>
-                <div class="seg" role="radiogroup" aria-label="Mark fulfilled" id="when-seg"><button role="radio" data-when="booked">When sent</button><button role="radio" data-when="picked">When picked up</button></div></div>
-              <label class="switch-row"><span><b>Email the customer a tracking link</b><small>Shopify sends its shipping confirmation</small></span><input type="checkbox" role="switch" id="notify_customer" /><i aria-hidden="true"></i></label>
+              <label class="field"><span>Pickup store · riders collect parcels from</span><select id="pathao_store_id"><option value="">Connect your account first</option></select></label>
+              <div class="sec-foot" style="margin-top:8px"><button class="btn" id="reload-stores">Reload stores</button></div>
+              <div class="pref"><b>Delivery type</b>
+                <div class="seg" role="radiogroup" aria-label="Delivery type" id="speed-seg"><button role="radio" data-speed="48">Regular</button><button role="radio" data-speed="12">Express</button></div></div>
+              <div class="grid2">
+                <label class="field"><span>Parcel weight (kg)</span><input id="default_weight" type="number" min="0.5" max="10" step="0.5" /><small class="hint">Used when a product has no weight</small></label>
+                <label class="field"><span>Note for rider</span><input id="default_note" data-note maxlength="200" placeholder="e.g. Call before delivery" /><small class="hint">Used when the order has no note</small></label>
+              </div>
+              <p class="hint" id="prefs-state-pathao"></p>
             </div>
           </div>
         </section>
@@ -173,7 +169,7 @@
           <div class="card cx-hero" id="sf-hero"></div>
 
           <div class="step" data-step="sf-account">
-            <button class="step-row" data-toggle-step="sf-account"><span class="step-dot"></span><span class="step-text"><b>Steadfast account</b><span class="meta" data-summary></span></span><span class="step-act"></span></button>
+            <button class="step-row" data-toggle-step="sf-account"><span class="step-dot"></span><span class="step-text"><b>API configuration</b><span class="meta" data-summary></span></span><span class="step-act"></span></button>
             <div class="step-body">
               <div class="grid2">
                 <label class="field"><span>API key</span><input id="sf_api_key" autocomplete="off" spellcheck="false" /></label>
@@ -186,7 +182,7 @@
           </div>
 
           <div class="step" data-step="sf-webhook">
-            <button class="step-row" data-toggle-step="sf-webhook"><span class="step-dot"></span><span class="step-text"><b>Live delivery updates</b><span class="meta" data-summary>Steadfast tells ShipBridge the moment a parcel moves</span></span><span class="step-act"></span></button>
+            <button class="step-row" data-toggle-step="sf-webhook"><span class="step-dot"></span><span class="step-text"><b>Webhook configuration</b><span class="meta" data-summary>Steadfast tells ShipBridge the moment a parcel moves</span></span><span class="step-act"></span></button>
             <div class="step-body">
               <div class="field"><span>Callback URL</span><div class="copy"><input id="sf_wh_url" readonly /><button class="btn" data-copy="sf_wh_url">Copy</button></div></div>
               <div class="field"><span>Auth token</span><div class="copy"><input id="sf_wh_token" readonly /><button class="btn" data-copy="sf_wh_token">Copy</button></div></div>
@@ -195,11 +191,11 @@
             </div>
           </div>
 
-          <div class="step" data-step="sf-default">
-            <button class="step-row" data-toggle-step="sf-default"><span class="step-dot"></span><span class="step-text"><b>Default courier</b><span class="meta" data-summary></span></span><span class="step-act"></span></button>
+          <div class="step" data-step="sf-delivery">
+            <button class="step-row" data-toggle-step="sf-delivery"><span class="step-dot"></span><span class="step-text"><b>Delivery settings</b><span class="meta" data-summary></span></span><span class="step-act"></span></button>
             <div class="step-body">
-              <p class="meta" id="sf-default-text"></p>
-              <div class="sec-foot"><button class="btn primary" id="sf-make-default">Make Steadfast the default</button></div>
+              <label class="field"><span>Note for rider</span><input id="sf_default_note" data-note maxlength="200" placeholder="e.g. Call before delivery" /><small class="hint">Used when the order has no note (same note for every courier)</small></label>
+              <p class="hint">Product names and quantities are sent to Steadfast as the item description. The rider collects what the customer still owes in Shopify.</p>
             </div>
           </div>
         </section>
@@ -219,10 +215,12 @@
             <div class="seg" role="radiogroup" aria-label="Default courier" id="def-seg"></div></div>
           <label class="switch-row"><span><b>Send new orders automatically</b><small id="auto-hint">Sent to your default courier within seconds</small></span><input type="checkbox" role="switch" id="auto_send" /><i aria-hidden="true"></i></label>
           <label class="switch-row"><span><b>Hold high-risk orders</b><small>Fraud-flagged orders wait for you</small></span><input type="checkbox" role="switch" id="hold_risky" /><i aria-hidden="true"></i></label>
-          <div class="pref"><b>Pathao delivery type</b>
-            <div class="seg" role="radiogroup" aria-label="Delivery type" id="speed-seg"><button role="radio" data-speed="48">Regular</button><button role="radio" data-speed="12">Express</button></div></div>
-          <label class="field"><span>Parcel weight (kg)</span><input id="default_weight" type="number" min="0.5" max="10" step="0.5" /><small class="hint">Used when a product has no weight</small></label>
-          <label class="field"><span>Note for rider</span><input id="default_note" maxlength="200" placeholder="e.g. Call before delivery" /><small class="hint">Used when the order has no note</small></label>
+          <div class="rules-sub">Update orders inside Shopify</div>
+              <div id="perm-body"></div>
+              <label class="switch-row"><span><b>Update fulfillment and status</b><small>Shown on the order timeline and the customer's order page</small></span><input type="checkbox" role="switch" id="sync_fulfillment" /><i aria-hidden="true"></i></label>
+              <div class="pref"><b>Mark the Shopify order fulfilled</b>
+                <div class="seg" role="radiogroup" aria-label="Mark fulfilled" id="when-seg"><button role="radio" data-when="booked">When sent</button><button role="radio" data-when="picked">When picked up</button></div></div>
+              <label class="switch-row"><span><b>Email the customer a tracking link</b><small>Shopify sends its shipping confirmation</small></span><input type="checkbox" role="switch" id="notify_customer" /><i aria-hidden="true"></i></label>
         </aside>
       </div>
     </main>

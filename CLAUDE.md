@@ -62,6 +62,13 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   courier's status text for every courier (name predates multi-courier).
 - `settings.default_courier` drives Send buttons and auto-send.
 
+## Couriers page
+- Left: courier list. Main: hero + exactly three steps per courier, same names for every courier:
+  **API configuration**, **Webhook configuration**, **Delivery settings** (Pathao: pickup store,
+  delivery type, parcel weight, note; Steadfast: note). The note for rider is one shared setting.
+- Right column "Sending rules": default courier, auto-send, hold high-risk, and "Update orders
+  inside Shopify" (permissions box, sync toggle, when to fulfil, email customer).
+
 ## Dashboard tabs
 - All = every order (errors and cancelled included), newest first; other tabs filter.
 - Wording: an order handed to a courier is "Sent to <Courier>" (pill, order panel), the tab is
