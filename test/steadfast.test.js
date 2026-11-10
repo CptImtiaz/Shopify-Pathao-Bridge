@@ -540,3 +540,29 @@ test('tracker rests 5 minutes when no parcel needs asking, and wakes on a new bo
   await a.api('/orders/send', { method: 'POST', body: { ids: ['990'], courier: 'steadfast' } });
   assert.equal(await a.tracker.tick(t0 + 5 * 60000 + 2000), 1, 'a booking wakes it at once');
 });
+
+test('pathao disconnect forgets the account; Steadfast takes over as default when connected', async (t) => {
+  const a = await steadfastShop(t);
+  await a.api('/settings', { method: 'POST', body: { pathao_client_id: 'c', pathao_client_secret: 's', pathao_username: 'u@shop.com', pathao_password: 'p', pathao_store_id: 77, pathao_store_name: 'Dhaka' } });
+  await a.api('/settings', { method: 'POST', body: { default_courier: 'pathao', auto_send: true } });
+  const d = await a.api('/settings', { method: 'POST', body: { pathao_disconnect: true } });
+  assert.equal(d.status, 200, d.data.error);
+  assert.equal(d.data.settings.connected, false);
+  assert.equal(d.data.settings.default_courier, 'steadfast');
+  assert.equal(d.data.settings.auto_send, true);
+  const s = await a.db.getSettings(SHOP);
+  assert.deepEqual([s.pathao_client_id, s.pathao_username, s.pathao_client_secret_enc, s.pathao_password_enc, s.pathao_token_enc, s.pathao_store_id], [null, null, null, null, null, null]);
+});
+
+test('pathao disconnect with no other courier turns auto-send off', async (t) => {
+  const a = await startApp();
+  t.after(() => a.close());
+  await a.api('/bootstrap');
+  await a.api('/settings', { method: 'POST', body: { pathao_client_id: 'c', pathao_client_secret: 's', pathao_username: 'u@shop.com', pathao_password: 'p', pathao_store_id: 77 } });
+  await a.api('/settings', { method: 'POST', body: { auto_send: true } });
+  const d = await a.api('/settings', { method: 'POST', body: { pathao_disconnect: true } });
+  assert.equal(d.status, 200, d.data.error);
+  assert.equal(d.data.settings.default_courier, 'pathao');
+  assert.equal(d.data.settings.auto_send, false);
+  assert.equal(d.data.settings.connected, false);
+});

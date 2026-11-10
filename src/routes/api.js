@@ -227,6 +227,19 @@ function makeApiRouter({ redact = (t) => String(t), config, db, tokens, admin, p
     const credsChanged = ['pathao_env', 'pathao_client_id', 'pathao_username', 'pathao_client_secret_enc', 'pathao_password_enc']
       .some((k) => k in f && f[k] !== current[k]);
     if (credsChanged) Object.assign(f, { pathao_token_enc: null, pathao_refresh_enc: null, pathao_token_expires_at: null });
+    if (b.pathao_disconnect) {
+      // Forget the Pathao account (login, tokens, pickup store). Parcels already sent keep their tracking.
+      Object.assign(f, {
+        pathao_client_id: null, pathao_username: null, pathao_client_secret_enc: null, pathao_password_enc: null,
+        pathao_token_enc: null, pathao_refresh_enc: null, pathao_token_expires_at: null,
+        pathao_store_id: null, pathao_store_name: null,
+      });
+      // Don't leave auto-send pointing at a courier that can no longer book: use Steadfast if it is connected.
+      if ((current.default_courier || 'pathao') === 'pathao') {
+        if (courierReady({ ...current, ...f }, 'steadfast')) f.default_courier = 'steadfast';
+        else f.auto_send = false;
+      }
+    }
 
     // ---- Steadfast ----
     // Keys are saved through /steadfast/connect (checked with Steadfast first).
@@ -322,7 +335,7 @@ function makeApiRouter({ redact = (t) => String(t), config, db, tokens, admin, p
       const next = { ...current, ...f };
       const def = next.default_courier || 'pathao';
       const ready = courierReady(next, def);
-      if (!ready && b.default_courier !== undefined && !b.steadfast_disconnect) {
+      if (!ready && b.default_courier !== undefined && !b.steadfast_disconnect && !b.pathao_disconnect) {
         throw Object.assign(new Error(`Connect ${def === 'steadfast' ? 'Steadfast' : 'Pathao (account and pickup store)'} before making it your default courier`), { status: 400 });
       }
       if (!ready && f.auto_send) {

@@ -99,6 +99,7 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   courier sends anything (pushed via /api/events). Only the wrong-token warning is shown.
 - Hero facts: Pathao = Pickup store, Default, Auto-send, Delivery type; Steadfast = Balance, Default,
   Auto-send, Delivery type (Home/Point). No "Updates" tile (owner's request); Live is the pill in the title.
+- API configuration has a Disconnect button for both couriers (`pathao_disconnect` / `steadfast_disconnect`). Pathao's clears login, tokens and pickup store; if Pathao was default, Steadfast becomes default when connected, else auto-send turns off. Sent parcels keep tracking.
 - Auto-send and the default courier require a *connected* courier (Pathao: account + pickup
   store; Steadfast: keys, not paused). Orders auto-sent while the default isn't connected are
   skipped with "Auto-send: <Courier> (your default courier) is not connected".

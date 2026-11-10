@@ -757,6 +757,7 @@
       el.querySelector('.step-row').setAttribute('aria-expanded', String(isOpen));
     });
     document.querySelector('[data-step="account"] [data-summary]').textContent = s.connected ? `${s.pathao_username} · connected` : 'Client ID, secret, merchant email and password';
+    show($('pathao-disconnect'), Boolean(s.connected || s.pathao_client_id));
     document.querySelector('[data-step="delivery"] [data-summary]').textContent = s.pathao_store_id
       ? `${s.pathao_store_name || 'Pickup store #' + s.pathao_store_id} · ${String(s.delivery_type) === '12' ? 'Express' : 'Regular'} · ${Number(s.default_weight) || 0.5} kg${defKey() === 'pathao' ? ' · default' : ''}`
       : 'Pickup store, parcel weight, note, delivery type';
@@ -894,6 +895,7 @@
     if (s.pathao_store_id && !sel.querySelector(`option[value="${s.pathao_store_id}"]`)) {
       sel.innerHTML = `<option value="${esc(s.pathao_store_id)}">${esc(s.pathao_store_name || 'Pickup store #' + s.pathao_store_id)}</option>`;
     }
+    if (!s.pathao_store_id && !s.connected) sel.innerHTML = '<option value="">Connect your account first</option>';
     sel.value = s.pathao_store_id ? String(s.pathao_store_id) : '';
   }
   async function loadStores(keep) {
@@ -1077,7 +1079,7 @@
     const per = t.closest('[data-period]');
     if (per) { state.period = per.dataset.period; renderBilling(); return; }
 
-    const b = t.closest('#send-new,#bulk-default,#save-connection,#save-webhook,#sf-save-webhook,#sf-save,#sf-disconnect,[data-plan],[data-downgrade]');
+    const b = t.closest('#send-new,#bulk-default,#save-connection,#pathao-disconnect,#save-webhook,#sf-save-webhook,#sf-save,#sf-disconnect,[data-plan],[data-downgrade]');
     if (!b) return;
     try {
       if (b.id === 'send-new') {
@@ -1088,6 +1090,10 @@
       if (b.id === 'bulk-default') return await busy(b, () => sendOrders([...state.selected], S().default_courier || 'pathao'));
       if (b.id === 'save-connection') return await busy(b, saveConnection);
       if (b.id === 'sf-save') return await busy(b, saveSteadfast);
+      if (b.id === 'pathao-disconnect') {
+        if (!confirm('Disconnect Pathao? Orders already sent keep their tracking. If Pathao is your default, Steadfast becomes the default when it is connected; otherwise auto-send turns off.')) return;
+        return await busy(b, async () => { apply(await api('/settings', { method: 'POST', body: { pathao_disconnect: true } })); state.section = undefined; fillAccount(); toast('Pathao disconnected'); renderAll(); });
+      }
       if (b.id === 'sf-disconnect') {
         if (!confirm('Disconnect Steadfast? Orders already sent keep their tracking. If Steadfast is your default, Pathao becomes the default and auto-send turns off.')) return;
         return await busy(b, async () => { apply(await api('/settings', { method: 'POST', body: { steadfast_disconnect: true } })); state.sfBalance = null; toast('Steadfast disconnected'); renderAll(); });
