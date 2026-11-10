@@ -216,3 +216,5 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
 - Start-up warns if PATHAO_WEBHOOK_INTEGRATION_SECRET or ADMIN_PASSWORD is missing; required vars still stop start-up.
 - `POST /api/orders/refresh-active` removed (unused). No CORS headers sent (same-origin only). Postgres has no public
   port/domain on Railway (private network only).
+- Cost (2026-11-10): tracker `tick()` rests 5 min when no store has a parcel to ask about (`wake()` on any
+  `admin.forgetOrders`); Railway var `NODE_OPTIONS=--max-old-space-size=96` caps the app's memory.

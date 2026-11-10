@@ -529,3 +529,14 @@ test('the Steadfast API key never goes back to the browser; a blank field keeps 
   assert.equal(r.status, 200, r.data.error);
   assert.equal((await a.db.getSettings(SHOP)).steadfast_api_key, 'sf_key');
 });
+
+test('tracker rests 5 minutes when no parcel needs asking, and wakes on a new booking', async (t) => {
+  const a = await steadfastShop(t);
+  const t0 = Date.now();
+  assert.equal(await a.tracker.tick(t0), 0, 'nothing to check');
+  assert.equal(await a.tracker.tick(t0 + 60000), null, 'resting: no database query');
+  assert.equal(await a.tracker.tick(t0 + 5 * 60000 + 1), 0, 'looks again after 5 minutes');
+  a.fake.state.orders['990'] = gqlOrder(990);
+  await a.api('/orders/send', { method: 'POST', body: { ids: ['990'], courier: 'steadfast' } });
+  assert.equal(await a.tracker.tick(t0 + 5 * 60000 + 2000), 1, 'a booking wakes it at once');
+});

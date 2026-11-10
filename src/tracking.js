@@ -91,9 +91,23 @@ function makeTracker({ db, pathao, steadfast, fulfillment = null, admin = null, 
   }
 
   async function pollAll() {
-    for (const shop of await db.shopsWithActiveShipments()) {
+    const shops = await db.shopsWithActiveShipments();
+    for (const shop of shops) {
       await refreshActive(shop).catch((e) => log.warn(`[${shop}] status poll failed: ${e.message}`));
     }
+    return shops.length;
+  }
+
+  // Nothing to ask any courier: rest for 5 minutes instead of asking the database every minute.
+  // A new booking or order change wakes the tracker at once (wake() is called from app.js).
+  const IDLE_MS = 5 * 60 * 1000;
+  let idleUntil = 0;
+  const wake = () => { idleUntil = 0; };
+  async function tick(now = Date.now()) {
+    if (now < idleUntil) return null;
+    const n = await pollAll();
+    idleUntil = n ? 0 : now + IDLE_MS;
+    return n;
   }
 
   // Once per start: bring older finished parcels up to the COD standard in Shopify.
@@ -107,12 +121,12 @@ function makeTracker({ db, pathao, steadfast, fulfillment = null, admin = null, 
 
   function start(everyMs = 60 * 1000) {
     setTimeout(() => catchUp().catch((e) => log.warn(`Shopify catch-up failed: ${e.message}`)), 5000).unref?.();
-    const timer = setInterval(() => pollAll().catch((e) => log.warn(`status poll failed: ${e.message}`)), everyMs);
+    const timer = setInterval(() => tick().catch((e) => log.warn(`status poll failed: ${e.message}`)), everyMs);
     if (timer.unref) timer.unref();
     return timer;
   }
 
-  return { refreshShipment, refreshActive, refreshSoon, pollAll, start, catchUp };
+  return { refreshShipment, refreshActive, refreshSoon, pollAll, tick, wake, start, catchUp };
 }
 
 module.exports = { makeTracker, DONE, pathaoSlug };

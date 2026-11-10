@@ -69,6 +69,8 @@ function createApp({ config, pool, fetchImpl: rawFetch = fetch, log = console, d
   const steadfast = makeSteadfast({ config, cipher, db, fetchImpl });
   const shipping = makeShipping({ db, pathao, steadfast, admin, fulfillment, log });
   const tracker = makeTracker({ db, pathao, steadfast, fulfillment, admin, log });
+  // A booking or an order change may add a parcel to watch: end the tracker's idle rest.
+  { const forget = admin.forgetOrders; admin.forgetOrders = (...a) => { tracker.wake(); return forget(...a); }; }
   const notifier = makeNotifier({ db, cipher, smsClient: makeSmsClient({ fetchImpl, apiUrl: config.smsApiUrl }), log });
 
   const app = express();
