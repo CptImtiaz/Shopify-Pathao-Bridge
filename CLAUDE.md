@@ -16,7 +16,9 @@ publish it on the **Shopify App Store as a paid app** and make money from it
   - Service `shipbridge` (app) deploys from GitHub branch **`main`**; `railway.json` starts
     `node src/server.js` directly (clean SIGTERM shutdown, no npm noise) with the `/health` check.
   - Service `Postgres` (Railway template, volume in Singapore). Fresh, empty database.
-- Public URL: `https://shipbridge-production-7b96.up.railway.app` (also in `shopify.app.toml`).
+- Public URL: `https://autocourier.nimtechit.com` (custom domain since 2026-11-10; GoDaddy CNAME -> Railway; also in
+  `shopify.app.toml` and `APP_URL`). The old `https://shipbridge-production-7b96.up.railway.app` still answers; keep it
+  until every store has the new courier callback URLs and the new app version is released.
 - Required env vars: `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `ENCRYPTION_KEY` (64 hex),
   `APP_URL`, `DATABASE_URL` (`${{Postgres.DATABASE_URL}}`). Optional: `ADMIN_PASSWORD`,
   `BILLING_TEST`, `SMS_FEATURE`, `SUPPORT_EMAIL`, `SUPPORT_WHATSAPP`.

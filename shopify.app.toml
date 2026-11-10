@@ -3,7 +3,7 @@
 
 client_id = "3b858aa1ec536fea2e3c1086e4470115"
 name = "ShipBridge: BD Courier Sync"
-application_url = "https://shipbridge-production-7b96.up.railway.app"
+application_url = "https://autocourier.nimtechit.com"
 embedded = true
 
 [access_scopes]
@@ -12,7 +12,7 @@ embedded = true
 scopes = "read_orders,write_orders,read_fulfillments,write_fulfillments,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders"
 
 [auth]
-redirect_urls = [ "https://shipbridge-production-7b96.up.railway.app/auth/callback" ]
+redirect_urls = [ "https://autocourier.nimtechit.com/auth/callback" ]
 
 [webhooks]
 api_version = "2026-10"
