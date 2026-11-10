@@ -1,4 +1,4 @@
-/* ShipBridge embedded admin UI: Orders / Couriers / Billing / Support. Plain JS + App Bridge. */
+/* AutoCourier BD embedded admin UI: Orders / Couriers / Billing / Support. Plain JS + App Bridge. */
 (function () {
   'use strict';
 
@@ -187,7 +187,7 @@
   // ---------------- banners ----------------
   function renderBanners() {
     const b = state.boot, out = [];
-    if (b.webhooks && b.webhooks.ok === false) out.push(`<div class="banner bad"><b>New orders can't reach ShipBridge.</b> Shopify refused to set up order notifications: ${esc(b.webhooks.error)}</div>`);
+    if (b.webhooks && b.webhooks.ok === false) out.push(`<div class="banner bad"><b>New orders can't reach AutoCourier BD.</b> Shopify refused to set up order notifications: ${esc(b.webhooks.error)}</div>`);
     if (S().pathao_env === 'sandbox') out.push('<div class="banner warn">Pathao is in <b>test mode</b>: bookings go to the sandbox, not real riders.</div>');
     if (b.usage.limit && b.usage.used >= b.usage.limit) out.push(`<div class="banner bad">You've used all ${b.usage.limit} orders on your plan this month. <a href="/billing" data-link><b>Upgrade to keep sending</b></a></div>`);
     $('banners').innerHTML = out.join('');
@@ -390,7 +390,7 @@
     if (!st) { $('ov-kpis').innerHTML = '<div class="card kpi skeleton"></div>'.repeat(6); return; }
     const sr = st.successRate;
     const srCol = sr == null ? '#9ca3af' : sr >= 85 ? '#22c55e' : sr >= 65 ? '#f59e0b' : '#ef4444';
-    $('ov-sub').textContent = `Parcels sent through ShipBridge ${rangeText(state.range)}`;
+    $('ov-sub').textContent = `Parcels sent through AutoCourier BD ${rangeText(state.range)}`;
     $('dp-label').textContent = rangeLabel(state.range);
     const fr = fraudSummary();
     const kpi = (cls, icon, label, value, foot) => `<div class="card kpi k-${cls}"><div class="kpi-top"><span class="k-icon"><svg viewBox="0 0 24 24" aria-hidden="true">${icon}</svg></span><span class="k-label">${label}</span></div><b class="k-value">${value}</b>${foot}</div>`;
@@ -760,7 +760,7 @@
     document.querySelector('[data-step="delivery"] [data-summary]').textContent = s.pathao_store_id
       ? `${s.pathao_store_name || 'Pickup store #' + s.pathao_store_id} · ${String(s.delivery_type) === '12' ? 'Express' : 'Regular'} · ${Number(s.default_weight) || 0.5} kg${defKey() === 'pathao' ? ' · default' : ''}`
       : 'Pickup store, parcel weight, note, delivery type';
-    document.querySelector('[data-step="webhook"] [data-summary]').innerHTML = webhookLive() ? '<span class="live" style="margin:0"><i></i>Live</span>' : webhookSaved('pathao') ? 'Saved' : 'Pathao tells ShipBridge the moment a parcel moves';
+    document.querySelector('[data-step="webhook"] [data-summary]').innerHTML = webhookLive() ? '<span class="live" style="margin:0"><i></i>Live</span>' : webhookSaved('pathao') ? 'Saved' : 'Pathao tells AutoCourier BD the moment a parcel moves';
     const wh = state.boot.pathaoWebhook || {};
     $('wh-state').innerHTML = webhookState(wh, 'Pathao', 'secret key', 'Pathao Merchant Panel');
 
@@ -835,9 +835,9 @@
     });
     document.querySelector('[data-step="sf-account"] [data-summary]').textContent = sfConnected() ? `API key ${sf.api_key_hint || ''} · connected`
       : sfRejected() ? 'Steadfast refused the connection, see below' : 'API key and secret key';
-    $('sf-auth-error').innerHTML = sfRejected() ? `<b>Steadfast bookings are paused.</b> ${esc(sf.auth_error)}. ShipBridge stopped calling Steadfast so your key doesn't get locked out. When it's fixed, click Save &amp; connect.` : '';
+    $('sf-auth-error').innerHTML = sfRejected() ? `<b>Steadfast bookings are paused.</b> ${esc(sf.auth_error)}. AutoCourier BD stopped calling Steadfast so your key doesn't get locked out. When it's fixed, click Save &amp; connect.` : '';
     show($('sf-auth-error'), sfRejected());
-    document.querySelector('[data-step="sf-webhook"] [data-summary]').innerHTML = webhookLive('steadfast') ? '<span class="live" style="margin:0"><i></i>Live</span>' : webhookSaved('steadfast') ? 'Saved' : 'Steadfast tells ShipBridge the moment a parcel moves';
+    document.querySelector('[data-step="sf-webhook"] [data-summary]').innerHTML = webhookLive('steadfast') ? '<span class="live" style="margin:0"><i></i>Live</span>' : webhookSaved('steadfast') ? 'Saved' : 'Steadfast tells AutoCourier BD the moment a parcel moves';
     document.querySelector('[data-step="sf-delivery"] [data-summary]').textContent = [
       sf.delivery_type === 1 ? 'Point delivery' : 'Home delivery',
       defKey() === 'steadfast' ? 'default' : null,
@@ -855,8 +855,8 @@
   // Only a real problem is shown under the webhook: the courier calling with a different secret/token.
   function webhookState(wh, name, secretWord, portal) {
     if (wh.refusedAt && (!wh.lastAt || new Date(wh.refusedAt) > new Date(wh.lastAt))) {
-      if (!secretWord) return `<span class="bad-line"><b>${name} is calling an old ShipBridge address.</b> Copy the Callback URL above into the ${name} portal again and save it there.</span>`;
-      return `<span class="bad-line"><b>${name} is calling ShipBridge with a different ${secretWord}.</b> Make the ${secretWord} here and in the ${portal} the same, then save both.</span>`;
+      if (!secretWord) return `<span class="bad-line"><b>${name} is calling an old AutoCourier BD address.</b> Copy the Callback URL above into the ${name} portal again and save it there.</span>`;
+      return `<span class="bad-line"><b>${name} is calling AutoCourier BD with a different ${secretWord}.</b> Make the ${secretWord} here and in the ${portal} the same, then save both.</span>`;
     }
     return '';
   }
@@ -967,7 +967,7 @@
     }).join('');
     const h = b.history || [];
     $('history').innerHTML = h.length ? `<div class="wrap"><table><thead><tr><th>Plan</th><th>Price</th><th>Status</th><th>Started</th><th>Renews / ended</th></tr></thead><tbody>
-      ${h.map((x) => `<tr><td><b>${esc(x.name.replace(/^ShipBridge /, ''))}</b>${x.test ? ' <span class="pill p-check">Test</span>' : ''}</td><td>${x.price != null ? `${usd(x.price)} / ${x.interval === 'yearly' ? 'year' : 'month'}` : '—'}</td>
+      ${h.map((x) => `<tr><td><b>${esc(x.name.replace(/^(ShipBridge|AutoCourier BD) /, ''))}</b>${x.test ? ' <span class="pill p-check">Test</span>' : ''}</td><td>${x.price != null ? `${usd(x.price)} / ${x.interval === 'yearly' ? 'year' : 'month'}` : '—'}</td>
         <td><span class="pill ${x.status === 'ACTIVE' ? 'p-safe' : 'p-wait'}">${esc(x.status.charAt(0) + x.status.slice(1).toLowerCase())}</span></td><td>${esc(dateOnly(x.createdAt))}</td><td>${esc(dateOnly(x.currentPeriodEnd))}</td></tr>`).join('')}
       </tbody></table></div><p class="hint" style="margin-top:10px">Invoices and receipts are on your Shopify bill.</p>`
       : `<p class="meta">No paid plans yet. Charges appear on your <a href="${esc(b.shopifyBillingUrl)}" target="_top">Shopify bill</a>.</p>`;
@@ -1208,7 +1208,7 @@
     setOverviewOpen(ovOpen);
     try { embedded = window.top !== window.self; } catch (e) { embedded = true; }
     if (!embedded || !(window.shopify && shopify.idToken)) {
-      $('banners').innerHTML = '<div class="banner info"><b>Open ShipBridge from your Shopify admin.</b>&nbsp;Go to your store admin → Apps → ShipBridge. If it isn\'t listed, install it first.</div>';
+      $('banners').innerHTML = '<div class="banner info"><b>Open AutoCourier BD from your Shopify admin.</b>&nbsp;Go to your store admin → Apps → AutoCourier BD. If it isn\'t listed, install it first.</div>';
       $$('.page').forEach((p) => { p.hidden = true; });
       return;
     }
@@ -1217,7 +1217,7 @@
     const ordersP = state.page === 'orders' ? api('/orders') : null;
     if (ordersP) ordersP.catch(() => {});
     try { await refreshBoot(); fillAccount(); }
-    catch (e) { $('banners').innerHTML = `<div class="banner bad"><b>Could not load ShipBridge.</b>&nbsp;${esc(e.message)}</div>`; return; }
+    catch (e) { $('banners').innerHTML = `<div class="banner bad"><b>Could not load AutoCourier BD.</b>&nbsp;${esc(e.message)}</div>`; return; }
     if (state.page === 'orders') loadOrders(ordersP);
     startLive();
     if (state.page === 'billing') loadBilling();

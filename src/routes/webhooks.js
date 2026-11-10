@@ -145,8 +145,8 @@ function makeWebhookRouter({ config, db, admin, shipping, fulfillment = null, st
     const shop = req.params.shop;
     const row = isValidShop(shop) ? await db.getShop(shop) : null;
     if (!row || row.uninstalled_at) return res.status(404).type('text').send('Unknown shop');
-    res.type('html').send(`<!doctype html><meta charset="utf-8"><title>ShipBridge</title><body style="font:15px system-ui;padding:40px;color:#14161a">
-      <h2 style="margin:0 0 8px">✓ ShipBridge is ready for ${name} updates</h2>
+    res.type('html').send(`<!doctype html><meta charset="utf-8"><title>AutoCourier BD</title><body style="font:15px system-ui;padding:40px;color:#14161a">
+      <h2 style="margin:0 0 8px">✓ AutoCourier BD is ready for ${name} updates</h2>
       <p>This is the webhook address for <b>${shop}</b>. ${name} sends delivery updates here when a parcel's status changes.</p>
       <p style="color:#6b7280">Nothing else to do on this page.</p></body>`);
   };

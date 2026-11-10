@@ -27,7 +27,7 @@ test('billing page data: plans, usage, history; yearly subscriptions use the yea
 
   await a.api('/billing/subscribe', { method: 'POST', body: { plan: 'starter', interval: 'yearly' } });
   const sub = a.fake.state.lastSubscription;
-  assert.equal(sub.name, 'ShipBridge Starter (yearly)');
+  assert.equal(sub.name, 'AutoCourier BD Starter (yearly)');
   assert.equal(sub.lineItems[0].plan.appRecurringPricingDetails.interval, 'ANNUAL');
   assert.equal(sub.lineItems[0].plan.appRecurringPricingDetails.price.amount, 49.9);
 

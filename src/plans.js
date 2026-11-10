@@ -8,7 +8,7 @@ const PLANS = {
     price: 0,
     yearlyPrice: 0,
     monthlyOrderLimit: 50,
-    tagline: 'For trying ShipBridge',
+    tagline: 'For trying AutoCourier BD',
     features: ['50 orders a month', 'Auto-send, bulk send & retry', 'Fraud check on every order', 'Live delivery status in Shopify'],
   },
   starter: {
@@ -37,13 +37,19 @@ const PLANS = {
 const INTERVALS = { monthly: 'EVERY_30_DAYS', yearly: 'ANNUAL' };
 
 // Name used for the Shopify subscription. Must stay stable: we match on it.
-function subscriptionName(planKey, interval = 'monthly') {
-  return `ShipBridge ${PLANS[planKey].name}${interval === 'yearly' ? ' (yearly)' : ''}`;
+// The app was called ShipBridge until 2026-11-10; subscriptions made under that name still count.
+const BRAND = 'AutoCourier BD';
+const OLD_BRANDS = ['ShipBridge'];
+function subscriptionName(planKey, interval = 'monthly', brand = BRAND) {
+  return `${brand} ${PLANS[planKey].name}${interval === 'yearly' ? ' (yearly)' : ''}`;
 }
 
 function planFromSubscriptionName(name) {
   for (const plan of Object.values(PLANS)) {
-    if (plan.price > 0 && (subscriptionName(plan.key) === name || subscriptionName(plan.key, 'yearly') === name)) return plan.key;
+    if (plan.price <= 0) continue;
+    for (const brand of [BRAND, ...OLD_BRANDS]) {
+      if (subscriptionName(plan.key, 'monthly', brand) === name || subscriptionName(plan.key, 'yearly', brand) === name) return plan.key;
+    }
   }
   return 'free';
 }

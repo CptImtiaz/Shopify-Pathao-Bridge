@@ -1,4 +1,4 @@
-# ShipBridge: BD Courier Sync (Shopify app)
+# AutoCourier BD (Shopify app)
 
 A public Shopify app by AutoCourier BD that sends Shopify orders to Bangladeshi couriers (**Pathao** and **Steadfast**; RedX, Paperfly, Carrybee and Bahok planned): automatically when an order is placed, or in bulk from a dashboard inside Shopify admin. It tracks every parcel live and keeps the Shopify order in step (fulfilled with tracking, paid on delivery, unfulfilled if returned), with a fraud check on every order. Built from the original `Shopify-Pathao-Bridge` single-store script.
 

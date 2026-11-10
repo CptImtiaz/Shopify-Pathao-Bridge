@@ -14,7 +14,7 @@ async function main() {
   await db.migrate();
   const poller = tracker.start(); // checks parcels still on the way every minute
   const server = app.listen(config.port, () => {
-    console.log(`ShipBridge running on port ${config.port} (${config.appUrl})`);
+    console.log(`AutoCourier BD running on port ${config.port} (${config.appUrl})`);
   });
 
   // Railway stops the old copy with SIGTERM on every deploy: finish open requests, then exit cleanly.

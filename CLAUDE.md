@@ -1,4 +1,4 @@
-# ShipBridge: BD Courier Sync — project notes for Claude
+# AutoCourier BD (was ShipBridge until 2026-11-10) — project notes for Claude
 
 ## Goal
 Shopify app that sends Shopify orders to Pathao Courier (Bangladesh). The owner wants to
@@ -220,3 +220,6 @@ in `src/couriers/`, not separate services — cheaper and faster for HTTP-only c
   port/domain on Railway (private network only).
 - Cost (2026-11-10): tracker `tick()` rests 5 min when no store has a parcel to ask about (`wake()` on any
   `admin.forgetOrders`); Railway var `NODE_OPTIONS=--max-old-space-size=96` caps the app's memory.
+- Name (2026-11-10): the app is "AutoCourier BD" everywhere merchants read it (toml, UI, privacy, subscription names
+  `AutoCourier BD <Plan>`); old `ShipBridge <Plan>` subscriptions still map to their plan. Provider in the privacy
+  policy = NIMTECH. Internal names stay: Railway project/service `shipbridge`, repo, `SHOPIFY_APP_HANDLE`.

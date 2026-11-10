@@ -2,7 +2,7 @@
 # Hosted on Railway (Singapore).
 
 client_id = "3b858aa1ec536fea2e3c1086e4470115"
-name = "ShipBridge: BD Courier Sync"
+name = "AutoCourier BD"
 application_url = "https://autocourier.nimtechit.com"
 embedded = true
 

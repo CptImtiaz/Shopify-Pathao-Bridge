@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="shopify-api-key" content="%SHOPIFY_API_KEY%" />
   <meta name="logo-version" content="%LOGO_VERSION%" />
-  <title>ShipBridge</title>
+  <title>AutoCourier BD</title>
   <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
   <!-- Inter is served from this app (no Google Fonts call, so merchants' IPs aren't shared) -->
   <link rel="preload" href="/assets/fonts/inter-latin-400.woff2" as="font" type="font/woff2" crossorigin />
@@ -41,7 +41,7 @@
 
       <section class="overview" aria-label="Delivery overview">
         <div class="ov-head">
-          <div><h2>Delivery overview</h2><p class="meta" id="ov-sub">All parcels sent through ShipBridge</p></div>
+          <div><h2>Delivery overview</h2><p class="meta" id="ov-sub">All parcels sent through AutoCourier BD</p></div>
           <div class="ov-tools"><button class="btn ghost sm ov-more" id="ov-more" aria-expanded="false">Show all</button>
           <div class="dp" id="dp">
             <button class="btn dp-btn" id="dp-btn" aria-haspopup="dialog" aria-expanded="false">
@@ -137,7 +137,7 @@
           </div>
 
           <div class="step" data-step="webhook">
-            <button class="step-row" data-toggle-step="webhook"><span class="step-dot"></span><span class="step-text"><b>Webhook configuration</b><span class="meta" data-summary>Pathao tells ShipBridge the moment a parcel moves</span></span><span class="step-act"></span></button>
+            <button class="step-row" data-toggle-step="webhook"><span class="step-dot"></span><span class="step-text"><b>Webhook configuration</b><span class="meta" data-summary>Pathao tells AutoCourier BD the moment a parcel moves</span></span><span class="step-act"></span></button>
             <div class="step-body">
               <div class="field"><span>Callback URL</span><div class="copy"><input id="wh_url" readonly /><button class="btn" id="copy-url"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h9"/></svg>Copy</button></div></div>
               <label class="field"><span>Secret key (same as in Pathao)</span><input id="wh_secret" autocomplete="off" /></label>
@@ -174,16 +174,16 @@
                 <label class="field"><span>Secret key</span><input id="sf_secret_key" type="password" autocomplete="new-password" spellcheck="false" /></label>
               </div>
               <div class="perm-box" id="sf-auth-error" hidden></div>
-              <p class="hint">Steadfast portal → <b>API</b> → <b>Your API keys</b>. Make a key just for ShipBridge, so you can revoke it without affecting anything else. The secret key is stored encrypted.</p>
+              <p class="hint">Steadfast portal → <b>API</b> → <b>Your API keys</b>. Make a key just for AutoCourier BD, so you can revoke it without affecting anything else. The secret key is stored encrypted.</p>
               <div class="sec-foot"><button class="btn ghost" id="sf-disconnect" hidden>Disconnect</button><button class="btn primary" id="sf-save">Save &amp; connect</button></div>
             </div>
           </div>
 
           <div class="step" data-step="sf-webhook">
-            <button class="step-row" data-toggle-step="sf-webhook"><span class="step-dot"></span><span class="step-text"><b>Webhook configuration</b><span class="meta" data-summary>Steadfast tells ShipBridge the moment a parcel moves</span></span><span class="step-act"></span></button>
+            <button class="step-row" data-toggle-step="sf-webhook"><span class="step-dot"></span><span class="step-text"><b>Webhook configuration</b><span class="meta" data-summary>Steadfast tells AutoCourier BD the moment a parcel moves</span></span><span class="step-act"></span></button>
             <div class="step-body">
               <div class="field"><span>Callback URL</span><div class="copy"><input id="sf_wh_url" readonly /><button class="btn" data-copy="sf_wh_url">Copy</button></div></div>
-              <ol class="howto"><li>Steadfast portal → <b>API</b> → <b>Webhook</b>.</li><li>Paste the <b>Callback URL</b> there. Leave the auth token empty — it's not needed.</li><li>Save in Steadfast, then press Save here.</li><li>Steadfast sends updates when a parcel's status changes (not when you save). Until the first one, ShipBridge checks Steadfast every minute, so statuses still update.</li></ol>
+              <ol class="howto"><li>Steadfast portal → <b>API</b> → <b>Webhook</b>.</li><li>Paste the <b>Callback URL</b> there. Leave the auth token empty — it's not needed.</li><li>Save in Steadfast, then press Save here.</li><li>Steadfast sends updates when a parcel's status changes (not when you save). Until the first one, AutoCourier BD checks Steadfast every minute, so statuses still update.</li></ol>
               <p class="hint" id="sf-wh-state"></p>
               <div class="sec-foot"><button class="btn primary" id="sf-save-webhook">Save</button></div>
             </div>

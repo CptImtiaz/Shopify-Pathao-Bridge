@@ -70,7 +70,7 @@ function makeNotifier({ db, cipher, smsClient, log = console }) {
     const { smsPhone } = require('./sms');
     const to = smsPhone(phone);
     if (!to) throw Object.assign(new Error('Enter a valid Bangladesh mobile number, e.g. 01712345678'), { status: 400 });
-    const text = 'Test SMS from ShipBridge for Pathao. Your SMS notifications are working.';
+    const text = 'Test SMS from AutoCourier BD for Pathao. Your SMS notifications are working.';
     try {
       await smsClient.send({ token: cipher.decrypt(s.sms_token_enc), sid: s.sms_sid }, to, text, csmsIdFor(`t${Date.now()}`));
     } catch (e) {

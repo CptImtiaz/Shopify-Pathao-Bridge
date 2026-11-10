@@ -43,7 +43,7 @@ function makeOwnerRouter({ config, db }) {
       }
     }
     if (pass && safeEqual(pass, config.adminPassword)) return next();
-    res.set('WWW-Authenticate', 'Basic realm="ShipBridge owner", charset="UTF-8"');
+    res.set('WWW-Authenticate', 'Basic realm="AutoCourier BD owner", charset="UTF-8"');
     return res.status(401).send('Login required');
   });
 
@@ -59,7 +59,7 @@ function makeOwnerRouter({ config, db }) {
         ['Orders sent this month', sent], ['Uninstalled', shops.length - active.length],
       ];
       res.set('Cache-Control', 'no-store').set('X-Robots-Tag', 'noindex').send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ShipBridge · Owner</title><style>
+<title>AutoCourier BD · Owner</title><style>
 body{margin:0;background:#f4f5f7;font:14px/1.45 -apple-system,Segoe UI,Inter,Roboto,sans-serif;color:#15171a}
 .wrap{max-width:1180px;margin:0 auto;padding:28px 20px}h1{margin:0 0 4px;font-size:22px}.meta{color:#6b7280;margin:0 0 20px}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:20px}
@@ -68,7 +68,7 @@ body{margin:0;background:#f4f5f7;font:14px/1.45 -apple-system,Segoe UI,Inter,Rob
 table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px 16px;border-bottom:1px solid #f0f1f3;white-space:nowrap}th{font-size:12px;color:#6b7280;font-weight:600;background:#fafafb}
 .b{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;font-weight:600;background:#eceef0}.g{background:#d6f5e3;color:#0c5132}.r{background:#fde2e1;color:#8e0b21}.y{background:#fff1b8;color:#5c4b00}
 td.err{white-space:normal;color:#8e0b21;max-width:520px}</style></head><body><div class="wrap">
-<h1>ShipBridge owner dashboard</h1><p class="meta">Live from the app database · ${esc(new Date().toUTCString())}</p>
+<h1>AutoCourier BD owner dashboard</h1><p class="meta">Live from the app database · ${esc(new Date().toUTCString())}</p>
 <div class="tiles">${tiles.map(([k, v]) => `<div class="tile"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>
 <div class="card"><h2>Shops</h2><table><tr><th>Shop</th><th>Status</th><th>Plan</th><th>Pathao</th><th>Steadfast</th><th>Default</th><th>Auto-send</th><th>Sent this month</th><th>Failed (7 days)</th><th>Installed</th><th>Last activity</th><th>Granted scopes</th></tr>
 ${shops.map((s) => `<tr><td><a href="https://${esc(s.shop)}" target="_blank" rel="noopener">${esc(s.shop)}</a></td>

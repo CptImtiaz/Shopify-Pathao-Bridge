@@ -59,7 +59,7 @@ function createApp({ config, pool, fetchImpl: rawFetch = fetch, log = console, d
   const bus = makeBus();
   const forgetOrders = admin.forgetOrders;
   admin.forgetOrders = (shop, type = 'orders') => { forgetOrders(shop); bus.publish(shop, type); };
-  // Only ShipBridge's own data changed (a courier status, a note): redraw open dashboards, but keep
+  // Only AutoCourier BD's own data changed (a courier status, a note): redraw open dashboards, but keep
   // the cached Shopify order list. /api/orders merges parcel data from Postgres on every call.
   admin.touchOrders = (shop, type = 'orders') => bus.publish(shop, type);
   // After a courier update: refetch from Shopify only if the Shopify order itself changed.
